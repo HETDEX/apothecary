@@ -1,0 +1,40 @@
+dircal=/scratch/00115/gebhardt/calscripts/
+mth=$1
+mkdir -p cal${mth}
+mkdir -p lib_calib/${mth}
+cd cal${mth}
+cp /work/00115/gebhardt/maverick/gettar/rt*.${mth} .
+cp /work/00115/gebhardt/maverick/gettar/runt${mth} .
+cp ${dircal}/run1t .
+cp ${dircal}/rback .
+cp ${dircal}/rback1 .
+cp ${dircal}/rgetcal0 .
+cp ${dircal}/rgetcal1 .
+cp ${dircal}/rgetcal2 .
+cp ${dircal}/rgetata .
+cp ${dircal}/rgetata1 .
+cp ${dircal}/rgetcmb .
+cp ${dircal}/rgetcmb1 .
+sed -i s/ChangeMe/${mth}/ run1t
+
+rm -f rt1.${mth}_* rt1b.${mth}_* rt2.${mth}_*
+~gebhardt/jobsplitter2s rt1.${mth} 80 2 "02:00:00"
+~gebhardt/jobsplitter2s rt1b.${mth} 80 2 "01:00:00"
+cp rt1b.${mth} rt
+cp ~gebhardt/rt.slurm .
+~gebhardt/jobsplitter2s rt2.${mth} 80 2 "01:00:00"
+~gebhardt/bin/rslurm rt1.${mth} > rstep1
+~gebhardt/bin/rslurm rt1b.${mth} > rstep2
+cp rt1c.${mth} rstep3
+~gebhardt/bin/rslurm rt2.${mth} > rstep4
+cp rt3.${mth} rstep5
+cp rt1c.${mth} rstep6
+chmod +x rstep?
+
+cd ..
+mkdir -p sci${mth}
+cd sci${mth}
+cp /work/00115/gebhardt/maverick/gettar/runs${mth} .
+awk '{print "run1s",$2,$3,$4,$7}' runs${mth} | sort -g  | uniq > rt1s
+cp /work/00115/gebhardt/hdr/karlspipe/hdr2.1/sci/run1s .
+sed -i s/ChangeMe/${mth}/ run1s

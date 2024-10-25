@@ -1,0 +1,4 @@
+tar xf $1
+/home/03261/polonius/wcs/wcstools-3.9.2/bin/gethead virus0000???/exp01/virus/*LU_sci.fits IFUSLOT SPECID SSA  IFUID > in
+rm -rf virus0000*
+~/bin/getfplane

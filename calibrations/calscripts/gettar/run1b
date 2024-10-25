@@ -1,0 +1,1 @@
+grep 104LL_sci $1  | sed s/"\/"/" "/g | sed s/T/" "/ | awk '{print "rtar /work/03946/hetdex/maverick/"$1"/virus/"$3".tar",$3"/"$4"/"$5"/"$6"T"$7}'

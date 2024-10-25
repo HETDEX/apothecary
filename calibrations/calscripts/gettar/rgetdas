@@ -1,0 +1,1 @@
+grep virus0000$2 201???sci | grep $1 | grep exp01

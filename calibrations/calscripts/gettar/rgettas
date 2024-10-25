@@ -1,0 +1,4 @@
+grep "$1 $2" *.use | sed s/:/" "/ | awk '{print $2,$3,$4,$5,$6}' >> lists
+awk '{print $4,$5}' lists | uniq >> listt
+sort -g listt | uniq > t1
+mv t1 listt

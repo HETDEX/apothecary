@@ -1,0 +1,6 @@
+tar xvf $1 $2
+echo $1 > t1
+sed s/"\/"/" "/g t1 | awk '{print "/"$1"/"$2"/"$3"/"$4"/"$5"/"$6"/"}' > t2
+rgettwi1 > t3
+paste t2 t3 | awk '{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$19,$11}' >> twinew
+rm -rf virus0000*

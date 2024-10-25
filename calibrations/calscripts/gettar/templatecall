@@ -1,0 +1,1 @@
+python /work/03261/polonius/hetdex/panacea/Panacea/panacea2.py --ifuslot ifu666 -td datet666 -to shott666 -te 1  -sd dates666 -so shots666 --reduce_sci --combine_reductions

@@ -1,0 +1,12 @@
+cp $1.twis use.twis
+
+#grep virus0000 $1tarlist | grep exp01 | grep LL_sci | sed s/"\/"/" "/g | sed s/virus0000// | sed s/_/" "/ | sed s/LL/" "/ | awk '{print "rfindtwi",$1,$3,$7}' > rtmp
+
+#grep virus0000 $1tarlist | grep exp01 | grep LL_sci | sed s/"\/"/" "/g | sed s/virus0000// | sed s/_/" "/ | sed s/LL/" "/ | sed s/T/" "/ | awk '{print "rfindtwi",$10,$7,$12}' > rtmp
+
+grep virus0000 $1tarlist | grep exp01 | grep LL_sci | sed s/"\/"/" "/g | sed s/virus0000// | sed s/_/" "/ | sed s/LL/" "/ | sed s/T/" "/ | awk '{print "rfindtwi",$1,$3,$8}' > rtmp
+
+#grep virus0000 $1tarlist | grep exp01 | grep LL_eng | sed s/"\/"/" "/g | sed s/virus0000// | sed s/_/" "/ | sed s/LL/" "/ | sed s/T/" "/ | awk '{print "rfindtwi",$1,$3,$8}' > rtmp
+
+chmod +x rtmp
+rtmp > $1.use

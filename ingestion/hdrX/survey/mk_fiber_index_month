@@ -1,0 +1,1 @@
+python3 /home1/05350/ecooper/hetdex_api/h5tools/create_fiber_index_hdf5.py -of mfi_$1.h5 -m $1

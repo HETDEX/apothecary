@@ -1,0 +1,41 @@
+#!/usr/bin/env python
+
+import glob
+import os
+import sys
+import numpy as np
+from tqdm import tqdm
+
+cl_args = list(map(str.lower,sys.argv))
+
+path = "/scratch/03261/polonius/science_reductions/vdrp/shifts/"
+
+yyyymm = int(cl_args[1])
+
+#dirs = glob.glob(f"{path}{yyyymm}??v*")
+#with open(f"ifucen_{yyyymm}.run","w+") as f1:
+#    for d in tqdm(dirs):
+#        try:
+#
+#            fn = os.path.basename(d)
+#            date = fn.split("v")[0]
+#            shot = fn.split("v")[1]
+#
+#            f1.write(f"rgetifucen {date} {shot}\n")
+#
+#        except Exception as E:
+#            print(E)
+
+#use the "good" list file rather than the directories to avoid continuuing with bad shots
+dates,shots = np.loadtxt(os.path.join(path,f"{yyyymm}.good"),unpack=True,dtype=int)
+
+with open(f"ifucen_{yyyymm}.run","w+") as f1:
+    for date,shot in zip(dates,shots):
+        try:
+
+            f1.write(f"rgetifucen {date} {str(shot).zfill(3)}\n")
+
+        except Exception as E:
+            print(E)
+
+print("Done")

@@ -1,0 +1,31 @@
+grep DEX 201709sci | grep exp03 | awk '{print $6,$4,$3}' > j1
+grep DEX 201710sci | grep exp03 | awk '{print $6,$4,$3}' >> j1
+grep DEX 201711sci | grep exp03 | awk '{print $5,$3,$2}' >> j1
+grep DEX 201712sci | grep exp03 | grep 105LL | awk '{print $5,$3,$2,$1}' >> j1
+grep COSDEEP 201712sci | grep exp03 | grep 105LL | awk '{print $5,$3,$2,$1}' >> j1
+
+grep DEX 201801sci | grep exp03 | grep 093LL | awk '{print $5,$3,$2,$1}' >> j1
+grep HS 201801sci | grep exp03 | grep 093LL | awk '{print $5,$3,$2,$1}' >> j1
+grep COSDEEP 201801sci | grep exp03 | grep 093LL | awk '{print $5,$3,$2,$1}' >> j1
+
+grep DEX 201802sci | grep exp03 | grep 105LL | awk '{print $5,$3,$2,$1}' >> j1
+grep HS 201802sci | grep exp03 | grep 105LL | awk '{print $5,$3,$2,$1}' >> j1
+grep GN 201802sci | grep exp03 | grep 105LL | awk '{print $5,$3,$2,$1}' >> j1
+grep COSDEEP 201802sci | grep exp03 | grep 105LL | awk '{print $5,$3,$2,$1}' >> j1
+
+grep DEX 201803sci | grep exp03 | grep 105LL | awk '{print $5,$3,$2,$1}' >> j1
+grep HS 201803sci | grep exp03 | grep 105LL | awk '{print $5,$3,$2,$1}' >> j1
+grep GN 201803sci | grep exp03 | grep 105LL | awk '{print $5,$3,$2,$1}' >> j1
+
+grep DEX 201804sci | grep exp03 | grep 093LL | awk '{print $5,$3,$2,$1}' >> j1
+grep HS 201804sci | grep exp03 | grep 093LL | awk '{print $5,$3,$2,$1}' >> j1
+grep GN 201804sci | grep exp03 | grep 093LL | awk '{print $5,$3,$2,$1}' >> j1
+
+grep DEX 201805sci | grep exp03 | grep 093LL | awk '{print $5,$3,$2,$1}' >> j1
+grep HS 201805sci | grep exp03 | grep 093LL | awk '{print $5,$3,$2,$1}' >> j1
+grep GN 201805sci | grep exp03 | grep 093LL | awk '{print $5,$3,$2,$1}' >> j1
+
+grep HS 201806sci | grep exp03 | grep 093LL | awk '{print $5,$3,$2,$1}' >> j1
+grep GN 201806sci | grep exp03 | grep 093LL | awk '{print $5,$3,$2,$1}' >> j1
+
+grep HS 201807sci | grep exp03 | grep 093LL | awk '{print $5,$3,$2,$1}' >> j1

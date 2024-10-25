@@ -1,0 +1,29 @@
+dirsci=/scratch/00115/gebhardt/sciscripts/
+mth=$1
+mkdir -p sci${mth}
+cd sci${mth}
+cp /work/00115/gebhardt/maverick/gettar/runs${mth} .
+awk '{print "run1s",$2,$3,$4,$7}' runs${mth} | sort -g  | uniq > rt1s
+awk '{print "grep \""$1,$2"\" rt1s"}' ../detect/hdr4.use > rj
+chmod +x rj; rj > j1; mv j1 rt1s
+cp ${dirsci}/* .
+sed -i s/ChangeMe/${mth}/ run1s
+sed -i s/ChangeMe/${mth}/ run2s
+sed -i s/ChangeMe/${mth}/ rtaremc
+
+rm -f rt1s_* runtar0e_*
+~gebhardt/jobsplitter2s rt1s 80 3 "02:00:00"
+~gebhardt/bin/rslurm rt1s > rstep1
+#awk '{print "sed s/skx-dev/skx-normal/",$2,"> n_"$2}' rstep1 > rtmpns
+#chmod +x rtmpns; rtmpns
+#awk '{print $1,"n_"$2}' rstep1 > rstep1ns
+
+#awk '{print "runtar",$2,$3,$4}' rt1s > runtar0
+#chmod +x runtar0
+#echo "sbatch runtar0.slurm" > rstep2
+#rm -f runtar0_*
+#~gebhardt/jobsplitter2s runtar0 48 4 "01:00:00"
+#~gebhardt/bin/rslurm runtar0 > rstep2
+
+chmod +x rstep*
+rstep1

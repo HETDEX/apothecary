@@ -1,0 +1,15 @@
+spec=$1
+mkdir -p fix${spec}
+cd fix${spec}
+mkdir -p raw
+awk '{if($6==spec0) print $1,$2,$3,$4,$5,$6,$7,2}' spec0=$spec /work/00115/gebhardt/maverick/gettar/runs20???? > rt
+#cp /scratch/00115/gebhardt/sciscripts/rback_fix rback
+#cp /scratch/00115/gebhardt/sciscripts/run0s .
+cp /scratch/03261/polonius/science_reductions/sciscripts/rback_fix rback
+cp /scratch/03261/polonius/science_reductions/sciscripts/run0s .
+#awk '{if($2>20200700&&$2<20210900) print $0}' rt > rt2
+chmod +x rt rt2
+#~gebhardt/jobsplitter2s rt 20 40 "02:00:00"
+echo " "
+echo "cd fix${spec}"
+#~gebhardt/bin/rslurm rt

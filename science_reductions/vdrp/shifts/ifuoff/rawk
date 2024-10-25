@@ -1,0 +1,2 @@
+name=$1
+awk '{print name0,$0}' name0=$name $1 | grep -v IFU

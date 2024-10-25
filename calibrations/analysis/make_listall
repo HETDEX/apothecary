@@ -1,0 +1,2 @@
+#ls -1 /work/00115/gebhardt/maverick/fplane/fp2023* | sed 's/$/"/' | sed 's/^/"/' > listall
+ls -1 /work/00115/gebhardt/maverick/fplane/fp202[3-4]* | sed 's/$/"/' | sed 's/^/"/' > listall

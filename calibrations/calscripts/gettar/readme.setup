@@ -1,0 +1,24 @@
+rsettwitar0 201805
+awk '{print "rpan0",$0}' 201808.twis > rt1
+rbadtwi 201805
+rbadtwi2 201805
+rbadtwi3 201805
+rsettwitar1 201805
+
+rsetbackt 201908
+rsetpan1 201908
+rbadsci 201805
+
+NEW SCRIPTS:
+rsetvred 201909
+rsetcal 201909
+
+awk '{print $1,$2}' 201808.use | uniq | awk '{print "rsetwave0",$0}' > rt3
+
+awk '{print $1,$6,$7,$8}' 201808sci | sed s/"\/"/" "/g | awk '{print $5,$7,$11,$12,$13}' | sed s/virus0000// | uniq -w 13 > l1
+awk '{if($5<180) print "run_shifts.sh",$1,$2,$3,$4,0; else print "run_shifts.sh",$1,$2,$3,$4,1}' l1 > rt
+
+# for rgetdas:
+awk '{print $1,$6,$7,$8}' j1 | sed s/"\/"/" "/g | awk '{print $6,$8,$12,$13,$14}' | sed s/virus0000// | sort -g > l1
+
+

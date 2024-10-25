@@ -1,0 +1,44 @@
+date=$1
+shot=$2
+exp=$3
+ifu=$4
+spec=$5
+mth=$6
+type=$7
+dir1=$(pwd)
+mthd=`echo "$date" | cut -b 1-6`
+mkdir -p d${date}s${shot}${exp}i${ifu}
+cd d${date}s${shot}${exp}i${ifu}
+cp ../rbfits .
+cp ../rbfits0 .
+cp ../rimarb .
+cp ../rback1 .
+cp ../sun_use.dat .
+echo ${mth} ${type} > vred.in
+rback1 $1 $2 $3 $4 $5 $6 LL $mthd
+rback1 $1 $2 $3 $4 $5 $6 LU $mthd
+rback1 $1 $2 $3 $4 $5 $6 RL $mthd
+rback1 $1 $2 $3 $4 $5 $6 RU $mthd
+cd ..
+rm -rf d${date}s${shot}${exp}i${ifu}
+
+if [ -e ${date}"v"${shot}${exp} ] ;
+then
+cd ${date}"v"${shot}${exp}
+#tar rvf d${date}s${shot}${exp}_mu.tar multi_${spec}*
+tar rf d${date}s${shot}${exp}_mu.tar multi_${spec}*
+rm multi_${spec}*
+# mv multi_${spec}* ${dir1}/.
+cp ../d${date}s${shot}${exp}i${ifu}a??1de.fits .
+ls d${date}s${shot}${exp}i${ifu}a??1de.fits > list.d${date}s${shot}${exp}i${ifu}
+~gebhardt/bin/vrecon << eof
+list.d${date}s${shot}${exp}i${ifu}
+eof
+
+rm list.d${date}s${shot}${exp}i${ifu}
+rm d${date}s${shot}${exp}i${ifu}a??1de.fits
+cd ..
+rm d${date}s${shot}${exp}i${ifu}a*.fits
+fi
+
+#echo "tmp/${date}"v"${shot}${exp}"

@@ -1,0 +1,4 @@
+n1=$1
+n2=$2
+mjd=$3
+grep $1 $2tarlist | grep LL | sed s/_/" "/g | awk '{print $7}' | sed s/LL// | sort -n > ifulist$2

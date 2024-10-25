@@ -1,0 +1,49 @@
+dir1=$(pwd)
+resdir=$dir1"/fitres"
+#datadir="/work/00115/gebhardt/maverick/"
+#datadir="/scratch/00115/gebhardt/"
+datadir="/scratch/03261/polonius/science_reductions/"
+ra=$1
+dec=$2
+rap=$3
+wv=$4
+wr=$5
+f1=$6
+f2=$7
+fw=$8
+wc=$9
+sig=${10}
+step=${11}
+nstep=${12}
+ifit1=${13}
+mkdir -p /tmp/ras$7_$6
+cd /tmp/ras$7_$6
+#mkdir -p ras$7_$6
+#cd ras$7_$6
+rm -rf $7_$6
+mkdir -p $7_$6
+cd $7_$6
+if [ -e ${datadir}detect/$7/norm.dat ]
+then
+cp ${datadir}detect/$7/norm.dat .
+cp ${datadir}detect/$7/fwhm.out fwhm.use
+fi
+~gebhardt/bin/fitradecsp << eof
+${ra} ${dec} ${step} ${nstep} ${wv} 3 ${ifit1}
+${f2} ${rap} ${wv} ${wr}
+eof
+cp outbest $resdir/$7_$6.res
+cp spec.out $resdir/$7_$6.spec
+if [ -e spec100.out ] 
+then
+cp spec.out $dir1/../res/sp$6_2.dat
+cp spec100.out $dir1/../res/sp$6_100.dat
+[ -f l1 ] && cp l1 $dir1/../res/$6.list
+if [ -e exp.out ]
+then
+cat exp.out >> $dir1/exp.all
+fi
+fi
+[ -f l1 ] && cp l1 $resdir/$7_$6.list
+cd $resdir
+rm -r /tmp/ras$7_$6

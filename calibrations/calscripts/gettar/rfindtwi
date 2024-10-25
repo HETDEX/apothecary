@@ -1,0 +1,6 @@
+date=$1
+shot=$2
+ifu=$3
+awk '{if($3==ifu0) print sqrt((date0-$1)^2),$0}' ifu0=$ifu date0=$date use.twis | sort -g | head -1 > j2
+#awk '{print sqrt((date0-$1)^2),$0}' date0=$date use.twis | sort -g | head -1 > j2
+awk '{print date0,shot0,ifu0,$2,$3}' date0=$date shot0=$shot ifu0=$ifu j2 

@@ -1,0 +1,46 @@
+#!/usr/bin/env python
+
+
+# takes  parameters, YYYYMMDD , shot, exposures all as integers
+# pulls from tar file and reduces a shot+exposure to mutli*fits locally
+# runs vred, serially, on each
+
+# !!! Warning ... Basically no proper error control, so use caution
+# !!! Warning ... This assumes you want to KEEP the multi*fits and so it works in a subdirectory under the cwd.
+#                 If you instead call from another application and use this as a guide, you may well want to
+#                 work under /tmp and use the multi*fits interactively and only write out as you need.
+
+import glob
+import os
+import sys
+from elixer import utilities as utils
+from elixer import global_config as G
+from tqdm import tqdm
+
+G.GLOBAL_LOGGING=True
+G.LOG_TO_STDOUT=True
+
+cl_args = list(map(str.lower,sys.argv))
+
+
+yyyymmdd = int(cl_args[1])
+shot = int(cl_args[2])
+exp = int(cl_args[3])
+
+ifus = utils.get_ifus_in_shot(yyyymmdd,shot)
+amps = ["LL","LU","RL","RU"]
+
+rc,old_cwd,cwd = utils.change_wd(f"./{str(yyyymmdd)}v{str(shot).zfill(3)}e{str(exp).zfill(2)}")
+print(os.getcwd())
+
+for ifu in tqdm(ifus):
+    for amp in amps:
+        try:
+            fh = utils.get_multifits(yyyymmdd,shot,exp,ifu,amp,raw=False)
+        except Exception as E:
+            print(f"{ifu},{exp},{amp}, {E}")
+
+rc,old_cwd,cwd = utils.change_wd(old_cwd)
+print(os.getcwd())
+
+print("Done.")

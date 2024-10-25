@@ -1,0 +1,1 @@
+grep $1 2*sci | sed s/"\/"/" "/g | awk '{print $6,$8,$12}' | sed s/virus0000// | sort | uniq

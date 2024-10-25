@@ -1,0 +1,19 @@
+grep -v GN rcalfibnpar > j1
+grep -v HF j1 > j2; mv j2 j1
+grep -v COS j1 > j2; mv j2 j1
+grep -v HS j1 > j2; mv j2 j1
+grep -v DEX j1 > j2; mv j2 j1
+grep -v EGS j1 > j2; mv j2 j1
+grep -v H00 j1 > j2; mv j2 j1
+grep -v NEP j1 > j2; mv j2 j1
+grep -v SSA22 j1 > j2; mv j2 j1
+grep -v Parallel j1 > j2; mv j2 j1
+grep -v tes j1 > j2; mv j2 j1
+grep -v Test j1 > j2; mv j2 j1
+grep -v SHELA j1 > j2; mv j2 j1
+grep -v GRW j1 > j2; mv j2 j1
+grep -v fcs j1 > j2; mv j2 j1
+grep -v hanshin j1 > j2; mv j2 j1
+grep -v after j1 > j2; mv j2 j1
+grep -v EPIC j1 > j2; mv j2 j1
+grep -v Orion j1 > j2; mv j2 j1

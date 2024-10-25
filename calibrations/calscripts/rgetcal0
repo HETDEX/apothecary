@@ -1,0 +1,41 @@
+# called with: rgetcal0 013 201910 412
+ifu=$1
+mth=$2
+spec=$3
+dir1=$(pwd)
+cd /tmp
+#cd tmp
+mkdir -p $1$2
+cd $1$2
+cp ${dir1}/rgetcmb1 .
+cp ${dir1}/rgetcmb .
+rm -f rt rt2
+echo "rgetcmb1 ${ifu}" > rt2
+
+ls $dir1/d${mth}*/*prf.tar > j1
+sed -r 's/(.*)\//\1 /' j1 | sed s/"_prf.tar"/"i${ifu}a??prf.fits"/ | awk '{print $2}' > j2
+paste j1 j2 | awk '{print "tar xf",$1,$2}' >> rt
+
+ls $dir1/d${mth}*/*ftf.tar > j1
+sed -r 's/(.*)\//\1 /' j1 | sed s/"_ftf.tar"/"i${ifu}a??ftf.fits"/ | awk '{print $2}' > j2
+paste j1 j2 | awk '{print "tar xf",$1,$2}' >> rt
+
+ls $dir1/d${mth}*/*wtr.tar > j1
+sed -r 's/(.*)\//\1 /' j1 | sed s/"_wtr.tar"/"i${ifu}a??wtr.fits"/ | awk '{print $2}' > j2
+paste j1 j2 | awk '{print "tar xf",$1,$2}' >> rt
+
+ls $dir1/d${mth}*/*xtr.tar > j1
+sed -r 's/(.*)\//\1 /' j1 | sed s/"_xtr.tar"/"i${ifu}a??xtr.fits"/ | awk '{print $2}' > j2
+paste j1 j2 | awk '{print "tar xf",$1,$2}' >> rt
+
+ls $dir1/d${mth}*/*wavo.tar > j1
+sed -r 's/(.*)\//\1 /' j1 | sed s/"_wavo.tar"/"i${ifu}a??wavo.dat"/ | awk '{print $2}' > j2
+paste j1 j2 | awk '{print "tar xf",$1,$2}' >> rt
+
+chmod +x rt; rt
+
+chmod +x rt2
+rt2
+mv i* ${dir1}/.
+cd ..
+rm -r $1$2

@@ -1,0 +1,7 @@
+grep exp03 201701sci | grep COS
+grep exp03 201702sci | grep COS
+grep exp03 201703sci | grep COS
+grep exp03 201704sci | grep COS
+grep exp03 201712sci | grep COS
+grep exp03 201801sci | grep COS
+grep exp03 201802sci | grep COS

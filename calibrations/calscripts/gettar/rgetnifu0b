@@ -1,0 +1,3 @@
+name=$1
+grep exp03 $1sci | head -1 | sed s/"\/"/" "/g  | sed s/_/" "/g | awk '{print "rgetnifub",$7"/"$8"/"$9"/"$10,name0,$16}' name0=$name > rifu$1
+chmod +x rifu$1; rifu$1

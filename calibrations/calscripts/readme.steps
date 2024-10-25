@@ -1,0 +1,18 @@
+rt1  reduce all exposure and tar up for an observation
+rt1b untar over all obs for a month, combine results
+rt1c move results to calib folder
+rt2  run full-field to get A2A and tar up
+rt3  untar over all obs for A2A and combine; no need to batch
+rt1c move results to calib folder
+
+need these locally:
+run1t
+rtara
+rback
+rgetcal0
+rgetcal1
+rgetcal2
+rgetcmb
+rgetcmb1
+rgetata
+rgetata1

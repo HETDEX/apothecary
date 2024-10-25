@@ -1,0 +1,16 @@
+Hi all, 
+
+The extraction code is working and as far as I can tell so far producing the same results as the bash scripts.
+
+To run it in rsp1a2b mode:
+
+photometry.py night shot ra dec, e.g. photometry.py 20180901 027 34.8286018 3.44723797
+
+To run it in rsp1 mode (i.e. go through all shots containing a given star):
+
+photometry.py —multi_shot night shot ra dec
+
+To run it like rsetstar (loop over all stars in shuffle):
+
+photometry.py —shuffle_stars night shot ra dec
+

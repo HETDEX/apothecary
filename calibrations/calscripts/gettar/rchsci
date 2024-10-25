@@ -1,0 +1,22 @@
+echo "!!!!! rchsci !!!!! DD edit me !!!!!"
+
+date=$1
+shot=$2
+ifu=$3
+rm -f 1.fits out
+if [ -e /work/03946/hetdex/maverick/red1/reductions/$1/virus/virus0000$2/exp01/virus/multi_*_$3_*_LL.fits ]
+then
+ln -s /work/03946/hetdex/maverick/red1/reductions/$1/virus/virus0000$2/exp01/virus/multi_*_$3_*_LL.fits 1.fits
+~gebhardt/bin/imminmax << eof
+1.fits
+1
+1 1032
+1 1032
+eof
+#awk '{if($3>500) print date0,shot0,ifu0,$0}' date0=$date shot0=$shot ifu0=$ifu out | awk '{print $1,$2,$3,$4,$5,$6,$7}' > j1
+awk '{print date0,shot0,ifu0,$0}' date0=$date shot0=$shot ifu0=$ifu out | awk '{print $1,$2,$3,$4,$5,$6}' > j1
+~gebhardt/wcs/wcstools-3.9.2/bin/gethead 1.fits BACKLVL > j2
+paste j1 j2 | awk '{print $1,$2,$3,$4,$5,$6,$7}' > j3
+awk '{if($6>2500||$7>50000) print $0}' j3
+cat j3 >> j4
+fi

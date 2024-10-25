@@ -1,0 +1,1 @@
+python3 /home1/05350/ecooper/hetdex_api/h5tools/create_fiber_index_hdf5.py -of fiber_index_hdr4.h5 --merge

@@ -1,0 +1,5 @@
+need to split into 2 runs using 
+def make_stats_for_shot(shotid=None, survey=None,fqfn=None, save=True):
+
+1. HDR4 and prior (can use the HDRconfig version with latest with shotid set)
+2. HDR5 cannot use HDRconfig since it is not ready yet. Needs to use paths, so call should be with fqfn set

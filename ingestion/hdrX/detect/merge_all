@@ -1,0 +1,2 @@
+#python3 /home1/05350/ecooper/hetdex_api/h5tools/create_detect_hdf5.py --merge -of detect_merged.h5 -mm
+python3 /work/03261/polonius/maverick/science/sciscripts/hetdex_api/h5tools/create_detect_hdf5.py --merge -of detect_merged.h5 -mm

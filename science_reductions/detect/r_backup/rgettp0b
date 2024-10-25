@@ -1,0 +1,48 @@
+cd $1v$2
+cp /work/00115/gebhardt/maverick/detect/cal_script/rgettp* .
+nstar=`wc -l $1v$2.ifu | awk '{print $1}'`
+
+if (( $(echo "$nstar < 0.1" |bc -l) )); then
+   echo "no stars for "$1 $2
+   awk '{print $1,0,0,0,0}' norm0=$norm /work2/00115/gebhardt/hdr/data/goodsed.dat > res/$1v$2sedtp.dat
+else
+
+good=`awk '{s+=$5; print s}' $1v$2.ifu | tail -1`
+if (( $(echo "$good < 0.1" |bc -l) )); then
+#if [ "good" -le "1." ]; then
+   echo "one band only for "$1 $2
+   awk '{if($1==4940) print $2}' /work2/00115/gebhardt/hdr/data/goodsed.dat > j1
+   norm=`paste j1 res/tp.biwt | awk '{print $3/$1}'`
+   awk '{print $1,$2*norm0,0,0,0}' norm0=$norm /work2/00115/gebhardt/hdr/data/goodsed.dat > res/$1v$2sedtp.dat
+else
+rgettp3
+awk '{print "/work/00115/gebhardt/maverick/scripts/rsp/rgetsumfib0",$10,$2}' runstar > rj1
+#chmod +x rj1; rj1 > res/apsum.out
+cd res
+ls *sed.dat > list
+rm -f comb.out
+~gebhardt/bin/combsed << eof
+$3 $4
+eof
+#paste list out | awk '{if($5==0) print $0}' > in
+paste list out > in
+mv comb.out $1v$2sedtp.dat
+ls $1v$2sedtp.dat > j1
+cat in j1 > in2
+echo $1v$2 > title
+#~gebhardt/bin/plotseda << eof
+#/xwin
+#eof
+~gebhardt/bin/plotseda << eof
+/vcps
+eof
+/work/00115/gebhardt/maverick/detect/convpng pgplot
+mv pgplot.png $1v$2sedtpa.png
+awk '{print $1,(6.626e-27)*(3e18/$1)/360/5e5/$2*250.}' $1v$2sedtp.dat > $1v$2fl.dat
+#grep 4540 sp20*_???.dat | awk '{if($3>10000) print $1}' | sed s/sp// | sed s/_/" "/ | awk '{print "cat 2*_"$1"/out2"}' > rtcp
+#chmod +x rtcp
+#cd ../
+#res/rtcp > j1
+#paste res/rtcp j1 | sed s/"cat 2\*_"// | sed s/"\/out2"// | awk '{if($5>-0.5&&$5<0.5&&$6>-0.5&&$6<0.5) print $0}' > offsets.dat
+fi
+fi

@@ -1,0 +1,73 @@
+#!/usr/bin/env python
+
+#
+# check the output of rfft
+#
+# takes a single input, YYYYMM
+
+
+import glob
+import os
+import sys
+import numpy as np
+from tqdm import tqdm
+
+
+#workpath = "/scratch/03261/polonius/science_reductions/alldet/"
+#outpath = "/scratch/03261/polonius/science_reductions/alldet/output/" 
+
+workpath = "./"
+outpath = "./output/" 
+
+cl_args = list(map(str.lower,sys.argv)) 
+#cl_args = ["","202309"]
+
+try:
+    yyyymm = int(cl_args[1])
+    ref_fn = f"rfft_{yyyymm}.run"
+except:
+    yyyymm = None
+    ref_fn = cl_args[1]
+
+#open the run file
+#fmt 
+#rfft 20230914 012 exp01
+#rfft 20230914 012 exp02
+#rfft 20230914 012 exp03
+
+dates, shots = np.loadtxt(os.path.join(workpath,ref_fn),usecols=[1,2],dtype=int,unpack=True)
+exps = np.loadtxt(os.path.join(workpath,ref_fn),usecols=[3],dtype=str,unpack=True)
+
+extensions = ["amp.dat","ds9.reg","sky.dat","sub.fits"]
+
+missing_shots = []
+missing_files = []
+
+for d,s,e in tqdm(zip(dates,shots,exps),total=len(dates)):
+    #check that the file exists
+    #d20230925s021exp02amp.dat
+    shotstr = str(s).zfill(3)
+    corename = f"d{d}s{shotstr}{e}"
+    for x in extensions:
+        if not os.path.exists(os.path.join(outpath,corename+x)):
+            
+            missing_files.append(os.path.join(outpath,corename+x))
+            if f"{d}v{shotstr}" not in missing_shots:
+                missing_shots.append(f"{d}v{shotstr}")
+            
+           # print(f"Missing: {os.path.join(outpath,corename+x)}")
+#         else:
+#             print(f"Found: {os.path.join(outpath,corename+x)}")
+
+
+if len(missing_shots) == 0:
+    print("Done. All shots found.")
+else:
+    print(f)
+    print(f"Done. {len(missing_files)} files missing for {len(missing_shots)} shots missing.")
+    print("Files:")
+    for f in missing_files:
+        print(f)
+    print("\n\nShots:")
+    for f in missing_shots:
+        print(f)

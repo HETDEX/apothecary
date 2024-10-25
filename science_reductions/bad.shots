@@ -1,0 +1,32 @@
+#failed VDRP or other issue, should be removed from further use
+20230910v010  #bad dither norms
+20230911v022  #bad dither norms
+20230924v011  #nans in dither norms
+20231212v030 
+20231213v009
+20231213v016
+
+#ugg .. did not record those for 202401,02
+
+20240306v018 #bad dither norms
+20240313v018 #nans dither norms
+20240330v007 #bad dither norms
+20240330v008 #bad dither norms
+20240331v013 #bad dither norms
+
+20240406v010 #nans dither norms
+20240408v021 #bad dither norms
+
+20240510v014 #nans in dither norms
+20240510v018 #nans
+20240512v022 #bad dither norm
+20240517v003 #nans
+20240528v011 #nans
+
+20240609v006 #bad dither norms
+20240609v009 #bad dither norms
+20240609v011 #bad dither norms
+20240612v010 #bad dither norms
+
+#
+20240730v007 #bad dither norms

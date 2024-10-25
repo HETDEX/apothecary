@@ -1,0 +1,7 @@
+date=$1
+shot=$2
+# awk '{print $3,$4,1}' ../$1v$2/all.mch
+awk '{s+=1; if(s==1) print $3,$4,1}' ../$1v$2/all.mch > d1
+awk '{s+=1; if(s==2) print $3,$4,1}' ../$1v$2/all.mch > d2
+awk '{s+=1; if(s==3) print $3,$4,1}' ../$1v$2/all.mch > d3
+paste d1 d2 d3 | awk '{print $1,$2,$4,$5,$7,$8,n1,n2}' n1=$date n2=$shot >> d4

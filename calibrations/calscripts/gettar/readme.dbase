@@ -1,0 +1,17 @@
+if tarred:
+ls 201708*/virus/virus0000*tar  | awk '{print "tar tvf",$1}' > ~/rt
+chmod +x ~/rt
+~/rt > ~/j1
+grep -v drwxr ~/j1 | awk '{print $6}' | sed s/"\/"/" "/g | sed s/T/" "/ | awk '{print $4"/virus/"$1"/"$2"/"$3"/"$4"T"$5}' | grep -v shuffle | grep -v gc > ~/j1t
+mv ~/j1t 201708tarlist
+
+if not tarred yet:
+ls 201804??/virus/virus0000*/*/*/*.fits > ~/j1
+mv ~/j1 201804tarlist
+rgetsci2 201807 > 201807sci 
+
+run1 201711tarlist > run4
+run1 201710tarlist > run5
+run1 201709tarlist > run6
+run1 201708tarlist > run201708
+run1 201712tarlist > run201712

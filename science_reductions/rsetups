@@ -1,0 +1,56 @@
+#########################################################
+# rsetups
+# top level science reductions
+# cloned from /scratch/00115/gebhardt/rsetups
+########################################################
+
+#dirsci=/scratch/00115/gebhardt/sciscripts/
+basesci=/work/03261/polonius/hetdex/science_reductions/sciscripts
+dirsci=/scratch/03261/polonius/science_reductions/sciscripts
+#use the same helper bin as calibrations
+dirbin=/work/03261/polonius/hetdex/calibrations/calscripts/bin
+karlgettar=/work/00115/gebhardt/maverick/gettar/
+karldetect=/scratch/00115/gebhardt/detect/
+
+if [ ! -d ${dirsci} ]; then
+  cp -r ${basesci} .
+fi
+
+mth=$1
+mkdir -p sci${mth}
+cd sci${mth}
+#cp /work/00115/gebhardt/maverick/gettar/runs${mth} .
+cp ${karlgettar}runs${mth} .
+awk '{print "run1s",$2,$3,$4,$7}' runs${mth} | sort -g  | uniq > rt1s
+#awk '{print "grep \""$1,$2"\" rt1s"}' ../detect/hdr4.use > rj
+#dd 20240102 ... this awk line selects the shots for the YYYYMM
+#dd 20240102 .... comment out the awk line to run ALL shots (including parallel science?)
+awk '{print "grep \""$1,$2"\" rt1s"}' ../hdrX.use > rj
+chmod +x rj; rj > j1; mv j1 rt1s
+cp ${dirsci}/* .
+sed -i s/ChangeMe/${mth}/ run1s
+sed -i s/ChangeMe/${mth}/ run2s
+sed -i s/ChangeMe/${mth}/ rtaremc
+
+rm -f rt1s_* runtar0e_*
+#~gebhardt/jobsplitter2s rt1s 80 3 "02:00:00"
+${dirbin}/jobsplitter2s rt1s 80 3 "02:00:00"
+#~gebhardt/bin/rslurm rt1s > rstep1
+${dirbin}/rslurm rt1s > rstep1
+
+
+#awk '{print "sed s/skx-dev/skx-normal/",$2,"> n_"$2}' rstep1 > rtmpns
+#chmod +x rtmpns; rtmpns
+#awk '{print $1,"n_"$2}' rstep1 > rstep1ns
+
+#awk '{print "runtar",$2,$3,$4}' rt1s > runtar0
+#chmod +x runtar0
+#echo "sbatch runtar0.slurm" > rstep2
+#rm -f runtar0_*
+#~gebhardt/jobsplitter2s runtar0 48 4 "01:00:00"
+#~gebhardt/bin/rslurm runtar0 > rstep2
+
+chmod +x rstep*
+#dd 20240102 ... do not auto-run rstep1
+#rstep1
+echo "Shots to run: " $(grep run1s rt1s_1.run | wc)

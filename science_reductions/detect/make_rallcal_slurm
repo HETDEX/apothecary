@@ -1,0 +1,31 @@
+#
+# this will make the run and slurm files for vdrp/shifts
+#
+# takes 1 or 2 inputs a file and a YYYYMM ; rta.YYYMM  or rta.YYYYMM.dex then repeat the YYYYMM
+# IMPORTANT!! do NOT use ../vdrp/shifts/yyyymm.good in the first case ... only use the rta.xxx 
+# to use yyyymm.good, use the second case that only takes the YYYYMM paramter
+
+#want to get the YYYMM out of the file
+
+if ! [ -z $2 ]; then
+
+  echo "2 parm case" $1  $2
+  cat $1 | awk '{print $1, $2, $3}' | sed s/"run_shifts.sh"/"rallcal"/g > $2.job
+
+  lines=$(wc $2.job | awk '{print $1+1}')
+  /work/03261/polonius/hetdex/science_reductions/myscripts/jobsplitter $2.job  $lines 1 "00:30:00" 1 $lines 
+
+elif [ -f ../vdrp/shifts/$1.good ]; then
+
+  echo "1 parm case" $1
+  cat ../vdrp/shifts/$1.good | awk '{print "rallcal", $1, $2}' | sed s/"run_shifts.sh"/"rallcal"/g > $1.job
+
+  lines=$(wc $1.job | awk '{print $1+1}')
+  /work/03261/polonius/hetdex/science_reductions/myscripts/jobsplitter $1.job  $lines 1 "00:30:00" 1 $lines 
+
+else
+  echo "requires 2 parameters, see header comment"
+  exit -1
+
+fi
+

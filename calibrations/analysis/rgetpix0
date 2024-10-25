@@ -1,0 +1,3 @@
+name=$1
+ls 2*/${name}.fits | awk '{print "\""$1"\""}' > list
+~gebhardt/bin/imgetpix > ${name}.dat

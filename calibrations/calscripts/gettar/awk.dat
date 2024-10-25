@@ -1,0 +1,13 @@
+awk '{print "ls -l reductions/"$1"/virus/virus0000"$2"/exp0?/virus/m*fits"}' hdr1.scilist | grep 2017 > rj
+
+grep ERR HETDEX.o210100 | grep Failed | grep 03946 | awk '{print $8}' | sort | uniq
+
+awk '{print "ls /work/03946/hetdex/maverick/red1/reductions/"$2"/virus/virus0000"$3"/exp01/virus/multi_???_"$4"_???_LL.fits"}' rt2 > rj
+rj > j1
+sed s/"\/"/" "/g notthere | sed s/_/" "/g | awk '{print "grep \""$10,$12,$17"\" rt2"}' | sed s/virus0000// > rj2
+rj2 > rt2b
+
+
+grep cmp 2017??tarlist | sed s/:/" "/ | sed s/"\/exp"/".tar "/ | awk '{print $2}' | sort -g | uniq | awk '{print "rm -rf",$1}' > rm.cmp
+
+ls /work/00115/gebhardt/maverick/fplane/fp2019* | awk '{print "\""$1"\""}' > listall

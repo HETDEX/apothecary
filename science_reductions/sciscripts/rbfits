@@ -1,0 +1,22 @@
+in=$1
+out=$2
+spec=$3
+rm -f in.fits out*.fits multi*.fits
+echo $in > j1
+sed s/"\/"/" "/ j1 > j2
+sed s/"\/"/" "/ j2 > j1
+sed s/"\/"/" "/ j1 > j2
+#awk '{print "rbfits0 /work/03946/hetdex/maverick/"$1"/virus/"$3".tar",$3"/"$4,in0}' in0=${in} j2 > rj2
+awk '{print "rbfits0 ../"$3".tar",$3"/"$4,in0}' in0=${in} j2 > rj2
+chmod +x rj2
+rj2
+
+~gebhardt/bin/vred; rc=$?
+#for debugging only
+#echo "$rc := vred out ::: $1, $2, $3"
+
+if [ ${rc} != 0 ]; then
+        echo "!!! BAD !!! ${rc} := vred out ::: $1, $2, $3"
+fi
+#echo "done vred with $1, $2, $3 ..."
+

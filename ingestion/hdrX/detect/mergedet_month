@@ -1,0 +1,2 @@
+# takes one parameter -m YYYYMM
+python3 /work/03261/polonius/maverick/science/sciscripts/hetdex_api/h5tools/create_detect_hdf5.py --merge -m $1

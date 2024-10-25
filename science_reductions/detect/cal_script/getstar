@@ -1,0 +1,27 @@
+id=$1
+ra=$2
+dec=$3
+ifu=$9
+getfib2 $ra $dec 4500 $id
+rdith ${id}.posall 
+mkdir fitstar${id}
+cd fitstar${id}
+cp ../${id}.posall.new .
+awk '{print "cp ../i"ifu0"/"$8".spec ."}' ifu0=$ifu ${id}.posall.new  > rt; chmod +x rt; rt
+ls *.spec > list
+rm -f sumspec.out
+~gebhardt/bin/sumspec
+ls 2*.spec | cut -b 18-32 | awk '{print "cp /work/00115/gebhardt/maverick/getampnorm/all/multi"$1".norm norm.dat"}' | head -1 > rt ; chmod +x rt; rt
+mv sumspec.out in
+~gebhardt/bin/spnorm
+mv out sp${id}_${ifu}.dat
+
+rm -f sumspec.out
+~gebhardt/bin/sumspec2
+ls 2*.spec | cut -b 18-32 | awk '{print "cp /work/00115/gebhardt/maverick/getampnorm/all/multi"$1".norm norm.dat"}' | head -1 > rt ; chmod +x rt; rt
+mv sumspec.out in
+~gebhardt/bin/spnorm
+mv out sp${id}_${ifu}_2.dat
+
+wc list | awk '{if($1==0) print "rm",$4}' > rt; chmod +x rt; rt
+mv list ${id}_${ifu}.list

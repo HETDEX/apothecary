@@ -1,0 +1,12 @@
+wave=$1
+awk '{print $1,$2,wave0,$4,$5,$6,$7,$8}' wave0=$wave rs1 > rs2
+chmod +x rs2
+rs2
+cat spavg*.dat > s4
+paste l1 s4 | awk '{print $1,$2,$12,$13}' ra0=$ra dec0=$dec > s5
+~gebhardt/bin/rgetadc
+paste s5 l1 a1 | awk '{print $1,$2,$3,$4,$13,$14,$15,$10,$16}' > in
+~gebhardt/bin/fit2d << eof
+292.457947 46.4333496
+/xwin
+eof

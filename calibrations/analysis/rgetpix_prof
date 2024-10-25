@@ -1,0 +1,8 @@
+name=$1
+rm -f list
+cp ${name} list
+~gebhardt/bin/imgetpix << eof
+3
+2 200
+eof
+mv out ${name}.dat

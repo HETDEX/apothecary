@@ -1,0 +1,43 @@
+dir1=$(pwd)
+datadir="/scratch/projects/hetdex/"
+ra=$1
+dec=$2
+rap=$3
+wv=$4
+wr=$5
+f1=$6
+f2=$7
+fw=$8
+wc=$9
+sig=${10}
+step=${11}
+nstep=${12}
+ifit1=${13}
+
+~gebhardt/bin/fitradecsp << eof
+${ra} ${dec} ${step} ${nstep} ${wv} 3 ${ifit1}
+${f2} ${rap} ${wv} ${wr}
+eof
+
+#amp=`sort -g +6 -7 l2 | head -1 | awk '{print $5}' | sed s/multi_// | cut -b 1-11`
+#if [ -e /scratch/00115/gebhardt/alldet/cal_out/${f2}_${amp}_cal.fits ]
+#then
+#cp spec.out spec_orig.out
+#cp l2 l2_orig
+#rm -f rtmp specall.out in_cal.fits
+#ln -s /scratch/00115/gebhardt/alldet/cal_out/${f2}_${amp}_cal.fits in_cal.fits
+#~gebhardt/bin/fitspec << eof
+#${ra} ${dec} ${step} ${nstep} ${wv} 3 ${ifit1}
+#${f2} ${rap} ${wv} ${wr}
+#eof
+#awk '{print $2}' spec.out > j1
+#paste spec_orig.out j1 > spec.out
+#mv l2_orig l2
+#else
+#awk '{print 0}' spec_orig.out > j1
+#paste spec_orig.out j1 > spec.out
+#echo "Not Here: " ${f1} /scratch/00115/gebhardt/alldet/cal_out/${f2}_${amp}_cal.fits
+#fi
+
+mv spec.out $7_$6.spec
+mv l2 $7_$6.list

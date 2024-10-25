@@ -1,0 +1,10 @@
+date=$1
+ifu=$2
+rm -f ifutmp
+awk '{if($1==ifu0) print $4}' ifu0=${ifu} /work/00115/gebhardt/maverick/fplane/fp${date} > ifutmp
+if [ -s ifutmp ]
+then
+	cat ifutmp
+else
+	echo 666
+fi

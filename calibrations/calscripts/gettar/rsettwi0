@@ -1,0 +1,3 @@
+date=$1
+ls /work/03946/hetdex/maverick/$date??/virus/virus0000???/exp01/virus/*LL_twi.fits > j1
+sed s/"\/"/" "/g j1 | sed s/virus0000// | sed s/_/" "/ | awk '{print $5,$7,$11}' | cut -b 1-16 > $date.twis

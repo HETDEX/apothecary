@@ -1,0 +1,5 @@
+cp $1.twis use.twis
+grep virus0000 $1sci | grep exp01 | sed s/"\/"/" "/g | sed s/_/" "/ | sed s/virus0000// | awk '{print $5,$7,$11}' | cut -b 1-16 > j1
+awk '{print "rfindtwi",$0}' j1 > rtmp
+chmod +x rtmp
+rtmp > $1.use

@@ -1,0 +1,9 @@
+date=$1
+shot=$2
+cd ${date}v${shot}
+rm -rf add_radec_angoff_trial
+rm -rf ACAMimages
+rm -rf cache
+rm -rf gp_wfs HETcommands images regions
+rm -f use.psf *.opt 2*.log all.raw args.pickle
+rm -f shout.acamstars shout.info shout.probestars shout.result vdrp_info.pickle

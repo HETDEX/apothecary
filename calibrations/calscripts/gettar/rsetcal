@@ -1,0 +1,17 @@
+mth=$1
+awk '{print "rpbias",$5,$7,$6}' runs${mth} | sort | uniq > r1.${mth}
+awk '{print "rpsci",$5,$7,$6}' runs${mth} | sort | uniq > r2
+#awk '{print "rpsci0kg",$5,$7,$6}' runs${mth} | sort | uniq > r2
+#awk '{print "rpsci1kg",$5,$7,$6}' runs${mth} | sort | uniq > r3
+awk '{print "rptwi0kg",$5,$7,$6}' runt${mth} | sort | uniq > r4
+cat r2 r4 > rall${mth}
+#cat r2 r3 r4 > rall${mth}
+awk '{print "run1t",$2,$3,$4,$7}' runt${mth} | sort -g | uniq > rt1.${mth}
+awk '{print "rgetcal0",$5,$7,$6}' runt${mth} | sort | uniq > rt1b.${mth}
+echo "mv i* ../lib_calib/${mth}/." > rt1c.${mth}
+awk '{print "rgetcal1",$2,$3,$4,$5,0}' rt1.${mth} > rt2.${mth}
+awk '{print "rgetcal2",$5,$7,$6}' runt${mth} | sort | uniq > rt3.${mth}
+chmod +x rt3.${mth} rt1c.${mth}
+
+awk '{print $1,$6,$7,$8}' ${mth}sci | sed s/"\/"/" "/g | awk '{print $5,$7,$11,$12,$13}' | sed s/virus0000// | uniq -w 13 > l1
+awk '{if($5<180) print "run_shifts.sh",$1,$2,$3,$4,0; else print "run_shifts.sh",$1,$2,$3,$4,1}' l1 > rta.${mth}

@@ -1,0 +1,43 @@
+4266 DEX with 3 exposures, which is 1422x3
+2614 parallel observations (including all exppsures)
+
+79  SSA
+63  NEP
+93  LDS
+12  GAMA
+4   GRW
+9   LB
+12  M15
+2   shela
+13  Orion
+0 287 Sum of others
+
+57  GD
+130 BD
+153 PG
+33  G193
+33  G_99
+12  G138
+12  FEIGE
+48  fcs
+12  G47
+9   G60
+12  HD
+78  HZ
+111 J1
+60  J2
+6   WOLF
+144 USNO
+18  Ross
+0 928 standard star
+
+29   random number or name
+105  test; junk to be deleted
+346  globulars
+17   sdss fields
+
+8592 Sum
+8774 total exposures, means 182 failed DEX or something I missed
+
+sed s/"\/"/" "/g 2*sci | awk '{print "rcalfib0",$5,$7,$8,$11}' | sed s/virus0000//  > rcalfiball 
+grep parallel rcalfiball  > rcalfibpar

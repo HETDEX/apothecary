@@ -1,0 +1,23 @@
+date=$1
+shot=$2
+exp=$3
+mth=$4
+type=$5
+dir1=$(pwd)
+cd /tmp
+#cd tmp
+mkdir -p d${date}s${shot}${exp}
+cd d${date}s${shot}${exp}
+
+tar xf ${dir1}/d${date}s${shot}${exp}/*1ds.tar
+tar xf ${dir1}/d${date}s${shot}${exp}/*wav.tar
+
+rm -f out.fits
+ls d${date}s${shot}${exp}*1ds.fits > list
+echo ${mth} ${type} > vred2.in
+~gebhardt/bin/vred2
+tar cf d${date}s${shot}${exp}_ata.tar d${date}s${shot}${exp}*ata.dat
+mv *ata.tar ${dir1}/d${date}s${shot}${exp}/.
+cd ..
+rm -rf d${date}s${shot}${exp}
+

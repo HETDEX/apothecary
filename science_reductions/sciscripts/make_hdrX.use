@@ -1,0 +1,1 @@
+cat /work/00115/gebhardt/maverick/gettar/dex.all | awk '{print $1, $2}'

@@ -1,0 +1,9 @@
+1443 DEX observations
+47880 IFUs on sky
+574560 fits files
+64350720 calibrated spectra
+9.6 sq deg of sky with spectra
+
+We are working on survey acceptance, with current estimates about 5% might require additional exposure time. All data are being used.
+
+We will produce the same stats for the calibration stars. These calibration observations are likely only useful for the one star in the frame.

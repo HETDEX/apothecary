@@ -1,0 +1,86 @@
+#!/usr/bin/env python
+
+#
+# check the output of rf1 (emission line detection)
+#
+# takes a single input, YYYYMM
+
+
+import glob
+import os
+import sys
+import numpy as np
+from tqdm import tqdm
+
+
+#workpath = "/scratch/03261/polonius/science_reductions/alldet/"
+#outpath = "/scratch/03261/polonius/science_reductions/alldet/detect_out/" 
+workpath = "./"
+outpath = "./detect_out/" 
+
+
+cl_args = list(map(str.lower,sys.argv)) 
+#cl_args = ["","202309"]
+
+try:
+    yyyymm = int(cl_args[1])
+    #rdet_rf1_202309.run
+    ref_fn = f"rdet_rf1_{yyyymm}.run"
+except:
+    yyyymm = None
+    ref_fn = cl_args[1]
+
+#open the run file
+#fmt 
+# rf1 242.4206850 47.2901840 35 4505 50 025_067_032 20230904v011 1.70 3.0 3.5 0.5 3 104
+
+
+ifus, datevshots = np.loadtxt(os.path.join(workpath,ref_fn),usecols=[6,7],dtype=str,unpack=True)
+extensions = [".list",".spec",".mc"]
+
+
+with open(os.path.join(workpath,ref_fn)) as f:
+    lines = f.readlines()
+
+missing_shots = []
+missing_files = []
+missing_lines = []
+
+for i,d,ln in tqdm(zip(ifus,datevshots,lines),total=len(datevshots)):
+    #check that the file exists
+    #20231014v013_505_097_022.list
+    corename = d+"_"+i
+    for x in extensions:
+        if not os.path.exists(os.path.join(outpath,corename+x)):
+            missing_files.append(os.path.join(outpath,corename+x))
+
+            if ln.strip() not in missing_lines:
+                missing_lines.append(ln.strip())
+
+            if d not in missing_shots:
+                missing_shots.append(d)
+             
+        #else:
+            #check the size?
+            
+            
+           # print(f"Missing: {os.path.join(outpath,corename+x)}")
+#         else:
+#             print(f"Found: {os.path.join(outpath,corename+x)}")
+
+
+if len(missing_shots) == 0:
+    print("Done. All shots found.")
+else:
+    print(f"Done. {len(missing_files)} files missing for {len(missing_shots)} shots missing.")
+    print("Files:")
+    for f in missing_files:
+        print(f)
+        
+    print("\n\nLines:")
+    for f in missing_lines:
+        print(f)
+        
+    print("\n\nShots:")
+    for f in missing_shots:
+        print(f)

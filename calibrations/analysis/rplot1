@@ -1,0 +1,8 @@
+ifu=$1
+mkdir -p plots
+~gebhardt/bin/plotcaliball << eof
+${ifu}
+/vcps
+eof
+~gebhardt/bin/convpng pgplot
+mv pgplot.png plots/${ifu}calib.png

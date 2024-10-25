@@ -1,0 +1,15 @@
+     Here are a couple of files that summarize the observer’s comments at the telescope for
+all the HETDEX shots.  The first, “status_summary.txt”, lists shot date, shot number,
+and the acceptance status for each dither (separated by colons).  The code letters are
+
+                A - Accept
+                B - Accepted but boarderline for some reason
+                E - Rejected by RA due to equipment failure
+                H - Rejected by RA due to human error
+                W - Rejected by RA due to weather
+                T - PI rejects due to poor track choice (late in track or incomplete track)
+                
+The second file “comment_summary.txt”,  lists the observers comments:  the columns 
+are shot date, shot number, the beginning DIMM measurements for each dither,
+the ending DIMM measurements for each exposure, and the telescope comments
+for each dither, separated by colons.

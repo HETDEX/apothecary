@@ -1,0 +1,3 @@
+awk '{print "rgettas",$0}' all.list  > run31
+chmod +x run31
+rm -f lists listt listt2

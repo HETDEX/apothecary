@@ -1,0 +1,46 @@
+#if you already updated run2, make_listall, in_mth then you can set do_run2=1
+#and everything will run with this run1 script
+#OTHERWISE do_run2 should be set to 0
+do_run2=1
+dir=/scratch/projects/hetdex/lib_calib/202[3-4]*
+
+echo "1/5 building listprof ... " $(date +%T)
+ls ${dir}/*cmbp.fits | awk '{print "\""$1"\""}' > listprof
+rgetpix_prof listprof
+sed s/"\/"/" "/g listprof.dat  | awk '{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$20,$21}' | sed s/sci// | sed s/cmbp.fits// | sed s/i/" "/ | sed s/a/" "/g | awk '{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18}' | sed s/LL/" LL"/ | sed s/LU/" LU"/ | sed s/RL/" RL"/ | sed s/RU/" RU"/ > listprof2.dat
+
+echo "2/5 building lista2a ... " $(date +%T)
+ls ${dir}/*ata.dat | awk '{print "\""$1"\""}' > lista2a
+rgetpix_a2a lista2a
+sed s/"\/"/" "/g lista2a.dat | awk '{print $1,$6,$7}' | sed s/i// | sed s/ata.dat// | sed s/a/" "/ > lista2a2.dat
+awk '{print $1,$1,$2,$3,$3,$4}' lista2a2.dat  > j1
+mv j1 lista2a2.dat
+
+echo "3/5 building listf2f ... " $(date +%T)
+ls ${dir}/*cmbf.fits | awk '{print "\""$1"\""}' > listf2f
+rgetpix_f2f listf2f
+sed s/"\/"/" "/g listf2f.dat  | awk '{print $1,$2,$7,$8}' | sed s/cmbf.fits// | sed s/i/" "/g | sed s/a/" "/ | awk '{print $1,$2,$3,$4,$4,$5}' > listf2f2.dat
+
+echo "4/5 building listwave ... " $(date +%T)
+ls ${dir}/*cbwt.fits | awk '{print "\""$1"\""}' > listwave
+rgetpix_wv listwave
+sed s/"\/"/" "/g listwave.dat  | awk '{print $1,$2,$7,$8}' | sed s/cbwt.fits// | sed s/i/" "/g | sed s/a/" "/ | awk '{print $1,$2,$3,$4,$4,$5}' > listwave2.dat
+
+echo "5/5 building listfib ... " $(date +%T)
+ls ${dir}/*cbxt.fits | awk '{print "\""$1"\""}' > listfib
+rgetpix_fib listfib
+sed s/"\/"/" "/g listfib.dat  | awk '{print $1,$2,$7,$8}' | sed s/cbxt.fits// | sed s/i/" "/g | sed s/a/" "/ | awk '{print $1,$2,$3,$4,$4,$5}' > listfib2.dat
+
+echo "Cleaning bad data ... " $(date +%T)
+grep -v \* listfib2.dat > j1; mv j1 listfib2.dat
+
+
+if [ $do_run2 -ne 0 ]; then
+
+  echo "make_listall ..."
+  ./make_listall
+
+  echo "Making pngs (so you don't need to execute run2 separately) ..." 
+  ./run2
+
+fi

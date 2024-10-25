@@ -1,0 +1,40 @@
+resdir=$(pwd)/output
+date=$1
+shot=$2
+exp=$3
+#mth=$4
+mth=`echo $1 | cut -b 1-6`
+type="1"
+
+#dd 20240226  ifucen_20230904v011.dat
+if [ ! -f ../getcen/ifucen_${date}v${shot}.dat ]; then
+    echo "Making ifucen file ..."
+    cd ../getcen/
+    rgetifucen ${date} ${shot}
+    if [ ! -f ../getcen/ifucen_${date}v${shot}.dat ]; then
+      echo "Failed to make ifucen file! Exiting!"
+      exit -1
+    else
+      echo "Done. Continuuing with rfft ..."
+    fi
+fi
+
+
+cd /tmp
+mkdir -p ${date}${shot}${exp}
+cd ${date}${shot}${exp}
+rm -f out.fits sky.out
+#ls /scratch/00115/gebhardt/red1/reductions/${date}/virus/virus0000${shot}/${exp}/virus/m*fits | awk '{print "\""$1"\""}' > list
+ls /scratch/03261/polonius/red1/reductions/${date}/virus/virus0000${shot}/${exp}/virus/m*fits | awk '{print "\""$1"\""}' > list
+echo ${mth} ${type} > vred2.in
+~gebhardt/bin/vred3
+
+if [ -e out.fits ] 
+then
+mv out.fits ${resdir}/d${date}s${shot}${exp}sub.fits
+mv amp.out ${resdir}/d${date}s${shot}${exp}amp.dat
+mv sky.out ${resdir}/d${date}s${shot}${exp}sky.dat
+cat /work/00115/gebhardt/maverick/scripts/back/header.ds9reg ds9reg.dat > ${resdir}/d${date}s${shot}${exp}ds9.reg
+cd ..
+rm -r ${date}${shot}${exp}
+fi

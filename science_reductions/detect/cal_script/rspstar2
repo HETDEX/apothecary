@@ -1,0 +1,31 @@
+fwhm=-1.85
+n1=$9
+n2=$1
+mkdir -p $9_$1
+cd $9_$1
+cp ../norm.dat .
+mkdir -p fitres
+/work/00115/gebhardt/maverick/scripts/rsp/rsp3fc $2 $3 3 4505 1035 $1 $9 -1.85 10 3.5 0.2 9 -1
+head -1 fitres/$9_$1.res | awk '{print "/work/00115/gebhardt/maverick/scripts/rsp/rsp3fc",$1,$2,3,4504,1035,n2o,n1o,fw0,10,3.5,0.05,7,-1}' fw0=$fwhm n2o=$n2 n1o=$n1 > rj
+chmod +x rj
+rj
+head -1 fitres/$9_$1.res | awk '{print "/work/00115/gebhardt/maverick/scripts/rsp/rfit2d",$1,$2,3,4504,1035,n2o,n1o,fw0,10,3.5,0.05,5,-1}' fw0=$fwhm n2o=$n2 n1o=$n1 > rj2 
+chmod +x rj2
+rj2
+
+cd $9_$1
+cp $9_$1specf.dat ../../res/sp$1_2.dat
+cp l1 ../../res/$1.list
+mv list listo
+ls $9_$1specf.dat > list
+rm -f sumspec.out
+~gebhardt/bin/sumspec
+cp sumspec.out ../../res/sp$1_100.dat
+/work/00115/gebhardt/maverick/scripts/rsp/rgetsumfib $9 $1 > ../../sfit/apsum$9_$1
+cat out2 > ../../sfit/off$9_$1
+cat out > ../../sfit/fit$9_$1
+cd ..
+cp out.png ../sfit/fit$9_$1.png
+cp outall ../sfit/fw$9_$1.dat
+cd  ..
+rm -r $9_$1

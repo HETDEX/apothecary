@@ -1,0 +1,3 @@
+grep exp03 20*sci  | grep NEP | sed s/"\/"/" "/g | awk '{print $6,$8,$12,$15,$16,$17,$18,$14}' | sort -g | sed s/virus0000//
+grep exp03 20*sci  | grep SSA22 | sed s/"\/"/" "/g | awk '{print $6,$8,$12,$15,$16,$17,$18,$14}' | sort -g | sed s/virus0000//
+grep exp03 20*sci  | grep 3C273 | sed s/"\/"/" "/g | awk '{print $6,$8,$12,$15,$16,$17,$18,$14}' | sort -g | sed s/virus0000//

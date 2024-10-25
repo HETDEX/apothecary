@@ -1,0 +1,12 @@
+grep . ???off.dat | sed s/:/" "/ | sort -g +1 -2 | head -1
+grep . ???off.dat | sed s/:/" "/ | sort -g +1 -2 | tail -1
+grep . ???off.dat | sed s/:/" "/ | sort -g +2 -3 | head -1
+grep . ???off.dat | sed s/:/" "/ | sort -g +2 -3 | tail -1
+
+grep . ???off.dat > t2
+paste t1 t2 | sed s/.dat:/" "/ | awk '{print $1,$2-$11,$3-$10,$4,$5,$6,$7,$8}' > t3
+./iformat
+mv out t3
+paste t1_0 t3 | awk '{print $1,$2,$3,$10,$11,$2-$10,$3-$11}' > t4
+cat ifuposhead > ifupos.dat
+awk '{if(sqrt($6*$6)<2) print $0}' t4 >> ifupos.dat

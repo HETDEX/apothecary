@@ -1,0 +1,78 @@
+#!/usr/bin/env python
+
+
+# takes  one required parameters, YYYYMMDD   and one optional (True/False or 1/0)
+# second parameter indicates whether to also figure out the number of exposures and total number of files, but takes longer to run
+# pulls from tar file and reduces a shot+exposure to mutli*fits locally
+# runs vred, serially, on each
+
+# !!! warning ... basically no proper error control, so use caution
+
+
+import glob
+import os
+import sys
+from elixer import utilities as utils
+from elixer import global_config as G
+from tqdm import tqdm
+import tarfile
+import numpy as np
+
+
+G.GLOBAL_LOGGING=True
+G.LOG_TO_STDOUT=True
+
+raw_basedir = "/work/03946/hetdex/maverick/"
+
+cl_args = list(map(str.lower,sys.argv))
+
+path = "./"
+
+yyyymmdd = int(cl_args[1])
+try:
+  getcts = cl_args[2]
+except:
+  getcts = False
+
+def list_shot_types(yyyymmdd,count_exp=False):
+    if type(yyyymmdd) is int:
+        yyyymmdd = str(yyyymmdd)
+    tarfns = glob.glob(os.path.join(raw_basedir,yyyymmdd,"virus/*.tar"))
+
+    stl = []
+    typ = []
+    nex = []
+    nfi = []
+
+    for fn in tqdm(tarfns):
+        with tarfile.open(fn,'r') as tarf:
+            nextname = tarf.next().path
+
+            stl.append(os.path.basename(fn))
+            typ.append(nextname[-8:-5])
+
+            if count_exp:
+                all_names = tarf.getnames() #this is SLOW
+                nfi.append(len(all_names))
+                lx = [n.split("/")[1] for n in all_names]
+                nex.append(len(np.unique(lx)))
+            else:
+                nex.append('?')
+                nfi.append('?')
+
+    st = np.argsort(stl)
+    stl=np.array(stl)[st]
+    typ=np.array(typ)[st]
+    nex=np.array(nex)[st]
+    nfi=np.array(nfi)[st]
+
+
+    print(os.path.dirname(tarfns[0]))
+    for t,f,x,i in zip(typ,stl,nex,nfi):
+        print(f"{t} {str(x).rjust(2)} {f} #files {str(i).rjust(4)}")
+
+
+
+list_shot_types(yyyymmdd,getcts)
+
+print("Done.")

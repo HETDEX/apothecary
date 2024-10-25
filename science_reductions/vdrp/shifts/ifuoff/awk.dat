@@ -1,0 +1,28 @@
+wc /work/00115/gebhardt/maverick/vdrp/shifts/201*/xy*.dat | awk '{if($1>8&&$1<200) print "rawk",$4}' | grep -v total > rj
+rj > j1
+awk '{print $5-$11,$6-$12,1,$5,$6,$4,$1}' j1 > j2
+
+wc /work/00115/gebhardt/maverick/sci/panacea/test/shifts/201805*/xy*.dat | awk '{if($1>8&&$1<200) print "rawk",$4}' | grep -v total > rj
+wc /work/00115/gebhardt/maverick/sci/panacea/test/shifts/201806*/xy*.dat | awk '{if($1>8&&$1<200) print "rawk",$4}' | grep -v total >> rj
+wc /work/00115/gebhardt/maverick/sci/panacea/test/shifts/2018070*/xy*.dat | awk '{if($1>8&&$1<200) print "rawk",$4}' | grep -v total >> rj
+wc /work/00115/gebhardt/maverick/sci/panacea/test/shifts/2018071*/xy*.dat | awk '{if($1>8&&$1<200) print "rawk",$4}' | grep -v total >> rj
+wc /work/00115/gebhardt/maverick/sci/panacea/test/shifts/20180720*/xy*.dat | awk '{if($1>8&&$1<200) print "rawk",$4}' | grep -v total >> rj
+wc /work/00115/gebhardt/maverick/sci/panacea/test/shifts/20180721*/xy*.dat | awk '{if($1>8&&$1<200) print "rawk",$4}' | grep -v total >> rj
+wc /work/00115/gebhardt/maverick/sci/panacea/test/shifts/20180722*/xy*.dat | awk '{if($1>8&&$1<200) print "rawk",$4}' | grep -v total >> rj
+wc /work/00115/gebhardt/maverick/sci/panacea/test/shifts/20180723*/xy*.dat | awk '{if($1>8&&$1<200) print "rawk",$4}' | grep -v total >> rj
+chmod +x rj
+rj > j1
+awk '{print $5-$11,$6-$12,1,$5,$6,$4,$1}' j1 > j2
+mv j1 j1pre
+mv j2 j2pre
+
+wc /work/00115/gebhardt/maverick/sci/panacea/test/shifts/20180728*/xy*.dat | awk '{if($1>8&&$1<200) print "rawk",$4}' | grep -v total > rj
+wc /work/00115/gebhardt/maverick/sci/panacea/test/shifts/20180729*/xy*.dat | awk '{if($1>8&&$1<200) print "rawk",$4}' | grep -v total >> rj
+wc /work/00115/gebhardt/maverick/sci/panacea/test/shifts/2018073*/xy*.dat | awk '{if($1>8&&$1<200) print "rawk",$4}' | grep -v total >> rj
+wc /work/00115/gebhardt/maverick/sci/panacea/test/shifts/201808*/xy*.dat | awk '{if($1>8&&$1<200) print "rawk",$4}' | grep -v total >> rj
+wc /work/00115/gebhardt/maverick/sci/panacea/test/shifts/201809*/xy*.dat | awk '{if($1>8&&$1<200) print "rawk",$4}' | grep -v total >> rj
+chmod +x rj
+rj > j1
+awk '{print $5-$11,$6-$12,2,$5,$6,$4,$1}' j1 > j2
+mv j1 j1post
+mv j2 j2post

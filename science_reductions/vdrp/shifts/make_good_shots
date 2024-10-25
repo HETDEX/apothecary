@@ -1,0 +1,4 @@
+# takes 2 parms, $1 = rta.YYYYMM.dex , $2 = YYYYMM repeat
+# manually edit afterward to remove the bad shots (see also /work/03261/polonius/hetdex/science_reductions/bad.shots)
+cat rta.$1.dex | awk '{print $2, $3}' > $1.good
+

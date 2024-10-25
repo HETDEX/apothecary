@@ -1,0 +1,2 @@
+#python3 /home1/05350/ecooper/hetdex_api/h5tools/create_survey_hdf5.py -sl hdr4.shotlist -of survey_hdr4.h5 -survey hdr4
+python3 $WORK_BASEDIR/03261/polonius/hetdex/science/sciscripts/hetdex_api/h5tools/create_survey_hdf5.py -sl hdr5.shotlist -of survey_hdr5.h5 -survey hdr5

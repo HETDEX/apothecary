@@ -1,0 +1,5 @@
+date=$1
+grep LL_twi.fits $1tarlist > j1
+sed s/"\/"/" "/g j1 | sed s/virus0000// | sed s/_/" "/  | sed s/LL/" "/ | awk '{print $1,$3,$7}' > $date.twis
+#grep LL_twi.fits $1tarlist | awk '{print $6}' > j1
+#sed s/"\/"/" "/g j1 | sed s/virus0000// | sed s/T/" "/ | sed s/_/" "/ | sed s/LL/" "/ | awk '{print $4,$1,$6}' > $date.twis

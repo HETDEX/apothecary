@@ -1,0 +1,6 @@
+x=$1
+y=$2
+date=$4
+shot=$5
+awk '{print 60.*sqrt((15*$1-15*x0)^2+($2-y0)^2),$1,$2,$3,date0,shot0}' x0=$x y0=$y date0=$date shot0=$shot dj.dat | sort -g | head -1
+#awk '{print 60.*sqrt(($1-x0)^2+($2-y0)^2),$1,$2,date0,shot0}' x0=$x y0=$y date0=$date shot0=$shot dj.dat | sort -g 

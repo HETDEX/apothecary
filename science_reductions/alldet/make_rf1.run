@@ -1,0 +1,34 @@
+#!/usr/bin/env python
+
+import glob
+import os
+import sys
+import numpy as np
+from tqdm import tqdm
+
+cl_args = list(map(str.lower,sys.argv))
+
+path = "../vdrp/shifts/"
+yyyymm = int(cl_args[1])
+#get the good shots
+dates,shots = np.loadtxt(os.path.join(path,f"{yyyymm}.good"),unpack=True,dtype=int)
+
+
+#new path:
+path="../getcen/"
+
+with open(f"rdet_rf1_{yyyymm}.run","w+") as f2:
+    for date,shot in tqdm(zip(dates,shots),total=len(dates)):
+        try:
+            shot = str(shot).zfill(3)
+            multis = np.loadtxt(os.path.join(path,f"ifucen_{date}v{shot}.dat"),dtype=str,usecols=(0))
+            ras, decs = np.loadtxt(os.path.join(path,f"ifucen_{date}v{shot}.dat"),usecols=(1,2),unpack=True)
+
+            for multi,ra,dec in zip(multis,ras,decs):
+                f2.write(f"rf1 {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {date}v{shot} 1.70 3.0 3.5 0.5 3 104\n")
+
+        except Exception as E:
+            print(E)
+
+print("Done.")
+

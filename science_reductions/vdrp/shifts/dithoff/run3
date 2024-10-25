@@ -1,0 +1,7 @@
+paste t1b t2b | awk '{print $11-$5,$8-$2}' > t12diff
+paste t1b t3b | awk '{print $11-$5,$8-$2}' > t13diff
+paste t2b t3b | awk '{print $11-$5,$8-$2}' > t23diff
+awk '{print sqrt($1*$1+$2*$2)}' t12diff
+awk '{print sqrt($1*$1+$2*$2)}' t13diff
+awk '{print sqrt($1*$1+$2*$2)}' t23diff
+

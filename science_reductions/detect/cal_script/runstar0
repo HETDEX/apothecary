@@ -1,0 +1,1 @@
+grep -v "#" 2*.ifu | awk '{s+=1; print "getstar",s+20000,$3,$4,$5,$6,$7,$8,$9,"$1"}' > runstar; chmod +x runstar

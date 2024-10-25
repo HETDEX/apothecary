@@ -1,0 +1,35 @@
+date=$1
+shot=$2
+exp=$3
+ifu=$4
+spec=$5
+mth=$6
+amp=$7
+mthd=$8
+
+grep ${ifu}${amp}_ /work/00115/gebhardt/lib_calib/tarlists/${mthd}tarlist | grep ${date} | grep virus0000${shot} | grep ${exp} | grep -v cmp | grep -v flt  > list
+
+# ls /work/00115/gebhardt/lib_calib/Fiber_Locations/20*/fiber_loc_${spec}_${ifu}*${amp}.txt | tail -1 | awk '{print "cp",$1,"."}' > rt1
+ls /scratch/projects/hetdex/lib_calib/Fiber_Locations/current/fiber_loc_${spec}_${ifu}*${amp}.txt | tail -1 | awk '{print "cp",$1,"."}' > rt1
+chmod +x rt1; rt1
+
+awk '{s+=1; print "rbfits",$1,s,spec0"_"amp0}' amp0=$amp spec0=$spec list > rj1
+chmod +x rj1
+rj1
+
+[ -f out.fits  ] && mv out.fits  ../d${date}s${shot}${exp}i${ifu}a${amp}sub.fits
+[ -f out5.fits ] && mv out5.fits ../d${date}s${shot}${exp}i${ifu}a${amp}1de.fits
+[ -f out6.fits ] && mv out6.fits ../d${date}s${shot}${exp}i${ifu}a${amp}rms.fits
+[ -f out9.fits ] && mv out9.fits ../d${date}s${shot}${exp}i${ifu}a${amp}chi.fits
+[ -f out7.fits ] && mv out7.fits ../d${date}s${shot}${exp}i${ifu}a${amp}1ds.fits
+[ -f out8.fits ] && mv out8.fits ../d${date}s${shot}${exp}i${ifu}a${amp}wav.fits
+if [ -e outprof.fits ]
+then
+mv outprof.fits ../d${date}s${shot}${exp}i${ifu}a${amp}prf.fits
+mv out2.fits ../d${date}s${shot}${exp}i${ifu}a${amp}ftf.fits
+mv out3.fits ../d${date}s${shot}${exp}i${ifu}a${amp}xtr.fits
+mv out4.fits ../d${date}s${shot}${exp}i${ifu}a${amp}wtr.fits
+mv wave.out ../d${date}s${shot}${exp}i${ifu}a${amp}wavo.dat
+else
+mv multi*fits ../${date}"v"${shot}${exp}/.
+fi

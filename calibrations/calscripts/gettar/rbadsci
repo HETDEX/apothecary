@@ -1,0 +1,14 @@
+echo "!!!!! rbadsci !!!!! DD edit me !!!!!"
+
+date=$1
+cp $1.use $1.use.orig
+awk '{print "rchsci",$0}' $1.use > r1
+chmod +x r1
+rm -f j4
+r1 > rtbad
+grep -v Error rtbad > j1
+mv j1 rtbad
+mv j4 $1.check
+awk '{print "grep -v \""$1,$2,$3"\"",date0".use > j1; mv j1",date0".use"}' date0=$date rtbad > r2
+chmod +x r2
+r2

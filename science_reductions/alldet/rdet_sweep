@@ -1,0 +1,51 @@
+#!/usr/bin/env python
+
+
+#takes a single input, the rdet_rf1 run file
+# checks for any lines that failed to produce output in detect_out and generates a similarly names file with .sweep extension with those missing lines
+# you can then re-run those missing lines (buid a new SLURM) and try again as needed
+
+import glob
+import os
+import sys
+import numpy as np
+from tqdm import tqdm
+
+path = "./"
+#path ="/scratch/03261/polonius/science_reductions/alldet/"
+
+cl_args = list(map(str.lower,sys.argv))
+run_file = cl_args[1]
+#run_file = "rdet_rf1_202309.run"
+
+#0    1           2         3   4   5  6           7            8   9   10  11  12 13
+#rf1 14.0293694 -1.9609796 35 4505 50 421_069_006 20230923v017 1.70 3.0 3.5 0.5 3 104
+
+multis,datevshots = np.loadtxt(os.path.join(path,run_file), dtype=str,unpack=True,usecols=[6,7])
+ras,decs,c8,c9,c10,c11 = np.loadtxt(os.path.join(path,run_file), dtype=float,unpack=True,usecols=[1,2,8,9,10,11])
+c3,c4,c5,c12,c13 = np.loadtxt(os.path.join(path,run_file), dtype=int,unpack=True,usecols=[3,4,5,12,13])
+
+
+fns_mc = sorted(glob.glob("/scratch/03261/polonius/science_reductions/alldet/detect_out/*.mc"))
+fns_mc = [os.path.basename(f) for f in fns_mc]
+
+expected_fns = [f"{x[0]}_{x[1]}.mc" for x in zip(datevshots,multis) ]
+
+missing = []
+missing_full_line = []
+
+for i,fn in tqdm(enumerate(expected_fns)):
+    if fn in fns_mc:
+        pass #all good
+    else:
+        missing.append(fn)
+        missing_full_line.append(f"rf1 {ras[i]:0.7f} {decs[i]:0.7f} {c3[i]} {c4[i]} {c5[i]} {multis[i]} {datevshots[i]} {c8[i]:0.2f} {c9[i]} {c10[i]} {c11[i]} {c12[i]} {c13[i]}")
+        
+        
+print(f"Missing {len(missing)} shot+ifu+amp.")
+if len(missing) > 0:
+    out_fn = f"{run_file}.sweep"
+    with open(out_fn,"w+") as f:
+        for ln in missing_full_line:
+            f.write(f"{ln}\n")
+    print(f"Wrote: {out_fn}")

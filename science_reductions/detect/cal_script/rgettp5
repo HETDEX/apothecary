@@ -1,0 +1,37 @@
+ls specbest.$1 > list
+rm -f sumspec.out
+~gebhardt/bin/sumspec
+mv sumspec.out s1
+
+awk '{print $1,$3}' specbest.$1 > sptmp
+ls sptmp > list
+rm -f sumspec.out
+~gebhardt/bin/sumspec
+mv sumspec.out s3
+
+cp res/sp$1*_2.dat j1
+ls j1 > list
+rm -f sumspec.out
+~gebhardt/bin/sumspec
+mv sumspec.out s2
+
+paste s2 s1 | awk '{print $1,$2/$4/$1}' > j2
+paste j2 res/*sedtp.dat | awk '{print $1,$4,$4/$2}' > j3
+~gebhardt/bin/biwt << eof
+j3
+3
+eof
+cat biwt.out  | awk '{print "rnormsed",$2}' > j4
+chmod +x j4; j4
+mv j5 tp.$1
+
+paste s2 s3 | awk '{print $1,$2/$4/$1}' > j2
+paste j2 res/*sedtp.dat | awk '{print $1,$4,$4/$2}' > j3
+~gebhardt/bin/biwt << eof
+j3
+3
+eof
+cat biwt.out  | awk '{print "rnormsed",$2}' > j4
+chmod +x j4; j4
+paste tp.$1 j5 | awk '{print $1,$2,$3,sqrt(($6-$3)^2)}' > j6
+mv j6 tp.$1

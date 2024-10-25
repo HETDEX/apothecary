@@ -1,0 +1,24 @@
+
+apipath="/work/03261/polonius/maverick/science/sciscripts/hetdex_api"
+red1path="/scratch/03261/polonius/red1/reductions"
+redworkpath="/scratch/03261/polonius/science_reductions"
+dexpath="/scratch/projects/hetdex"
+
+mkdir -p match_pngs
+
+echo "=== create shot === "
+python3 $apipath/h5tools/create_shot_hdf5.py -d $1 -o $2 -of $1v$2.h5 -r $red1path -dp $dexpath/detect/dithall
+echo ""
+echo "=== append calfib === "
+python3 $apipath/h5tools/append_calfib.py -d $1 -o $2 -of $1v$2.h5 -r $redworkpath/alldet/cal_out/
+echo ""
+echo "=== create fullskymodel === "
+python3 $apipath/h5tools/create_fullskymodel_hdf5.py -d $1 -o $2 -of $1v$2.h5 --append -r $redworkpath/alldet/output
+echo ""
+echo "=== create cal === "
+python3 $apipath/h5tools/create_cal_hdf5.py -d $1 -o $2 -of $1v$2.h5 --append -tp $redworkpath/detect/ -detdir $dexpath/detect
+echo ""
+echo "=== create astrometry === "
+python3 $apipath/h5tools/create_astrometry_hdf5.py -d $1 -o $2 -of $1v$2.h5 --append -r $redworkpath/vdrp/shifts/gaia # let's point to GAIA shifts directory 
+echo ""
+echo "Done Ingesting $1 $2"

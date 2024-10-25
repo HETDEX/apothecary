@@ -1,0 +1,20 @@
+fwhm=-1.85
+radpsf=4
+n1=$9
+n2=$1
+wave=${12}
+mkdir -p $9_$1
+cd $9_$1
+cp ../norm.dat .
+mkdir -p fitres
+/work/00115/gebhardt/maverick/scripts/rsp/rsp3fc $2 $3 $radpsf $wave 50 $1 $9 -1.85 50 3.5 0.2 9 107
+head -1 fitres/$9_$1.res | awk '{print "/work/00115/gebhardt/maverick/scripts/rsp/rsp3fc",$1,$2,radpsf0,wave0,50,n2o,n1o,fw0,50,3.5,0.05,9,107}' radpsf0=$radpsf wave0=$wave fw0=$fwhm n2o=$n2 n1o=$n1 > rj
+chmod +x rj
+rj
+head -1 fitres/$9_$1.res | awk '{print "/work/00115/gebhardt/maverick/scripts/rsp/rfitfw0",$1,$2,radpsf0,wave0,50,n2o,n1o,fw0,50,3.5,0,1,108}' radpsf0=$radpsf wave0=$wave fw0=$fwhm n2o=$n2 n1o=$n1 > rj2 
+chmod +x rj2
+rj2
+sort -g +1 -2 fitres/$9_$1.fw > ../sfit/$9_$1_$wave.fw
+cp fitres/$9_$1.res ../sfit/$9_$1_$wave.res
+cd ..
+rm -r $9_$1

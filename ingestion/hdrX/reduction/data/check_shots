@@ -1,0 +1,414 @@
+#!/usr/bin/env python
+
+#
+# very basic integrity check of shot h5 files
+# this is based on "check_bad_shot_h5" notebook on my laptop (notebook/utilities)
+# 
+# needs editing to run
+
+
+import numpy as np
+import tables
+import os.path as op
+import glob
+from hetdex_api.survey import Survey
+from tqdm import tqdm
+
+
+###########################
+# basic edits here
+###########################
+
+
+basepath = '/scratch/projects/hetdex/hdr4/reduction/data'
+#basepath = '/scratch/projects/hetdex/hdr5/reduction/data'
+all_h5_fn = np.array(sorted(glob.glob(f"{basepath}/20*.h5")))
+all_dates = np.array([int(op.basename(x)[0:8]) for x in all_h5_fn])
+sel = all_dates > 20190100
+#sel = all_dates > 20230832
+all_h5_fn = all_h5_fn[sel]
+print(len(all_h5_fn))
+
+
+############################
+# helpers
+###########################
+
+
+def h5_lens(fn):
+    h5 = tables.open_file(fn,mode='r')
+    
+    
+    print("h5.root.Astrometry.CatalogMatches.exp01",len(h5.root.Astrometry.CatalogMatches.exp01))
+    print("h5.root.Astrometry.CatalogMatches.exp02",len(h5.root.Astrometry.CatalogMatches.exp02))
+    print("h5.root.Astrometry.CatalogMatches.exp03",len(h5.root.Astrometry.CatalogMatches.exp03))
+
+    print("h5.root.Astrometry.CoaddImages.exp01",len(h5.root.Astrometry.CoaddImages.exp01))
+    print("h5.root.Astrometry.CoaddImages.exp02",len(h5.root.Astrometry.CoaddImages.exp02))
+    print("h5.root.Astrometry.CoaddImages.exp03",len(h5.root.Astrometry.CoaddImages.exp03))
+    print("h5.root.Astrometry.CoaddImages.match_exp01",len(h5.root.Astrometry.CoaddImages.match_exp01))
+    print("h5.root.Astrometry.CoaddImages.match_exp02",len(h5.root.Astrometry.CoaddImages.match_exp02))
+    print("h5.root.Astrometry.CoaddImages.match_exp03",len(h5.root.Astrometry.CoaddImages.match_exp03))
+    print("h5.root.Astrometry.CoaddImages.png_exp01",len(h5.root.Astrometry.CoaddImages.png_exp01))
+    print("h5.root.Astrometry.CoaddImages.png_exp02",len(h5.root.Astrometry.CoaddImages.png_exp02))
+    print("h5.root.Astrometry.CoaddImages.png_exp03",len(h5.root.Astrometry.CoaddImages.png_exp03))
+
+    print("h5.root.Astrometry.Dithall.exp01",len(h5.root.Astrometry.Dithall.exp01))
+    print("h5.root.Astrometry.Dithall.exp02",len(h5.root.Astrometry.Dithall.exp02))
+    print("h5.root.Astrometry.Dithall.exp03",len(h5.root.Astrometry.Dithall.exp03))
+
+    print("h5.root.Astrometry.PositionOffsets.exp01",len(h5.root.Astrometry.PositionOffsets.exp01))
+    print("h5.root.Astrometry.PositionOffsets.exp02",len(h5.root.Astrometry.PositionOffsets.exp02))
+    print("h5.root.Astrometry.PositionOffsets.exp03",len(h5.root.Astrometry.PositionOffsets.exp03))
+
+    print("h5.root.Astrometry.NominalVals",len(h5.root.Astrometry.NominalVals))
+    print("h5.root.Astrometry.QA",len(h5.root.Astrometry.QA))
+    print("h5.root.Astrometry.ShuffleCfg",len(h5.root.Astrometry.ShuffleCfg))
+    print("h5.root.Astrometry.StarCatalog",len(h5.root.Astrometry.StarCatalog))
+    print("h5.root.Astrometry.fplane",len(h5.root.Astrometry.fplane))
+
+    print("h5.root.Calibration.Throughput.throughput",len(h5.root.Calibration.Throughput.throughput))
+
+    print("h5.root.Data.FiberIndex",len(h5.root.Data.FiberIndex))
+    print("h5.root.Data.Fibers",len(h5.root.Data.Fibers))
+    print("h5.root.Data.Images",len(h5.root.Data.Images))
+
+    print("h5.root.FullSkyModel.exp01",len(h5.root.FullSkyModel.exp01))
+    print("h5.root.FullSkyModel.exp02",len(h5.root.FullSkyModel.exp02))
+    print("h5.root.FullSkyModel.exp03",len(h5.root.FullSkyModel.exp03))
+
+    print("h5.root.Shot",len(h5.root.Shot))
+    
+    h5.close()
+
+    
+def h5_exps(fn):
+    h5 = tables.open_file(fn,mode='r')
+    n_exp = 0
+    
+    try:
+        x = len(h5.root.Astrometry.FullSkyModel.exp01)
+        if x < 10:
+            n_exp = 0
+    except:
+        n_exp = 0
+    
+    try:
+        x = len(h5.root.Astrometry.FullSkyModel.exp02)
+        if x < 10:
+            n_exp = 1
+    except:
+        n_exp = 1
+    
+    try:
+        x = len(h5.root.Astrometry.FullSkyModel.exp03)
+        if x < 10:
+            n_exp = 2
+    except:
+        n_exp = 2
+        
+        
+    try:
+        x = len(h5.root.Astrometry.FullSkyModel.exp04)
+        if x < 10:
+            n_exp = 3
+        else:
+            n_exp = 9
+    except:
+        n_exp = 3
+        
+    h5.close()
+    return n_exp
+
+
+        
+def basic_integrity_check(fn):
+    
+    bad = False
+    status = []
+    try:
+        h5 = tables.open_file(fn,mode='r')
+	shotname = op.basename(h5)
+
+        #h5.root.Astrometry.CatalogMatches.expXX
+        #can be variable in length, might even be zero, but all three must exist
+        try:
+            _ = len(h5.root.Astrometry.CatalogMatches.exp01)
+            _ = len(h5.root.Astrometry.CatalogMatches.exp02)
+            _ = len(h5.root.Astrometry.CatalogMatches.exp03)
+        except:
+            #problem
+            status.append(f"{shotname}: h5.root.Astrometry.CatalogMatches.expXX")
+            bad = True
+
+
+        #h5.root.Astrometry.CoaddImages
+        #fixed size pngs
+        try:
+            if len(h5.root.Astrometry.CoaddImages.exp01) == \
+               len(h5.root.Astrometry.CoaddImages.exp02) == \
+               len(h5.root.Astrometry.CoaddImages.exp03) == 1300:
+                pass #all good
+            else:
+                #problem
+                status.append(f"{shotname}: h5.root.Astrometry.CoaddImages.expXX bad lengths")
+                bad = True 
+
+        except:
+            #problem
+            status.append(f"{shotname}: h5.root.Astrometry.CoaddImages.expXX")
+            bad = True
+
+        #h5.root.Astrometry.CoaddImages.match_expXX
+        #fixed size pngs
+        try:
+            if len(h5.root.Astrometry.CoaddImages.match_exp01) == \
+               len(h5.root.Astrometry.CoaddImages.match_exp02) == \
+               len(h5.root.Astrometry.CoaddImages.match_exp03) == 1080:
+                pass #all good
+            else:
+                #problem
+                status.append(f"{shotname}: h5.root.Astrometry.CoaddImages.match_expXX bad lengths")
+                bad = True 
+
+        except:
+            #problem
+            status.append(f"{shotname}: h5.root.Astrometry.CoaddImages.match_expXX")
+            bad = True
+
+
+        #h5.root.Astrometry.CoaddImages.png_expXX
+        #fixed size pngs
+        try:
+            if len(h5.root.Astrometry.CoaddImages.png_exp01) == \
+               len(h5.root.Astrometry.CoaddImages.png_exp02) == \
+               len(h5.root.Astrometry.CoaddImages.png_exp03) == 800:
+                pass #all good
+            else:
+                #problem
+                status.append(f"{shotname}: h5.root.Astrometry.CoaddImages.png_expXX bad lengths")
+                bad = True 
+
+        except:
+            #problem
+            status.append(f"{shotname}: h5.root.Astrometry.CoaddImages.png_expXX")
+            bad = True
+
+
+
+        #h5.root.Astrometry.Dithall.expXX
+        #fixed (constant?)
+        try:
+            if len(h5.root.Astrometry.Dithall.exp01) == \
+               len(h5.root.Astrometry.Dithall.exp02) == \
+               len(h5.root.Astrometry.Dithall.exp03) and \
+               34000 < len(h5.root.Astrometry.Dithall.exp03) < 36000:
+                
+                pass #all good
+            else:
+                #problem
+                status.append(f"{shotname}: h5.root.Astrometry.Dithall.expXX bad lengths")
+                bad = True 
+
+        except:
+            #problem
+            status.append(f"{shotname}: h5.root.Astrometry.Dithall.expXX")
+            bad = True
+
+
+        #h5.root.Astrometry.PositionOffsets.expXX
+        try:
+            _ = len(h5.root.Astrometry.PositionOffsets.exp01)
+            _ = len(h5.root.Astrometry.PositionOffsets.exp02)
+            _ = len(h5.root.Astrometry.PositionOffsets.exp03)
+        except:
+            #problem
+            status.append(f"{shotname}: h5.root.Astrometry.PositionOffsets.expXX")
+            bad = True
+
+
+        #h5.root.Astrometry.NominalVals
+        #can be variable in length, might even be zero, but all three must exist
+        #todo: could check that the offet values are not absurd
+        try:
+            if len(h5.root.Astrometry.NominalVals) == 3:
+                pass #all good
+            else:
+                status.append(f"{shotname}: h5.root.Astrometry.NominalVals != 3")
+                bad = True
+        except:
+            #problem
+            status.append(f"{shotname}: h5.root.Astrometry.NominalVals")
+            bad = True
+
+
+        #h5.root.Astrometry.QA
+        #can be variable in length, might even be zero, but all three must exist
+        #todo: could check that the offet values are not absurd
+        try:
+            if len(h5.root.Astrometry.QA) == 3:
+                pass #all good
+            else:
+                status.append(f"{shotname}: h5.root.Astrometry.QA != 3")
+                bad = True
+        except:
+            #problem
+            status.append(f"{shotname}: h5.root.Astrometry.QA")
+            bad = True
+
+
+
+        #h5.root.Astrometry.ShuffleCfg
+        try:
+            if len(h5.root.Astrometry.ShuffleCfg) == 1:
+                pass #all good
+            else:
+                status.append(f"{shotname}: h5.root.Astrometry.ShuffleCfg != 1")
+                bad = True
+        except:
+            #problem
+            status.append(f"{shotname}: h5.root.Astrometry.ShuffleCfg")
+            bad = True
+
+
+        #h5.root.Astrometry.QA
+        #can be variable in length, might even be zero, but must exist
+        try:
+            _ = len(h5.root.Astrometry.StarCatalog)
+        except:
+            #problem
+            status.append(f"{shotname}: h5.root.Astrometry.StarCatalog")
+            bad = True
+
+        #h5.root.Astrometry.fplane
+        #SHOULD be usually 78 (though what about if one or more IFUs are inactive ?)
+        #might be 79 if HPF or LRS is on?
+        try:
+            if 76 < len(h5.root.Astrometry.fplane) < 80:
+                pass #all good
+            else:
+                status.append(f"h5.root.Astrometry.fplane {len(h5.root.Astrometry.fplane)} != 78")
+                bad = True
+        except:
+            #problem
+            status.append(f"{shotname}: h5.root.Astrometry.fplane")
+            bad = True
+
+
+        #h5.root.Calibration.Throughput.throughput
+        #can be variable in length ?, might even be zero, but must exist
+        try:
+            _ = len(h5.root.Calibration.Throughput.throughput)
+        except:
+            #problem
+            status.append(f"{shotname}: h5.root.Calibration.Throughput.throughput")
+            bad = True
+
+
+        #h5.root.Data.FiberIndex
+        #can be variable in length but should be similar to 35K x 3 ~ 100K
+        try:
+            fiberindex_len = len(h5.root.Data.FiberIndex)
+            if  fiberindex_len > 1e5:
+                pass #all good
+            else:
+                status.append(f"h5.root.Data.FiberIndex {fiberindex_len} < 1e5")
+                bad = True
+        except:
+            #problem
+            status.append(f"{shotname}: h5.root.Data.FiberIndex")
+            bad = True
+            fiberindex_len = None
+
+        #h5.root.Data.Fibers
+        #can be variable in length but should be similar to 35K x 3 ~ 100K
+        try:
+            fibers_len = len(h5.root.Data.Fibers)
+            if fibers_len > 1e5:
+                if fiberindex_len is not None:
+                    if fibers_len == fiberindex_len:
+                        pass #all good
+                    else:
+                        status.append(f"h5.root.Data.Fibers {fibers_len} != {fiberindex_len}") 
+                else:
+                    pass #can't check, but already marked bad
+            else:
+                status.append(f"h5.root.Data.Fibers {fibers_len} < 1e5")
+                bad = True
+        except:# Exception as e:
+            #problem
+            #print(e)
+            status.append(f"{shotname}: h5.root.Data.Fibers")
+            bad = True
+
+
+        #h5.root.Data.Images
+        #can be variable in length ?,  but must exist
+        try:
+            _ = len(h5.root.Data.Images)
+        except:
+            #problem
+            status.append(f"{shotname}: h5.root.Data.Images")
+            bad = True
+
+
+        #h5.root.FullSkyModel.expXX
+        #fixed size pngs
+        try:
+            if len(h5.root.FullSkyModel.exp01) == \
+               len(h5.root.FullSkyModel.exp02) == \
+               len(h5.root.FullSkyModel.exp03) == 20600:
+                pass #all good
+            else:
+                #problem
+                status.append(f"{shotname}: h5.root.FullSkyModel.expXX bad lengths")
+                bad = True 
+
+        except:
+            #problem
+            status.append(f"{shotname}: h5.root.FullSkyModel.expXX")
+            bad = True
+
+
+        #h5.root.Shot
+        #can be variable in length ?,  but must exist
+        try:
+            if len(h5.root.Shot) == 1:
+                pass
+            else:
+                status.append(f"h5.root.Shot {len(h5.root.Shot)} != 1")
+                bad = True
+        except:
+            #problem
+            status.append(f"{shotname}: h5.root.Shot")
+            bad = True
+            
+        h5.close()
+    except:
+        bad = True
+        status.append(f"{shotname}: Could not open file")
+
+    return not bad, status
+
+########################
+# run part
+########################    
+
+
+bad_h5 = []
+bad_status = []
+fiber_len = []
+for fn in tqdm(all_h5_fn):
+    try:
+        good,status = basic_integrity_check(fn)
+        if not good:
+            print(op.basename(fn))
+            bad_h5.append(fn)
+            bad_status.append(status)
+
+    except Exception as E:
+        exception_h5.append(fn)
+        print(f"Exception: {fn}, {E}")
+
+np.savetxt("check_shots.bad_fn",bad_fn,fmt=str)
+np.savetxt("check_shots.bad_reason",bad_status,fmt=str)

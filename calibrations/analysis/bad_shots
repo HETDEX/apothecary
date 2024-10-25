@@ -1,0 +1,32 @@
+#BAD SHOTS
+
+#original (manual) data lost for 202309 to 202404
+#recreated from list of all shots in range minus those deemed "good" under science_reductions/vdrp
+#These shots are removed from consideration as BAD
+
+20230910v010
+20230911v022
+20230924v011
+20231016v010
+20231212v030
+20231213v009
+20231213v016
+20240111v019
+20240115v021
+20240217v018
+20240306v018
+20240313v018
+20240330v007
+20240330v008
+20240331v013
+20240406v010
+20240408v021
+20240510v014 #bad dither norm
+20240510v018 #bad dither norm
+20240512v022 #bad dither norm
+20240517v003 #bad dither norm
+20240528v011 #bad dither norm
+20240609v006 #bad dither norm
+20240609v009 #bad dither norm
+20240609v011 #bad dither norm
+20240612v010 #bad dither norm

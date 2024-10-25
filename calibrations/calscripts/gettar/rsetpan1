@@ -1,0 +1,6 @@
+mth=$1
+awk '{print "rpan1",$0,mth0}' mth0=${mth} ${mth}.use > rt2
+awk '{print "rgfplane",$2,$4}' rt2 > rt2b
+chmod +x rt2b
+rt2b > j1
+paste rt2 j1 | awk '{print $1,$2,$3,$4,$5,$6,$8,$7}' > rt2b

@@ -1,0 +1,14 @@
+date=$1
+shot=$2
+wdir=$(pwd)
+cd raw
+if [ -f /work/03946/hetdex/maverick/${date}/virus/virus0000${shot}.tar ]
+then
+mkdir -p $1
+cd $1
+mkdir -p virus
+cd virus
+cp /work/03946/hetdex/maverick/${date}/virus/virus0000${shot}.tar .
+else
+tar xvf /corral-repl/utexas/Hobby-Eberly-Telesco/het_raw/$1.tar $1/virus/virus0000$2.tar
+fi

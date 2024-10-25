@@ -1,0 +1,185 @@
+# organized by IFU (as IFU SLOTID, middle ID), then IFU+AMP, then IFU+AMP+Date (increasing)
+#
+# note: 202304 is copied fully into 202305,06,07,08
+#
+
+
+############################
+# 014
+############################
+cp 202309/i014aRL* 202310/.
+cp 202309/i014aRL* 202311/.
+
+
+
+############################
+# 015
+############################
+# FYI, 015LL f2f always around 2.0 (max thresh 1.5), at least since 202301; always ignore
+
+
+############################
+# 026
+############################
+cp 202404/i026aRU* 202405/.  #f2f big jump and out or range, 1.2 to 1.8
+cp 202404/i026aRU* 202406/.  #f2f ditto
+cp 202404/i026aRU* 202407/.  #f2f ditto
+
+
+############################
+# 032
+############################
+cp 202308/i032aLL* 202309/.
+cp 202308/i032aRL* 202309/.
+
+
+############################
+# 033
+############################
+# FYI 033RU FWHM is always a little high, but we ignore
+cp 202308/i033aRL* 202309/.  #FWHM high
+
+
+############################
+# 036
+############################
+cp 202404/i036aRU* 202405/.  #f2f (8.9) max allowed 1.8
+cp 202404/i036aRU* 202406/.  #f2f (5.5)
+cp 202404/i036aRU* 202407/.  #f2f (3.9)
+
+
+############################
+# 039
+############################
+# FYI 039LU FWHM is a little high, and erratic in my plots, but have been ignoring; in Karl's it is similarly shaped, but never high
+
+
+
+############################
+# 042
+############################
+# FYI 042LL FWHM is always a little high (for me), but ignore; Karl's plots are not high
+
+
+
+############################
+# 043
+############################
+cp 202311/i034aRL* 202312/.  
+cp 202402/i034aLL* 202403/. #a2a  
+
+
+############################
+# 044
+############################
+# 044RU FWHM high for me and Karl, seems erratic, but have been ignoring for a very long time, at least since 202301 and earlier
+#       and has never been replaced
+
+############################
+# 045
+############################
+# FYI, 045RL a2a is ALWAYS zero and we have never done anythhing about it (at least not since 202301)
+
+############################
+# 046
+############################
+cp 202404/i046aLL* 202405/. #f2f (3.4) max allowed 1.8
+cp 202404/i046aLL* 202406/. #f2f (3.5) max allowed 1.8
+cp 202404/i046aLL* 202407/. #f2f (2.6) max allowed 1.8
+
+
+############################
+# 048
+############################
+#something changed in date or calculation? 202401 to 202404 is now (as of 202407 check) marginally low in a2a but okay there after
+
+
+############################
+# 050
+############################
+# FYI, 050RL fiber pos is ALWAYS 1010 (way above threshold 990) and we have never done anythhing about it (at least not since 202301)
+
+############################
+# 053
+############################
+# FYI, 053RL FWHM always a little high and always ignore
+
+
+############################
+# 060
+############################
+cp 202308/i060aLL* 202309/. #really back to 202305
+cp 202309/i060aLL* 202310/. #really back to 202305
+
+
+
+############################
+# 062
+############################
+cp 202402/i062aRU* 202403/. #pos
+cp 202402/i062aRL* 202403/. #pos
+cp 202403/i062aRL* 202404/. #pos
+cp 202406/i062aRU* 202407/. #pos (mask)
+
+
+
+############################
+# 067
+############################
+# FYI 067RU f2f has been a little high since 202303 and we have done nothing
+cp 202312/i067aLL* 202401/. 
+cp 202401/i067aLL* 202402/. #pos  #really from 202312
+cp 202402/i067aLL* 202403/. #pos  #really from 202312
+cp 202403/i067aLL* 202404/. #pos  #really from 202312
+
+
+
+############################
+# 071
+############################
+cp 202308/i071aLU* 202309/.
+cp 202308/i071aLL* 202309/.
+cp 202312/i071aRU* 202401/.
+cp 202401/i071aRL* 202402/. #pos
+cp 202401/i071aLU* 202402/. #pos
+
+
+
+############################
+# 072
+############################
+# FYI 072+RL FWHM has been a bit erratic for a long time, but always within the bounds and we have been ignoring
+
+
+
+############################
+# 088
+############################
+# 088+RL drop in FWHM (202405 to 06), but still in range, and more stable in Karl's calculation, so ignoring
+
+
+############################
+# 091
+############################
+# 091+LL a bit unstable in FWHM (in Karl's, 202404) but stable in mine and never out of range, so ignoring
+
+############################
+# 095
+############################
+cp 202308/i095aRU* 202309/.
+cp 202309/i095aRU* 202310/.
+cp 202310/i095aRU* 202311/.
+cp 202311/i095aRU* 202312/.
+cp 202312/i095aRU* 202401/.
+cp 202401/i095aRU* 202402/.
+cp 202402/i095aRU* 202403/.
+cp 202403/i095aRU* 202404/.
+cp 202404/i095aRU* 202405/.
+cp 202404/i095aRU* 202406/.
+cp 202404/i095aRU* 202407/.
+
+
+############################
+# 096
+############################
+# 095+RU alwasy very slighly high in FWHM, but stable and always ignore

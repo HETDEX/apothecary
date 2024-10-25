@@ -1,0 +1,14 @@
+rm -f jnew
+grep globular obj_rbc.txt > j1
+grep Standard obj_rbc.txt >> j1
+
+grep M15 2*sci | sed s/"\/"/" "/g  | awk '{print $6,$8,$12,$15,$16,$17,$18,$14}' | sort -g | sed s/virus0000// >> j1
+grep NEP 2*sci | sed s/"\/"/" "/g  | awk '{print $6,$8,$12,$15,$16,$17,$18,$14}' | sort -g | sed s/virus0000// >> j1
+grep SSA22 2*sci | sed s/"\/"/" "/g  | awk '{print $6,$8,$12,$15,$16,$17,$18,$14}' | sort -g | sed s/virus0000// >> j1
+
+sort -g j1 | awk '{print $1,$2}' | uniq > j2
+
+awk  '{print $1,$2}' dex.all > j3
+cat j3 j2 | sort -g | uniq > j4
+awk '{print "rctexp",$0}' j4 > j5
+chmod +x j5

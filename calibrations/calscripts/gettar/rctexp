@@ -1,0 +1,5 @@
+date=$1
+shot=$2
+grep $date 2*sci | grep virus0000$shot | wc | awk '{if($1==3) print date0,shot0}' date0=$date shot0=$shot >> jnew
+
+

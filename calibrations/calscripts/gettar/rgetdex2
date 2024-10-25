@@ -1,0 +1,1 @@
+sed s/"\/"/" "/g dex_*.dat | awk '{print $6,$8,$12,$15,$16,$17,$18,$14}' | sort -g | sed s/virus0000// > dex.all 

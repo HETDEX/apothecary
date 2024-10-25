@@ -1,0 +1,36 @@
+date=$1
+shot=$2
+exp=$3
+mth=$4
+mkdir -p d${date}s${shot}${exp}
+cd d${date}s${shot}${exp}
+ddir=$(pwd)
+grep "$1 $2 $3" ../runtChangeMe > rj
+cp ../rback .
+chmod +x rj
+
+cd /tmp
+mkdir -p d${date}s${shot}${exp}
+cd d${date}s${shot}${exp}
+mkdir -p ${date}v${shot}${exp}
+cp /work/03946/hetdex/maverick/${date}/virus/virus0000${shot}.tar .
+cp ${ddir}/rj .
+cp ${ddir}/rback .
+scriptdir="/work/03261/polonius/hetdex/calibrations/calscripts/"
+cp ${scriptdir}rbfits .
+cp ${scriptdir}rbfits0 .
+cp ${scriptdir}rimarb .
+cp ${scriptdir}rback1 .
+cp ${scriptdir}sun_use.dat .
+rj
+
+tar cf d${date}s${shot}${exp}_prf.tar d${date}s${shot}${exp}*prf.fits
+tar cf d${date}s${shot}${exp}_ftf.tar d${date}s${shot}${exp}*ftf.fits
+tar cf d${date}s${shot}${exp}_wtr.tar d${date}s${shot}${exp}*wtr.fits
+tar cf d${date}s${shot}${exp}_xtr.tar d${date}s${shot}${exp}*xtr.fits
+tar cf d${date}s${shot}${exp}_1ds.tar d${date}s${shot}${exp}*1ds.fits
+tar cf d${date}s${shot}${exp}_wav.tar d${date}s${shot}${exp}*wav.fits
+tar cf d${date}s${shot}${exp}_wavo.tar d${date}s${shot}${exp}*wavo.dat
+cp *.tar ${ddir}/.
+cd /tmp
+rm -r d${date}s${shot}${exp}

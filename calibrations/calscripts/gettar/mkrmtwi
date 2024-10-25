@@ -1,0 +1,2 @@
+awk '{print $1,$2}' $1.twis | uniq | awk '{print "rm -r reductions/"$1"/virus/virus0000"$2}' > $1.rmtwi
+chmod +x $1.rmtwi

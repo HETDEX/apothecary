@@ -1,0 +1,1 @@
+grep 093LL_twi tarlist  | sed s/"\/"/" "/g | sed s/T/" "/ | awk '{print "rtart /work/03946/hetdex/maverick/"$10"/virus/"$7".tar",$7"/"$8"/"$9"/"$10"T"$11}'

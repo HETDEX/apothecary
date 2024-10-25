@@ -1,0 +1,32 @@
+~gebhardt/bin/biwt << eof
+t1
+1
+eof
+mv biwt.out b1
+~gebhardt/bin/biwt << eof
+t1
+2
+eof
+paste biwt.out b1 > t1b
+
+~gebhardt/bin/biwt << eof
+t2
+1
+eof
+mv biwt.out b1
+~gebhardt/bin/biwt << eof
+t2
+2
+eof
+paste biwt.out b1 > t2b
+
+~gebhardt/bin/biwt << eof
+t3
+1
+eof
+mv biwt.out b1
+~gebhardt/bin/biwt << eof
+t3
+2
+eof
+paste biwt.out b1 > t3b

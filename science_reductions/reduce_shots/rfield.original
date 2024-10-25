@@ -1,0 +1,14 @@
+date=$1
+shot=$2
+cd field
+mkdir -p raw
+awk '{if($2==date0&&$3==shot0) print $1,$2,$3,$4,$5,$6,$7,2}' date0=$date shot0=$shot /work/00115/gebhardt/maverick/gettar/runs20???? > rt
+echo "run0s" $date $shot > rt0
+cp /work/00115/gebhardt/scripts/sciscripts/rback_field rback
+cp /work/00115/gebhardt/scripts/sciscripts/run0s .
+chmod +x rt rt0
+~gebhardt/jobsplitter2s rt 60 4 "01:00:00"
+sed -i s/"-n 48"/"-n 60"/ rt_1.slurm 
+rt0
+cp rt rt.${date}v${shot}
+#sbatch rt_1.slurm

@@ -1,0 +1,32 @@
+#!/usr/bin/env python
+
+#takes (optionally) 1 parameter YYYYMM 
+# if not proveded, checks norms for all shots under the current directory
+
+import os
+import numpy as np
+import glob
+import sys
+
+vdrp_path = "./"
+
+cl_args = list(map(str.lower,sys.argv))
+
+path = "./dithall/"
+
+try:
+    yyyymm = int(cl_args[1])
+    fns = glob.glob(os.path.join(vdrp_path,f"{yyyymm}*v???"))
+except:
+    fns = glob.glob(os.path.join(vdrp_path,"202*v???"))
+
+fns = sorted(fns)
+
+print("Possible bad dither norms:")
+print("--------------------------")
+for fn in fns:
+    norms = np.loadtxt(os.path.join(fn,"norm.dat")) #one line, 3 values
+    if np.count_nonzero(abs(1-norms)>0.5) > 0 or np.any(np.isnan(norms)):
+        print(os.path.basename(fn), norms)
+print("--------------------------")
+print("Done")

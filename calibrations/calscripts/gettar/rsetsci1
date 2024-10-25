@@ -1,0 +1,10 @@
+mth=$1
+cp $1.twis use.twis
+
+grep virus0000 $1tarlist | grep LL_sci | sed s/"\/"/" "/g | sed s/virus0000// | sed s/_/" "/ | sed s/LL/" "/ | sed s/T/" "/ | awk '{print "rback",$1,$3,$4,$8,mth0}' mth0=${mth} > rtmp
+
+chmod +x rtmp
+awk '{print "rgfplane",$2,$5}' rtmp > rtmp2
+chmod +x rtmp2
+rtmp2 > j1
+paste rtmp j1 | awk '{print $1,$2,$3,$4,$5,$7,$6}' > j2

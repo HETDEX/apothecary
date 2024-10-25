@@ -1,0 +1,6 @@
+mth=$1
+awk '{print "rback",$0,mth0}' mth0=${mth} ${mth}.twis > rt2
+awk '{print "rgfplane",$2,$4}' rt2 > rt2b
+chmod +x rt2b
+rt2b > j1
+paste rt2 j1 | awk '{print $1,$2,$3,"exp01",$4,$6,$5}' > rt2b

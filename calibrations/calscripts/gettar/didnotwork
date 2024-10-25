@@ -1,0 +1,8 @@
+changed many things in vdrp to make it work for the 45.
+Then ended with:
+
+20170127v007 had 4 dithers, maybe early testing?
+20170224v005 should be ok, but not finding a solution
+20170419v006 had a bad amp, removed it, and then ok
+20170603v002 empty frames, don't know why
+20170603v003 empty frames, don't know why

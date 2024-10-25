@@ -1,0 +1,5 @@
+date=$1
+awk '{if($7<3e4) print $0}' ${date}.twis.good > j1
+awk '{print "grep -v \""$1,$2,$3"\"",date0".twis > j1; mv j1",date0".twis"}' date0=$date j1 > r2
+chmod +x r2
+r2

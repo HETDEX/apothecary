@@ -1,0 +1,6 @@
+date=$1
+mth=`echo "$date" | cut -b 1-6`
+grep ${date} ${mth}tarlist | grep LL_sci.fits | grep exp01 | grep virus0000 | head -1 | sed s/"\/exp"/" "/ | awk '{print "rtar2 /work/03946/hetdex/maverick/"$1".tar"}' > rj
+chmod +x rj
+rj
+mv out fp${date}

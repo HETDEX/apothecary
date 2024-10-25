@@ -1,0 +1,24 @@
+mth=$1
+grep virus0000 ${mth}tarlist | grep _sci | sed s/"\/"/" "/g | sed s/_/" "/g | awk '{print $1,$3,$4,$7}' | sed s/virus0000// | sed s/LL// | sed s/LU// | sed s/RL// | sed s/RU// | sort -n | uniq > j1
+
+#awk '{print "rgfplane",$1,$4}' j1 > rj
+#chmod +x rj
+#rj > j2
+#paste j1 j2 | awk '{print "rback",$1,$2,$3,$4,$5,mth0,1}' mth0=${mth} > runs${mth}
+#grep 666 runs${mth}
+rm -f out
+~gebhardt/bin/gfplane
+mv out runs${mth}
+
+grep virus0000 ${mth}tarlist | grep _twi | sed s/"\/"/" "/g | sed s/_/" "/g | awk '{print $1,$3,$4,$7}' | sed s/virus0000// | sed s/LL// | sed s/LU// | sed s/RL// | sed s/RU// | sort -n | uniq > j1
+#awk '{print "rgfplane",$1,$4}' j1 > rj
+#chmod +x rj
+#rj > j2
+#paste j1 j2 | awk '{print "rback",$1,$2,$3,$4,$5,mth0,0}' mth0=${mth} > runt${mth}
+#grep 666 runt${mth}
+
+rm -f out
+~gebhardt/bin/gfplane
+awk '{print $1,$2,$3,$4,$5,$6,$7,0}' out > runt${mth}
+
+# awk '{print "run1s",$2,$3,$4,$7}' runs201911 | sort -g  | uniq > rt1s

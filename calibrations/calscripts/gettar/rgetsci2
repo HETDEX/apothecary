@@ -1,0 +1,3 @@
+#/home/00115/gebhardt/wcs/wcstools-3.9.2/bin/gethead -p /work/03946/hetdex/maverick/$1??/virus/virus0000???/exp*/virus/*105LL_sci.fits OBJECT EXPTIME DARKTIME MJD TRAJCRA TRAJCDEC PARANGLE STRUCTAZ DETTEMP AMBTEMP
+/home/03261/polonius/wcs/wcstools-3.9.2/bin/gethead -p /work/03946/hetdex/maverick/$1??/virus/virus0000???/exp*/virus/*106LL_sci.fits OBJECT EXPTIME DARKTIME MJD TRAJCRA TRAJCDEC PARANGLE STRUCTAZ DETTEMP AMBTEMP
+#/home/00115/gebhardt/wcs/wcstools-3.9.2/bin/gethead -p /work/03946/hetdex/maverick/$1??/virus/virus0006???/exp*/virus/*062LL_eng.fits OBJECT EXPTIME DARKTIME MJD TRAJCRA TRAJCDEC PARANGLE STRUCTAZ DETTEMP AMBTEMP

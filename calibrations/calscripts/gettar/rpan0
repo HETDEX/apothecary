@@ -1,0 +1,11 @@
+resdir=/work/03946/hetdex/maverick/red1
+date=$1
+shot=$2
+ifu=$3
+mkdir /tmp/$date$shot$ifu
+cd /tmp/$date$shot$ifu
+python /work/00115/gebhardt/maverick/panacea/Panacea/panacea2.py --ifuslot $ifu -td $date -to $shot -te 1 --reduce_twi -C config_twi
+cp --parent reductions/$date/virus/virus0000$shot/*/virus/multi*fits $resdir/.
+cp --parent reductions/$date/virus/virus0000$shot/*/virus/fibermodel*fits $resdir/.
+cd $resdir
+rm -rf /tmp/$date$shot$ifu

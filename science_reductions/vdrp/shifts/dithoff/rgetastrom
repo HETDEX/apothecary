@@ -1,0 +1,5 @@
+date=$1
+shot=$2
+awk '{if($5>2) print sqrt($3*$3+$4*$4)/sqrt(2)/sqrt($5),$3,$4,$5}' ../$1v$2/getoff2_exp01.out
+awk '{if($5>2) print sqrt($3*$3+$4*$4)/sqrt(2)/sqrt($5),$3,$4,$5}' ../$1v$2/getoff2_exp02.out
+awk '{if($5>2) print sqrt($3*$3+$4*$4)/sqrt(2)/sqrt($5),$3,$4,$5}' ../$1v$2/getoff2_exp03.out

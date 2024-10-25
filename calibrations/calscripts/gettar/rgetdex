@@ -1,0 +1,8 @@
+grep exp03 20*sci  | grep GN > dex_gn.dat
+grep exp03 20*sci  | grep HF > dex_hf.dat
+grep exp03 20*sci  | grep COS > dex_cos.dat
+grep exp03 20*sci  | grep HS > dex_hs.dat
+grep exp03 20*sci  | grep DEX > dex_dex.dat
+grep exp03 20*sci  | grep EGS > dex_egs.dat
+grep exp03 20*sci  | grep NEP > dex_nep.dat
+grep exp03 20*sci  | grep SSA22 > dex_ssa.dat

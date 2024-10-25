@@ -1,0 +1,21 @@
+date=$1
+shot=$2
+exp=$3
+mth=$4
+type=$5
+dir1=$(pwd)
+cd /tmp/d${date}s${shot}${exp}/${date}v${shot}${exp}/
+
+# tar cvf d${date}s${shot}${exp}_mu.tar multi*.fits
+# tar cvf d${date}s${shot}${exp}_co.tar Co*.fits
+# mv *.tar ${dir1}/.
+# mv *.png ${dir1}/.
+
+python3 /work/00115/gebhardt/maverick/panacea/Panacea/cofes_vis.py Co --output d${date}s${shot}${exp}1de.png --vmin -20 --vmax 30
+
+tar rvf d${date}s${shot}${exp}_co.tar Co*.fits
+cp *.png ${dir1}/.
+cp *.tar ${dir1}/.
+
+cd /tmp
+rm -r d${date}s${shot}${exp}

@@ -1,0 +1,32 @@
+#!/usr/bin/env python
+
+#make bad shots list from good shots and hdrx.use
+import numpy as np
+import glob
+
+
+all_dates, all_shots = np.loadtxt("/scratch/03261/polonius/science_reductions/hdrX.use",dtype=int,unpack=True)
+#clean up
+
+sel = all_dates > 20230900
+all_dates = all_dates[sel]
+all_shots = all_shots[sel]
+
+
+good_dates = []
+good_shots = []
+
+good_files = glob.glob("/scratch/03261/polonius/science_reductions/vdrp/shifts/20????.good")
+
+for fn in good_files:
+    dates, shots = np.loadtxt(fn,dtype=int, unpack=True)
+    good_dates.extend(dates)
+    good_shots.extend(shots)
+
+
+#find bad
+all_good = np.array([str(d)+"v"+str(s).zfill(3) for d,s in zip(good_dates,good_shots)])
+
+for d,s in zip(all_dates,all_shots):
+    if str(d)+"v"+str(s).zfill(3) not in all_good:
+        print(str(d)+"v"+str(s).zfill(3))

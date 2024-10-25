@@ -1,0 +1,14 @@
+file1=$1
+file2=$2
+file3=$3
+if [ -e ${file1} ]
+then
+#echo "untarring"
+awk '{print "tar xf",file10,file20}' file10=${file1} file20=${file2} j2 > rtmp
+chmod +x rtmp; rtmp
+mv virus0000*/*/*/2*fits in.fits
+rm -rf virus0000*
+else
+echo "not tarred yet"
+cp /work/03946/hetdex/maverick/${file3} in.fits
+fi

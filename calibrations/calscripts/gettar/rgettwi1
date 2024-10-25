@@ -1,0 +1,1 @@
+/home/03261/polonius/wcs/wcstools-3.9.2/bin/gethead -p v*/*/*/*LL_twi.fits OBJECT EXPTIME DARKTIME MJD TRAJCRA TRAJCDEC PARANGLE STRUCTAZ DETTEMP 

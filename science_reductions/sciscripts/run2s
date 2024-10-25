@@ -1,0 +1,47 @@
+date=$1
+shot=$2
+exp=$3
+mth=$4
+wdir=$(pwd)
+mkdir -p d${date}s${shot}${exp}
+cd d${date}s${shot}${exp}
+ddir=$(pwd)
+grep "$1 $2 $3" ../runsChangeMe | awk '{print $1,$2,$3,$4,$5,$6,$7,2}' > rj
+#echo "rtaras $1 $2 $3 $4 1" >> rj
+cp ../rbacks rback
+#cp ../rtaras .
+chmod +x rj
+# rj
+
+#mkdir -p tmp
+#cd tmp
+cd /tmp
+mkdir -p d${date}s${shot}${exp}
+cd d${date}s${shot}${exp}
+mkdir -p ${date}v${shot}${exp}
+
+#cp /work/03946/hetdex/maverick/${date}/virus/virus0000${shot}.tar .
+cp ${wdir}/raw/${date}/virus/virus0000${shot}.tar .
+
+cp ${ddir}/rj .
+cp ${ddir}/rback .
+#cp ${ddir}/rtaras .
+#scriptdir="/work/00115/gebhardt/maverick/scripts/back/"
+#scriptdir="/scratch/00115/gebhardt/sciscripts/"
+scriptdir="/scratch/03261/polonius/science_reductions/sciscripts/"
+cp ${scriptdir}rbfits .
+cp ${scriptdir}rbfits0 .
+cp ${scriptdir}rimarb .
+cp ${scriptdir}rback1 .
+cp ${scriptdir}sun_use.dat .
+rj
+
+cd ${date}v${shot}${exp}
+python3 /work/00115/gebhardt/maverick/panacea/Panacea/cofes_vis.py Co --output d${date}s${shot}${exp}1de.png --vmin -20 --vmax 30
+tar rvf d${date}s${shot}${exp}_co.tar Co*.fits
+cp *.png ${ddir}/.
+cp *.tar ${ddir}/.
+cd /tmp
+rm -r d${date}s${shot}${exp}
+cd ${wdir}
+runtar ${date} ${shot} ${exp}

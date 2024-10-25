@@ -1,0 +1,103 @@
+#!/usr/bin/env python
+
+#update fwhm.all and norm.all from /scratch/projects/hetdex/detect
+#by appending the new data to them
+#any duplicates are removed in favor of the newer data
+#data is written out, sorted by datevshot
+
+import glob
+import os
+import sys
+import numpy as np
+from tqdm import tqdm
+
+
+
+#read in original fwhm.all and norm.all
+
+fwhm_all_dvs = np.loadtxt("/scratch/projects/hetdex/detect/fwhm.all",dtype=str,usecols=[0],unpack=True)
+fwhm_all_col = np.loadtxt("/scratch/projects/hetdex/detect/fwhm.all",dtype=float,usecols=[1,2,3],unpack=True)
+fwhm_all_col = list(fwhm_all_col)
+fwhm_all_col[2] = fwhm_all_col[2].astype(int)
+
+
+norm_all_dvs = np.loadtxt("/scratch/projects/hetdex/detect/norm.all",dtype=str,usecols=[0],unpack=True)
+norm_all_col = np.loadtxt("/scratch/projects/hetdex/detect/norm.all",dtype=float,usecols=[1,2,3],unpack=True)
+
+
+#get the new ones
+path = "./" #"/scratch/03261/polonius/science_reductions/detect/"
+dirnames = sorted(glob.glob(f"{path}????????v???"))
+
+
+fwhm_append_str = []
+norm_append_str = []
+dvs_append = []
+
+for d in tqdm(dirnames):
+    dvs = os.path.basename(d)
+    try:
+        fwhm_col = np.loadtxt(os.path.join(d,"fwhm.out"),dtype=float,unpack=True)
+    except:
+#        print(f"Skipping {os.path.join(d,'fwhm.out')}")
+        continue
+
+    dvs_append.append(dvs)
+
+    fwhm_col = list(fwhm_col)
+    fwhm_col[2] = fwhm_col[2].astype(int)
+
+    fwhm_append_str.append(f"{dvs}\t{fwhm_col[0]:0.9f}\t{fwhm_col[1]:0.9f}\t{fwhm_col[2]}\n")
+
+    norm_col = np.loadtxt(os.path.join(d,"norm.dat"),dtype=float,unpack=True)
+
+    norm_append_str.append(f"{dvs}\t{norm_col[0]:0.9f}\t{norm_col[1]:0.9f}\t{norm_col[2]:0.9f}\n")
+
+
+#which of the originals do we keep? usually all of them, but if we have a repeat, keep the newer one
+fwhm_sel = np.full(len(fwhm_all_dvs),True)
+norm_sel = np.full(len(norm_all_dvs),True)
+i=0
+for dvs in fwhm_all_dvs:
+    if dvs in dvs_append:
+        fwhm_sel[i] = False
+    i+=1
+
+i=0
+for dvs in norm_all_dvs:
+    if dvs in dvs_append:
+        norm_sel[i] = False
+    i+=1
+
+#write out fwhm
+out_str = []
+with open("fwhm.all","w+") as f:
+    for i in range(len(fwhm_sel)):
+        if fwhm_sel[i]:
+            out_str.append(f"{fwhm_all_dvs[i]}\t{fwhm_all_col[0][i]:0.9f}\t{fwhm_all_col[1][i]:0.9f}\t{fwhm_all_col[2][i]}\n")
+
+    for i in range(len(fwhm_append_str)):
+        out_str.append(f"{fwhm_append_str[i]}")
+
+    out_str = sorted(out_str)
+    for s in out_str:
+        f.write(s)
+
+
+#write out norm
+out_str = []
+with open("norm.all","w+") as f:
+    for i in range(len(norm_sel)):
+        if norm_sel[i]:
+            out_str.append(f"{norm_all_dvs[i]}\t{norm_all_col[0][i]:0.9f}\t{norm_all_col[1][i]:0.9f}\t{norm_all_col[2][i]:0.9f}\n")
+
+    for i in range(len(norm_append_str)):
+        out_str.append(f"{norm_append_str[i]}")
+
+    out_str = sorted(out_str)
+    for s in out_str:
+        f.write(s)
+
+
+
+print("Done.")

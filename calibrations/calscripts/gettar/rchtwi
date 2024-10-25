@@ -1,0 +1,41 @@
+echo "!!!!! rchtwi !!!!! DD edit me !!!!!"
+
+date=$1
+shot=$2
+ifu=$3
+rm -f 1.fits out
+if [ -e /work/03946/hetdex/maverick/red1/reductions/$1/virus/virus0000$2/exp01/virus/multi_*_$3_*_LL.fits ]; then
+ln -s /work/03946/hetdex/maverick/red1/reductions/$1/virus/virus0000$2/exp01/virus/multi_*_$3_*_LL.fits 1.fits
+~gebhardt/bin/imminmax << eof
+1.fits
+1
+1 1032
+1 1032
+eof
+~gebhardt/bin/imstat << eof
+1.fits
+6
+480 580
+1 112
+eof
+awk '{print $3,$4}' imstat.out > out2
+paste out out2 > out3
+awk '{print date0,shot0,ifu0,$0}' date0=$date shot0=$shot ifu0=$ifu out3 | awk '{print $1,$2,$3,$4,$5,$6,$7,$8}' > j1
+~gebhardt/wcs/wcstools-3.9.2/bin/gethead 1.fits BACKLVL > j2
+paste j1 j2 | awk '{print $1,$2,$3,$4,$5,$6,$7,$8,$9}' > j3
+cat j3 >> rtgood
+awk '{if($6>500||$9>50000) print $0}' j3 >> rtbad
+else
+echo $date $shot $ifu >> rtbad
+fi
+
+#if [ ! -e /work/03946/hetdex/maverick/red1/reductions/$1/virus/virus0000$2/exp01/virus/multi_*_$3_*_LU.fits ]; then
+#   echo $date $shot $ifu >> rtbad
+#fi
+#if [ ! -e /work/03946/hetdex/maverick/red1/reductions/$1/virus/virus0000$2/exp01/virus/multi_*_$3_*_RL.fits ]; then
+#   echo $date $shot $ifu >> rtbad
+#fi
+#if [ ! -e /work/03946/hetdex/maverick/red1/reductions/$1/virus/virus0000$2/exp01/virus/multi_*_$3_*_RU.fits ]; then
+#   echo $date $shot $ifu >> rtbad
+#fi
+   

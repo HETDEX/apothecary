@@ -1,0 +1,62 @@
+#!/usr/bin/env python
+
+#
+# check the output of mkshot (which h5 finished)
+#
+# takes a single input, YYYYMM
+
+
+import glob
+import os
+import sys
+import numpy as np
+from tqdm import tqdm
+
+
+workpath = "./"
+
+
+cl_args = list(map(str.lower,sys.argv))
+
+runfile = cl_args[1]
+
+#mkshot_202405.run
+if not os.path.exists(runfile): #maybe this was just YYYYMM
+  runfile = f"mkshot_{runfile}.run"
+
+  if not os.path.exists(runfile): #maybe this was just YYYYMM
+    print("Cannot locate runfile.")
+    exit(-1)
+
+
+#open the run file
+#./mkshotid 20240531 022
+
+
+dates,shots = np.loadtxt(os.path.join(workpath,runfile),usecols=[1,2],dtype=str,unpack=True)
+
+
+missing_files = []
+
+for d,s in tqdm(zip(dates,shots),total=len(dates)):
+    #check that the file exists
+    h5name=d+"v"+s.zfill(3)+".h5"
+    if not os.path.exists(h5name):
+        missing_files.append(h5name)
+
+
+if len(missing_files) == 0:
+    print("Done. All shots found.")
+else:
+    print(f"Done. {len(missing_files)} files missing.")
+    print("Sweep:")
+    with open(f"{runfile}.sweep","w") as sweep:
+        for f in missing_files:
+#./mkshotid 20240531 022
+            toks = f.split("v")
+            d = toks[0]
+            s = toks[1].split(".")[0]
+            print("./mkshotid",d,s)
+            sweep.write(f"./mkshotid {d} {s}\n")
+
+

@@ -1,0 +1,1 @@
+needs the specid NOT the ifuid (can get from a fits header or elsewhere)

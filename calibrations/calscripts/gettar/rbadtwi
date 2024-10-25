@@ -1,0 +1,12 @@
+date=$1
+rm -f rtbad rtgood
+cp $1.twis $1.twis.orig
+awk '{print "rchtwi",$0}' $1.twis > r1
+chmod +x r1
+r1
+mv rtgood $1.twis.good
+awk '{print $1,$2,$3}' rtbad | sort | uniq > j1
+mv j1 rtbad
+awk '{print "grep -v \""$1,$2,$3"\"",date0".twis > j1; mv j1",date0".twis"}' date0=$date rtbad > r2
+chmod +x r2
+r2

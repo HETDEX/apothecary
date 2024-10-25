@@ -1,0 +1,6 @@
+rm -f out
+~gebhardt/bin/imfindmax << eof
+$1.fits
+16
+eof
+mv out $1.dat

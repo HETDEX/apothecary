@@ -1,0 +1,9 @@
+# slurm job to run survey script (~30 min on 1 Node)
+sbatch mk_survey.slurm 
+# slurm job to grab fibers by month (~30 min on 1 Node, 48 tasks/N)
+# awk '{print "mk_fiber_index_month", $1}' hdr4.monthlist > run_month_fibindex 
+sbatch run_month_fibindex.slurm
+# slurm job to merge all the monthly Fiber Index files after last job is done (~40 min)
+sbatch mk_fiber_index_merge.slurm
+# once detections are done make Detection Index file, I do this on idev
+python3 ~ecooper/hetdex_api/h5tools/create_detect_index_hdf5.py -of detect_index_hdr4.h5

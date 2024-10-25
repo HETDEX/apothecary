@@ -1,0 +1,43 @@
+#!/usr/bin/env python
+
+#dateshot or datevshot
+
+import sys
+from hetdex_api.survey import Survey,FiberIndex
+from hetdex_api.shot import open_shot_file
+import matplotlib.pyplot as plt
+
+
+survey_name = "hdr4"
+cl_args = list(map(str.lower,sys.argv))
+
+try:
+  shotid = int(cl_args[1])
+  datevobs = str(shotid)[0:8] +"v" +  str(shotid)[8:]
+except:
+  datevobs = cl_args[1]
+
+
+survey = Survey(survey_name)
+
+
+print(f"Trying to fetch match pngs for: {datevobs} via {survey_name}")
+
+fileh = open_shot_file(datevobs)
+immatch = fileh.root.Astrometry.CoaddImages.match_exp01.read()
+
+plt.figure(figsize=(15,15))
+plt.imshow(immatch)
+plt.savefig(f'match_{datevobs}_exp01.png')
+plt.close()
+
+immatch = fileh.root.Astrometry.CoaddImages.match_exp02.read()
+plt.figure(figsize=(15,15))
+plt.imshow(immatch)
+plt.savefig(f'match_{datevobs}_exp02.png')
+plt.close()
+
+immatch = fileh.root.Astrometry.CoaddImages.match_exp03.read()
+plt.figure(figsize=(15,15))
+plt.imshow(immatch)
+plt.savefig(f'match_{datevobs}_exp03.png')

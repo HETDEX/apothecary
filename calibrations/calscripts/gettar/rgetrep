@@ -1,0 +1,7 @@
+mth=$1
+grep ${mth} badall2 > j1
+cp tarall/${mth}tarlist j2
+awk '{print "grep -v",$1,"j2 > j3; mv j3 j2"}' j1 > rj
+chmod +x rj
+rj
+mv j2 ${mth}tarlist

@@ -1,0 +1,2 @@
+awk '{print "rgett",$0}' listt > run33
+chmod +x run33
