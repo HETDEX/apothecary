@@ -1,0 +1,39 @@
+#!/usr/bin/env python
+
+#
+# takes start and end YYYYMM and adds lines for all months between them, inclusive
+# 
+
+#import glob
+#import os
+import sys
+import numpy as np
+#from tqdm import tqdm
+
+
+
+cl_args = list(map(str.lower,sys.argv)) 
+#cl_args = ["","202309","202403"]
+mth0 = cl_args[1]
+mth1 = cl_args[2]
+
+d0 = np.datetime64(f"{mth0[0:4]}-{mth0[4:]}")
+d1 = np.datetime64(f"{mth1[0:4]}-{mth1[4:]}")
+
+if d1 < d0:
+    print(f"Error. Invalid dates. 1st argument must be less than or equal to 2nd.")
+    exit(-1)
+
+
+shot_h5_path ="/scratch/projects/hetdex/hdr4/reduction/data/"
+rescor_code_path = "/scratch/03261/polonius/rescor/code/rescor/ffskysub/code/combine_rescor_by_month.py"
+
+
+with open("rescor_combine.run","w+") as f:
+    while(d0 <= d1):
+        #todo: check if already exist for this month, and skip if so??
+        f.write(f"python {rescor_code_path} {str(d0).replace('-','')} 1 0 \n")
+        d0 = d0 + np.timedelta64(1,"M")
+    
+
+print("Done.")

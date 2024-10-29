@@ -1,0 +1,76 @@
+#!/bin/bash 
+#SBATCH -J rescor                # Job name
+#SBATCH -N 4                     # Total number of nodes requested
+#SBATCH --ntasks-per-node 12     # Tasks per node
+#SBATCH -p development            # Queue name
+#SBATCH -o /work/05865/maja_n/ls6/ffskysub/slurm_out/HETDEX.o%j            # Name of stdout output file (%j expands to jobid)
+#SBATCH -t 02:00:00              # Run time (hh:mm:ss)
+#SBATCH -A AST23008
+#SBATCH --mail-user maja@mpa-garching.mpg.de
+#SBATCH --mail-type all
+
+module load launcher
+export LAUNCHER_PLUGIN_DIR=$TACC_LAUNCHER_DIR/plugins
+export LAUNCHER_RMI=SLURM
+export LAUNCHER_WORKDIR=/tmp
+export LAUNCHER_JOB_FILE=/work/05865/maja_n/ls6/ffskysub/code/run_correction
+WORKDIR=$LAUNCHER_WORKDIR
+CONTROL_FILE=$LAUNCHER_JOB_FILE
+export LAUNCHER_SCHED=interleaved
+
+
+eval "$(/work/05865/maja_n/stampede2/anaconda3/bin/conda shell.bash hook); unset PYTHONPATH"
+conda activate nbodykit-env
+which python
+
+#----------------
+# Error Checking
+#----------------
+
+if [ ! -d $WORKDIR ]; then 
+        echo " " 
+	echo "Error: unable to change to working directory." 
+	echo "       $WORKDIR" 
+	echo " " 
+	echo "Job not submitted."
+	exit
+fi
+
+if [ ! -x $EXECUTABLE ]; then
+   echo " "
+   echo "Error: unable to find launcher executable $EXECUTABLE."
+   echo " "
+   echo "Job not submitted."
+   exit
+fi
+
+if [ ! -e $CONTROL_FILE ]; then # used to be $WORKDIR/$CONTROL_FILE
+   echo " "
+   echo "Error: unable to find input control file $CONTROL_FILE."
+   echo " "
+   echo "Job not submitted."
+   exit
+fi
+
+#----------------
+# Job Submission
+#----------------
+
+cd $WORKDIR/ 
+echo " WORKING DIR:   $WORKDIR/"
+
+echo " mkdir maja_n/ffskysub "
+mkdir maja_n/
+mkdir maja_n/ffskysub
+mkdir -p /tmp/maja_n/ffskysub/improved_spectra/pytables/nomask
+
+
+$TACC_LAUNCHER_DIR/paramrun
+
+rsync -av maja_n/ffskysub/ /scratch/05865/maja_n/ffskysub/
+
+echo "Done copying files."
+
+echo " "
+echo " Parameteric Job Complete"
+echo " " 
