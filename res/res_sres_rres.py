@@ -549,6 +549,16 @@ def reset_done():
         print("failed reset_run ", E)
 
 
+def check_stop():
+    """
+    check if the stop file exists ... if so, stop/exit
+    :return:
+    """
+    if os.path.exists("stop"):
+        return True
+    else:
+        return False
+
 ##############
 # Main loop
 #############
@@ -624,6 +634,11 @@ while not all_done:
                 f"Resuming {ifu}_XX: {datevshot_all[start_idx]} to {datevshot_all[stop_idx]}, max of {stop_idx - start_idx + 1} shots ...")
 
         for datevshot in datevshot_all[start_idx:stop_idx + 1]:
+
+            if check_stop():
+                all_done = True
+                print("Stop file detected. Exiting.")
+                break
 
             shotid = int(datevshot.replace('v', ''))
             if target_month is None:
@@ -721,10 +736,18 @@ while not all_done:
         # now do the final stuff
         # need to clear the target_months that did not get run
         for q_multiframe in q_multiframes:
+            if check_stop():
+                all_done = True
+                break
+
             sel = np.array(T_data['multiframe'] == q_multiframe)
             months = np.unique(T_data['yyyymm'][sel])
             print(f"Computing for remaining months ({len(months)})")
             for target_month in months:
+                if check_stop():
+                    all_done = True
+                    break
+
                 gids, sky_sub, sky_spec, err1d = select_data(T_data, D_data, q_multiframe, target_month)
                 res, sres, rres = compute_all(sky_sub, sky_spec, err1d)
 
