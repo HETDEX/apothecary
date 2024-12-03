@@ -1,8 +1,10 @@
 """
 
-build up the res, sres, and rres*.fits files using the shot.h5 files
+USES only the specid ... the same spectrograph that is moved to a different location (IFU SLOT) or has the fibers
+replaced (IFUID) all feed into the same statistics
+*** if you want different statistics based on the full multiframe name, see "res_sres_rres.py"
 
-USES the full multiframe name, so a spectrograph moved to a new IFU SLOT (for example) will be treated independently
+build up the res, sres, and rres*.fits files using the shot.h5 files
 
 this supersedes the lib_calib/reschi/?res<specid><amp>.fits files
 and builds out subdirectories by year+month
@@ -213,7 +215,7 @@ def insert_data_ifu(t, d, shotid, ifu, h5_fn, skip_bad=True):
             print(f"entry already exists! {shotid} {ifu}")
             return
 
-        # note: this specid, slotid, and ifuid uniquey identify this IFU for THIS shot
+            # note: this specid, slotid, and ifuid uniquey identify this IFU for THIS shot
         #specid = ifu[6:9]
         q_multiframes = np.array([f'{ifu}_LU', f'{ifu}_LL', f'{ifu}_RU', f'{ifu}_RL'])
         good = np.array([1, 1, 1, 1])  # assume good
@@ -398,8 +400,8 @@ def write_fits_files(yyyymm, multiframe, res, sres, rres):
             print(f"Created:  {outdir}")
 
         # build and write fits to outdirs
-        mf = multiframe[6:]
-        #amp = multiframe[-2:]
+        specid = multiframe[6:9]
+        amp = multiframe[-2:]
 
         rres = rres.astype(np.float32)
         sres = sres.astype(np.float32)
@@ -407,17 +409,17 @@ def write_fits_files(yyyymm, multiframe, res, sres, rres):
 
         # res
         hdu = fits.PrimaryHDU(res)  # essentially with an empty header
-        fout = os.path.join(outdir, f'res_{mf}.fits')
+        fout = os.path.join(outdir, f'res{specid}{amp}.fits')
         hdu.writeto(fout, overwrite=True)
 
         # sres
         hdu = fits.PrimaryHDU(sres)  # essentially with an empty header
-        fout = os.path.join(outdir, f'sres_{mf}.fits')
+        fout = os.path.join(outdir, f'sres{specid}{amp}.fits')
         hdu.writeto(fout, overwrite=True)
 
         # rres
         hdu = fits.PrimaryHDU(rres)  # essentially with an empty header
-        fout = os.path.join(outdir, f'rres_{mf}.fits')
+        fout = os.path.join(outdir, f'rres{specid}{amp}.fits')
         hdu.writeto(fout, overwrite=True)
 
         return True
@@ -485,8 +487,8 @@ def find_completed_fits(ifu):
 
     fns = []
     try:
-        mf_no_amp = ifu[6:]
-        fns = sorted(glob.glob(f"{basedir_out}/*/rres_{mf_no_amp}*.fits"))
+        specid = ifu[6:9]
+        fns = sorted(glob.glob(f"{basedir_out}/*/rres{specid}*.fits"))
         # months = np.unique([f.split("/")[-2] for f in fns])
 
     except Exception as E:
@@ -589,7 +591,7 @@ mf_ifus = np.array(np.unique(T_mfs['mf_ifu']))  # in roughly date order
 ifu_step_size = 10  # use 10 ifus as a time?
 
 all_done = False
-mark_done = True #okay to mark done (e.g. this is not a "stop" condition)
+mark_done = True #okay to mark done (e.g. not a "stop" condition)
 next_ifu = None
 target_month = None
 q_multiframe = None
