@@ -43,13 +43,13 @@ datevshot_all = [os.path.basename(shotfile)[:-3] for shotfile in shotfiles_all]
 print(f"Found: {len(shotfiles_all)}")
 
 #read in the list of multiframes and corresponding shots
-T_mfs = Table.read("multiframes_unique.txt",format="ascii",names=('multiframe', 'start_shot', 'stop_shot', 'num_shots'))
+T_mfs = Table.read("multiframes_unique_slurm.txt",format="ascii")#,names=('multiframe', 'start_shot', 'stop_shot', 'num_shots'))
 #update T_mfs with new column for the IFU as multiframe - AMP
-T_mfs['mf_ifu'] = np.array([m[:-3] for m in T_mfs['multiframe']])
+#T_mfs['mf_ifu'] = np.array([m[:-3] for m in T_mfs['multiframe']])
 T_mfs.sort(['start_shot', 'stop_shot'])
 T_mfs['done'] = False
 
-T_badamps = Table.read("/home/jovyan/Hobby-Eberly-Telesco/hdr5/survey/amp_flag.fits",format="fits")
+T_badamps = Table.read("/scratch/projects/hetdex/hdr5/survey/amp_flag.fits",format="fits")
 
 
 
@@ -604,7 +604,7 @@ while not all_done:
 
         ifu, start_shot, stop_shot, q_multiframes = parse_ifu_file(next_ifu)
         months_done = get_completed_months(find_completed_fits(ifu))
-        if months_done is None or len(months_done) == 1:  # new or we resume from the start anyway
+        if months_done is None or len(months_done) <= 1:  # new or we resume from the start anyway
             months_done = []  # while techincally could be per amp, just keep as per ifu
             start_idx = datevshot_all.index(start_shot)
             stop_idx = datevshot_all.index(stop_shot)
