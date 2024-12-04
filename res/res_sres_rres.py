@@ -23,7 +23,7 @@ import astropy.stats.biweight as biweight
 from astropy.io import fits
 #from tqdm.notebook import tqdm
 from filelock import FileLock
-#import traceback
+import traceback
 
 
 basedir_shots = "/scratch/projects/hetdex/hdr5/reduction/data/"
@@ -793,6 +793,17 @@ while not all_done:
 
     except Exception as e:
         print(f"[{ifu}] outer Exception!, {e}")
+        try:
+            excstr = f"Exception: {e}\n\n{traceback.format_exc()}"
+            print(excstr)
+            with open(next_ifu+".except","w+") as f:
+                f.write(excstr)
+                f.write("\n")
+        except Exception as e:
+            print(f"[{ifu}] outer Exception! Failed to write except file, {e}")
+
+
+
         # try:
         #     rres_fail[row['multiframe']].append(target_month)
         # except:
