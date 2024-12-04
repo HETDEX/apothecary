@@ -14,4 +14,5 @@
 for i in $(seq 1 10);
 do
   python res_sres_rres.py &
+  sleep 30
 done
