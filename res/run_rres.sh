@@ -1,5 +1,6 @@
-#spin up 10 (or change number) of calls to run the res, sres, rres calculations
-#each one will see what is available to run (semaphore blocked), take the next and run
+# spin up 10 (or change number) of calls to run the res, sres, rres calculations
+# each one will see what is available to run (semaphore blocked), take the next and run
+# output is under ./lib_calib/reschi/    with each YYYYMM under its own folder and each IFU+Amp with its own file for that month
 #
 # to stop all of them, create a file called "stop"
 #   at various points in their iterations, they check for the file and if it exits, they will exit
