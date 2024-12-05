@@ -792,7 +792,8 @@ while not all_done:
                 T_data.remove_rows(sel)
                 D_data.remove(gids)
 
-            if len(rres_fail[q_multiframe]) > 0:
+
+            if q_multiframe in rres_fail.keys() and len(rres_fail[q_multiframe]) > 0:
                 print(f"Failures: {rres_fail[q_multiframe]}")
 
         if mark_done:
