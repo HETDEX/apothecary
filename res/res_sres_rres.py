@@ -506,7 +506,7 @@ def get_completed_months(completed_list):
     except Exception as E:
         pass
 
-    return months
+    return list(months)
 
 
 def get_resume_month(completed_list):
