@@ -613,8 +613,7 @@ while not all_done:
             stop_idx = datevshot_all.index(stop_shot)
 
             for q_multiframe in q_multiframes:
-                rres_done[
-                    q_multiframe] = []  # initialize a list of months that have been completed (written to rres*fits)
+                rres_done[q_multiframe] = []  # initialize a list of months that have been completed (written to rres*fits)
                 rres_fail[q_multiframe] = []  # in case there was a problem
 
             target_month = int(datevshot_all[start_idx].replace('v', '')[0:6])
@@ -680,10 +679,16 @@ while not all_done:
                     # if the file write was okay:
                     if files_okay:
                         print(f"Wrote {target_month} {q_multiframe} (md: {md:0.2f})")
+                        if q_multiframe not in rres_done.keys():
+                            rres_done[q_multiframe] = []
                         rres_done[q_multiframe].append(target_month)
+
                     else:
                         print(f"Failed {target_month} {q_multiframe}")
+                        if q_multiframe not in rres_fail.keys():
+                            rres_fail[q_multiframe] = []
                         rres_fail[q_multiframe].append(target_month)
+
 
                     mark_month_done = True  # at least one completed
 
@@ -767,8 +772,12 @@ while not all_done:
                 # if the file write was okay:
                 if files_okay:
                     print(f"Wrote {target_month} {q_multiframe} (md: {md:0.2f})")
+                    if q_multiframe not in rres_done.keys():
+                        rres_done[q_multiframe] = []
                     rres_done[q_multiframe].append(target_month)
                 else:
+                    if q_multiframe not in rres_fail.keys():
+                        rres_fail[q_multiframe] = []
                     rres_fail[q_multiframe].append(target_month)
 
                 #write_status(rres_done, rres_fail, q_multiframe, target_month)
