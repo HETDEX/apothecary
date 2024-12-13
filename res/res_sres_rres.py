@@ -667,7 +667,14 @@ while not all_done:
                               np.count_nonzero(sky_spec), np.count_nonzero(err1d))
                         continue
 
-                    res, sres, rres = compute_all(sky_sub, sky_spec, err1d)
+                    try:
+                        res, sres, rres = compute_all(sky_sub, sky_spec, err1d)
+                    except Exception as e:
+                        excstr = f"Exception calling compute_all(): {e}\n\n{traceback.format_exc()}\n\n\nsky_sub {sky_sub}\nsky_spec {sky_spec}\nerr1d {err1d}."
+                        print(excstr)
+                        with open(next_ifu + ".except", "w+") as f:
+                            f.write(excstr)
+                            f.write("\n")
 
                     md = np.nanmedian(rres)
                     if md < 0.5 or md > 1.5:
@@ -760,7 +767,15 @@ while not all_done:
                     break
 
                 gids, sky_sub, sky_spec, err1d = select_data(T_data, D_data, q_multiframe, target_month)
-                res, sres, rres = compute_all(sky_sub, sky_spec, err1d)
+
+                try:
+                    res, sres, rres = compute_all(sky_sub, sky_spec, err1d)
+                except Exception as e:
+                    excstr = f"Exception calling LAST compute_all(): {e}\n\n{traceback.format_exc()}\n\n\nsky_sub {sky_sub}\nsky_spec {sky_spec}\nerr1d {err1d}."
+                    print(excstr)
+                    with open(next_ifu + ".except", "w+") as f:
+                        f.write(excstr)
+                        f.write("\n")
 
                 md = np.nanmedian(rres)
                 if md < 0.5 or md > 1.5:
