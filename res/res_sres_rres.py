@@ -424,6 +424,42 @@ def write_fits_files(yyyymm, multiframe, res, sres, rres):
     except Exception as e:
         return False
 
+
+def write_dummy_fits_files(yyyymm, multiframe):
+    """
+    fill with all zeros
+    112x1032 fits
+    """
+    try:
+        # make sure path exists
+        outdir = os.path.join(basedir_out, str(yyyymm))
+        if not os.path.isdir(outdir):
+            os.makedirs(outdir)
+            print(f"Created:  {outdir}")
+
+
+        # build and write fits to outdirs
+        mf = multiframe[6:]
+
+        hdu = fits.PrimaryHDU(np.zeros((112, 1032)).astype(np.float32))  # essentially with an empty header
+
+        # res
+        fout = os.path.join(outdir, f'res_{mf}.fits')
+        hdu.writeto(fout, overwrite=False)
+
+        # rres
+        fout = os.path.join(outdir, f'rres_{mf}.fits')
+        hdu.writeto(fout, overwrite=False)
+
+        # sres
+        fout = os.path.join(outdir, f'sres_{mf}.fits')
+        hdu.writeto(fout, overwrite=False)
+
+        return True
+    except Exception as e:
+        # print(e)
+        return False
+
 def already_done(ifu):
     done = np.loadtxt("ifu_done.txt",dtype=str)
     if ifu in done:
@@ -776,6 +812,8 @@ while not all_done:
                     with open(next_ifu + ".except", "w+") as f:
                         f.write(excstr)
                         f.write("\n")
+
+                    #res = np.full()
 
                 md = np.nanmedian(rres)
                 if md < 0.5 or md > 1.5:
