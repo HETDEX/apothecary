@@ -1,0 +1,110 @@
+#!/usr/bin/env python
+
+try:
+	from pylauncher import pylauncher
+except:
+	print("old import pylauncher")
+	#if module load pylauncher in slurm need this way
+	import pylauncher
+
+#import pylauncher
+#from pylauncher import pylauncher
+import os
+import glob
+import shutil
+
+#print(f"SLURM ID: {os.environ['SLURM_JOB_ID']}")
+
+try:
+  pid = os.environ['SLURM_JOB_ID']
+except:
+  print("could not load slurm job id, so using process id instead")
+  pid = os.getpid()
+
+py_workdir = os.path.join(os.environ['LAUNCHER_WORKDIR'],f"pylauncher_tmp{str(pid)}")
+
+#slurm_node = os.environ['']
+
+try:
+  slurm_nodes = os.environ['SLURM_JOB_NUM_NODES']
+  print(f"slurm nodes: {slurm_nodes}")
+except:
+  slurm_nodes = None
+
+try:
+  s = os.environ['SLURM_TASKS_PER_NODE']  #-ntasks_per_node
+  try: 
+    s = int(s)
+    slurm_tasks_per_node = s
+    print(f"tasks per node: {slurm_tasks_per_node}")
+  except:
+    #this can be a string like '16(x2)' as tasks per node (x nodes)
+    try:
+      s = os.environ['SLURM_TASKS_PER_NODE'] #-n or -ntasks
+      print(f"tasks per node: {s}")
+      s = s.replace("(","").replace(")","")
+      toks = s.split("x")
+      t = int(toks[0])
+      if len(toks) == 2:
+        t = t*int(toks[1])
+
+      slurm_tasks_per_node = t
+      print(f"tasks per node: {slurm_tasks_per_node}")
+    except:
+      slurm_tasks_per_node = None
+except:
+  slurm_tasks_per_node = None
+
+try:
+  #this can be a string like '16(x2)' as tasks per node (x nodes)
+  s = os.environ['SLURM_NTASKS'] #-n or -ntasks
+  print(f"total concurrent tasks: {s}")
+  s = s.replace("(","").replace(")","")
+  toks = s.split("x")
+  t = int(toks[0])
+  if len(toks) == 2:
+    t = t*int(toks[1])
+
+  slurm_total_concurrent_tasks = t
+  print(f"total concurrent tasks: {slurm_total_concurrent_tasks}")
+except:
+  slurm_total_concurrent_tasks  = None
+
+
+if os.path.isdir(py_workdir): #already exists (this holds control info for pylauncher)
+  # this could be a second call from the same slurm OR an unfortunate coincidence from an earlier run
+  # either way, pylauncher.ClassicLauncher will abend, so, delete the directory before continuuing
+  print(f"{py_workdir} already exits. Removing ...")
+  files = glob.glob(f"{py_workdir}/*")
+  for f in files:
+    os.remove(f)
+  shutil.rmtree(py_workdir)
+  print(f"{py_workdir} Removed.")
+
+
+if slurm_tasks_per_node is not None:
+  cpn = slurm_tasks_per_node
+elif slurm_total_concurrent_tasks is not None:
+  cpn = slurm_total_concurrent_tasks
+else:
+  cpn = None
+
+
+print(f"cpn: {cpn}")
+
+pylauncher.ClassicLauncher(commandfile=os.environ['LAUNCHER_JOB_FILE'],
+#                           resume=None,
+#                           cores=1,
+                            corespernode=cpn,
+                            workdir=py_workdir,
+#                           debug=None,
+                           )
+
+
+if os.path.isdir(py_workdir):
+  print(f"{py_workdir} Cleaning up ...")
+  files = glob.glob(f"{py_workdir}/*")
+  for f in files:
+    os.remove(f)
+  shutil.rmtree(py_workdir)
+  print(f"{py_workdir} Removed.")
