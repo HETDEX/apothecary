@@ -12,7 +12,8 @@ import glob
 from tqdm import tqdm
 import traceback
 
-PRINT_EXCEPTIONS = False
+PRINT_EXCEPTIONS = False #print out exception backtrace when they occur
+PRINT_INTERMEDIATE = False #print out "bad" directories as they occur rather than just at the end
 
 cl_args = list(map(str.lower,sys.argv))
 
@@ -35,6 +36,7 @@ else:
 
 
 bad_dirs = []
+possible_bad_dirs = []
 
 for dn in tqdm(dirnames):
     #check HETDEX.o* file (at least last line)
@@ -48,75 +50,110 @@ for dn in tqdm(dirnames):
             lines = f.readlines()
             if not ("Cleaning up ..." in lines[-2] and "Removed." in lines[-1]):
                 #something is wrong
-                print(lines[-2])
-                print(lines[-1])
-                print(f"{dn} Bad {hetdex_log} file.")
-                bad_dirs.append(dn)
+                #print(lines[-2])
+                #print(lines[-1])
+                badstr = f"{dn} Bad {hetdex_log} file."
+                bad_dirs.append(badstr)
+                if PRINT_INTERMEDIATE:
+                    print(badstr)
+
                 continue
     except:
         if PRINT_EXCEPTIONS:
             print(traceback.format_exc())
         #this is a fail
-        print(f"{dn} Bad HETDEX.o* file.")
-        bad_dirs.append(dn)
+        badstr = f"{dn} Bad HETDEX.o* file."
+        bad_dirs.append(badstr)
+        if PRINT_INTERMEDIATE:
+            print(badstr)
         continue
 
     #check ./output directory .find files are not zero length
     try:
         findfiles = sorted(glob.glob(os.path.join(dn,"output","*.find")))
         if len(findfiles) < 500: #depending on the shot there should be 900+ up to almost 5200
-            print(f"{dn} Bad output/*.find files. Too few: {len(findfiles)}")
-            bad_dirs.append(dn)
+            badstr =f"{dn} Bad output/*.find files. Too few: {len(findfiles)}"
+            bad_dirs.append(badstr)
+            if PRINT_INTERMEDIATE:
+                print(badstr)
             continue
 
         fail = False
+        zero_ct = 0
         for fn in findfiles: #if even one file is zero length, call it a fail
             sz = os.path.getsize(fn)
             if sz == 0:
-                print(f"{dn} Bad output/*.find files. Zero size.")
-                bad_dirs.append(dn)
-                fail = True
-                break
-        if fail:
-            continue
+                zero_ct += 1
+
+        if zero_ct > 0:
+            if zero_ct == len(findfiles):
+                badstr =f"{dn} Bad output/*.find files. ALL zero size."
+                bad_dirs.append(badstr)
+                if PRINT_INTERMEDIATE:
+                    print(badstr)
+                continue
+            else:
+                #some are zero, but not all ... maybe there are masked IFUs?
+                badstr =f"{dn} Possible bad output/*.find files. {zero_ct} / {len(findfiles)} zero size."
+                possible_bad_dirs.append(badstr)
+                if PRINT_INTERMEDIATE:
+                    print(badstr)
+                #!!! BUT do not skip to the next directory,
+                #!!! go ahead and continue
 
     except:
         if PRINT_EXCEPTIONS:
             print(traceback.format_exc())
-        print(f"{dn} Bad output/*.find files.")
-        bad_dirs.append(dn)
+        badstr = f"{dn} Bad output/*.find files."
+        bad_dirs.append(badstr)
+        if PRINT_INTERMEDIATE:
+            print(badstr)
         continue
 
     #check .sim file exists and is populated
     try:
         simfile = sorted(glob.glob(os.path.join(dn,"*.sim")))
         if len(simfile) == 0:
-            print(f"{dn} Missing *.sim file.")
-            bad_dirs.append(dn)
+            badstr =f"{dn} Missing *.sim file."
+            bad_dirs.append(badstr)
+            if PRINT_INTERMEDIATE:
+                print(badstr)
+
             continue
         elif len(simfile) != 1:
-            print(f"{dn} Too many *.sim files. {len(simfile)}")
-            bad_dirs.append(dn)
+            badstr = f"{dn} Too many *.sim files. {len(simfile)}"
+            bad_dirs.append(badstr)
+            if PRINT_INTERMEDIATE:
+                print(badstr)
             continue
         else:
             simfile = simfile[0]
             sz = os.path.getsize(simfile)
             if sz == 0:
-                print(f"{dn} Zero length *.sim file.")
-                bad_dirs.append(dn)
+                badstr = f"{dn} Zero length *.sim file."
+                bad_dirs.append(badstr)
+                if PRINT_INTERMEDIATE:
+                    print(badstr)
                 continue
     except:
         if PRINT_EXCEPTIONS:
             print(traceback.format_exc())
-        print(f"{dn} Bad *.sim file.")
-        bad_dirs.append(dn)
+        badstr = f"{dn} Bad *.sim file."
+        bad_dirs.append(badstr)
+        if PRINT_INTERMEDIATE:
+            print(badstr)
         continue
 
 print("\nSummary:")
-print(f"Checked {len(dirnames)} sim directories")
-if len(bad_dirs) == 0:
-    print("0 bad found.")
-else:
-    print(f"{len(bad_dirs)} bad found")
+if len(bad_dirs) > 0:
     for dn in bad_dirs:
         print(dn)
+
+if len(possible_bad_dirs) > 0:
+    for dn in possible_bad_dirs:
+        print(dn)
+
+print("-------------------------------")
+print(f"Checked {len(dirnames)} sim directories")
+print(f"{len(bad_dirs)} bad")
+print(f"{len(possible_bad_dirs)} possibly bad")
