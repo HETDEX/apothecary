@@ -18,10 +18,11 @@ PRINT_EXCEPTIONS = True #print out exception backtrace when they occur
 PRINT_INTERMEDIATE = False #print out "bad" directories as they occur rather than just at the end
 
 cl_args = list(map(str.lower,sys.argv))
-
+singledir = False
 try:
     if len(cl_args) == 2:
         shot = str((cl_args[1]))
+        singledir = True
     else:
         shot = None
 except:
@@ -31,9 +32,11 @@ except:
 if shot is None:
     dirnames = sorted(glob.glob("sim20*s666")) #skip those that have some extra extension, like .timeout
 else:
-    if "v" in shot:
+    if "sim" in shot:
+        dirnames = [shot] #assume of form: sim20171019v003s666
+    elif "v" in shot: #assume of form 20171019v003
         dirnames = [f"sim{shot}s666"]
-    else:
+    else: #assume just 20171019003
         dirnames = [f"sim{shot[0:8]}v{shot[8:]}s666"]
 
 
@@ -107,6 +110,8 @@ for dn in tqdm(dirnames):
                             badamp_ct += np.count_nonzero(t['flag'][ampsel] == 0)
 
                     if badamp_ct < 4: # really should never by greater than
+                        if singledir:
+                            print(f"{bn} has {badamp_ct} amps marked bad.")
                         zero_ct += 1
                         if badamp_ct > 0:
                             at_least_one_bad_amp += 1
