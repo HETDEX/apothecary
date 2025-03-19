@@ -3,7 +3,7 @@
 try:
 	from pylauncher import pylauncher
 except:
-	print("old import pylauncher")
+	#print("old import pylauncher")
 	#if module load pylauncher in slurm need this way
 	import pylauncher
 

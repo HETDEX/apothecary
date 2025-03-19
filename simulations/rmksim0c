@@ -1,0 +1,76 @@
+# rmksim0c 20201111 024 100 3.0  n1 n2
+#datadir="/scratch/projects/hetdex/"
+#datadir="/scratch/03261/polonius/hetdex/"
+datadir="/corral-repl/utexas/Hobby-Eberly-Telesco/"
+date=$1
+shot=$2
+ninput_o=$3
+# wsig=2.2
+wsig=$4
+ninput0=$5
+ninput=$6
+mthd=`echo "$date" | cut -b 1-6`
+mkdir -p sim$1v$2s${wsig}
+~gebhardt/bin/getran1 > sim$1v$2s${wsig}/n1
+cd sim$1v$2s${wsig}
+awk '{s+=1; print s,$1,$2,$8,$4,$5}' ${datadir}detect/dithall/${date}v${shot}.dithall | sed s/.ixy// > j1
+mv j1 info
+mkdir -p sources
+mkdir -p output
+mkdir -p datafiles
+mkdir -p raw
+cp ${datadir}detect/dithall/$1v$2.dithall datafiles/.
+cp ${datadir}detect/tp/${date}v${shot}sedtp_f.dat datafiles/.
+cp ${datadir}lib_calib/datafiles/fluxcor.use datafiles/.
+grep ${date}v${shot} ${datadir}detect/norm.all | awk '{print $2,$3,$4}' > datafiles/norm.dat
+grep ${date}v${shot} ${datadir}detect/fwhm.all | awk '{print $2,$3,$4}' > datafiles/fwhm.use
+awk '{if($2==date0&&$3==shot0) print "rbackt",$2,$3,$4,$5,$6,$7,2}' date0=$date shot0=$shot /work/00115/gebhardt/maverick/gettar/runs${mthd} > rt1c
+
+grep $1v$2 /work/00115/gebhardt/sim/simscript/rdet0 > rsim0
+awk '{print "rinputb",$7,$8,wsig0}' wsig0=${wsig} rsim0 | sed s/_/" "/g | sed s/v/" "/ > run0
+awk '{print "rmksim",$2,$3,$7,$8}' rsim0 > rsim1
+cp /work/00115/gebhardt/sim/simscript/rmksim .
+cp /work/00115/gebhardt/sim/simscript/rinput .
+cp /work/00115/gebhardt/sim/simscript/rinputb .
+cp /work/00115/gebhardt/sim/simscript/rinputb_large rinputb
+cp /work/00115/gebhardt/sim/simscript/mks2 .
+cp /work/00115/gebhardt/sim/simscript/rf1stam rf1
+cp /work/00115/gebhardt/sim/simscript/rfind0 .
+cp /work/00115/gebhardt/sim/simscript/rfind .
+cp /work/00115/gebhardt/sim/simscript/rfind0t .
+cp /work/00115/gebhardt/sim/simscript/rfindt .
+cp /work/00115/gebhardt/sim/simscript/run11 .
+cp /work/00115/gebhardt/sim/simscript/labels.dat .
+cp /work/00115/gebhardt/sim/simscript/rconvin .
+cp /work/00115/gebhardt/sim/simscript/run20 .
+cp /work/00115/gebhardt/sim/simscript/run21 .
+cp /work/00115/gebhardt/sim/simscript/rbackt .
+cp /work/00115/gebhardt/sim/simscript/run0s .
+#cp /work/00115/gebhardt/sim/simscript/run_pylauncher .
+cp /work/03261/polonius/stampede3/run_pylauncher .
+run0s ${date} ${shot}
+chmod +x rinput run0 rsim1
+echo $ninput $ninput0 > ndfsim
+run0
+ls sources/ | sed s/_sources./" "/ > allsource
+rsim1 > rt1
+sed -i s/" 3 311 "/" 3 111 "/ rt1
+#sed s/changedate/${date}/ /work/00115/gebhardt/sim/simscript/rt1_stam.slurm > rt1.slurm
+sed s/changedate/${date}/ /scratch/03261/polonius/simulations/rt1_stam.slurm > rt1.slurm
+sed -i s/changeshot/${shot}/ rt1.slurm
+sed -i s/datevshot/${date}v${shot}/ rt1.slurm
+
+awk '{print "rfind0",$7,$8,$15}' rt1 > rt2
+chmod +x rt2
+rm -f rt
+echo "sbatch rt1.slurm" > rstep1
+echo "cat output/*.find > ${date}v${shot}s${wsig}.sim" > rstep2
+echo "cp ${date}v${shot}s${wsig}.sim a1" >> rstep2
+echo "awk '{if(\$8>0) print \$0}' ${date}v${shot}s${wsig}.sim > det.${date}v${shot}s${wsig}" >> rstep2
+cat rconvin >> rstep2
+chmod +x rt1
+chmod +x rt1c
+chmod +x rstep?
+cat rstep2 > runpost
+chmod +x runpost
+rstep1

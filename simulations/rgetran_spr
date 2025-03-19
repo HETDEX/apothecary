@@ -1,0 +1,6 @@
+# rmksim0c 20240729 011 100 666 3 10000
+date=$1
+shot=$2
+n1="$(echo $(($RANDOM % 10)))"
+n2="$(echo $(($RANDOM % 100000)))"
+echo "rmksim0d" ${date} ${shot} 100 666 $n1 $n2
