@@ -38,7 +38,7 @@ for shot in shots_todo:
 	if  os.path.exists(dirname) or os.path.exists(os.path.join("done",dirname)) or \
 		os.path.exists(os.path.join("/scratch/00115/gebhardt/sim",dirname)) or \
         os.path.isfile(os.path.join("/corral-repl/utexas/Hobby-Eberly-Telesco/sims/orig",simname)) or \
-		os.path.isfile(os.path.join("/corral-repl/utexas/Hobby-Eberly-Telesco/sims/orig_dd", simname)) or \
+		os.path.isfile(os.path.join("/corral-repl/utexas/Hobby-Eberly-Telesco/sims_dd/orig", simname)) or \
 		os.path.isfile(os.path.join("/work/06890/ochase10/ls6/random_sims/sims", simname)):
 		print(f"{shot} already done or in-progress. Skipping.")
 		continue
