@@ -80,7 +80,11 @@ for dn in tqdm(dirnames):
 
         fail = False
         zero_ct = 0
-        for fn in findfiles: #if even one file is zero length, call it a fail
+        for fn in findfiles:
+            #todo: * could * check that if there are zero length files they are a multiple of 3
+            #   e.g. one or more bad IFU/amps would be zero for all 3 dithers
+            #   otherwise, something is wrong
+
             sz = os.path.getsize(fn)
             if sz == 0:
                 zero_ct += 1
@@ -92,15 +96,25 @@ for dn in tqdm(dirnames):
                 if PRINT_INTERMEDIATE:
                     print(badstr)
                 continue
-            else:
-                #some are zero, but not all ... maybe there are masked IFUs?
-                badstr =f"{dn} Possible bad output/*.find files. {zero_ct} / {len(findfiles)} zero size."
-                possible_bad_dirs.append(badstr)
+            elif zero_ct > (0.5 * len(findfiles)): #half or more are zero
+                badstr =f"{dn} Bad output/*.find files. Most ({zero_ct} / {len(findfiles)}) are zero size."
+                bad_dirs.append(badstr)
                 if PRINT_INTERMEDIATE:
                     print(badstr)
-                #!!! BUT do not skip to the next directory,
-                #!!! go ahead and continue
-
+                continue
+            else:
+                # !!! BUT do not skip to the next directory,
+                # !!! go ahead and continue
+                if zero_ct % 3 == 0: #a multiple of 3, bad/masked IFU/amps
+                    badstr =f"{dn} Possible bad output/*.find files. {zero_ct} / {len(findfiles)} zero size. Probably just masked IFU/Amps."
+                    possible_bad_dirs.append(badstr)
+                    if PRINT_INTERMEDIATE:
+                        print(badstr)
+                else:
+                    badstr =f"{dn} Possible bad output/*.find files. {zero_ct} / {len(findfiles)} zero size."
+                    possible_bad_dirs.append(badstr)
+                    if PRINT_INTERMEDIATE:
+                        print(badstr)
     except:
         if PRINT_EXCEPTIONS:
             print(traceback.format_exc())
