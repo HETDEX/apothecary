@@ -1,0 +1,21 @@
+#!/bin/bash
+
+#should be run under the lib_calib directory where the month .tar files live for local use
+#e.g. on stampede3 /scratch/03261/polonius/hetdex/lib_calib/
+
+#check that the same number of files are still in the directory matching the name of the tar file
+#this is to see if TACC deleted files due to aging
+#only prints out dates (YYYYMM) that do not match (accounting for the extra +1 in the count including the .tar filename)
+
+
+
+for fn in ./20????.tar; do
+  dn=$(basename "$fn" .tar)
+  tarcount=$(tar -tf "$fn" | wc | awk '{print $1}')
+  dircount=$(ls -1 "$dn"/* | wc | awk '{print $1}')
+  difference=$(($tarcount-$dircount))
+  #extra -1 to remove counting of the filename itself
+  if [ $difference -gt 1 ]; then
+    echo "$dn" "$tarcount" "$dircount"
+  fi
+done
