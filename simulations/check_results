@@ -81,9 +81,6 @@ for dn in tqdm(dirnames):
         fail = False
         zero_ct = 0
         for fn in findfiles:
-            #todo: * could * check that if there are zero length files they are a multiple of 3
-            #   e.g. one or more bad IFU/amps would be zero for all 3 dithers
-            #   otherwise, something is wrong
 
             sz = os.path.getsize(fn)
             if sz == 0:
