@@ -79,12 +79,12 @@ for dn in tqdm(dirnames):
                     else:
                         badstr = f"{dn} Bad {hetdex_log} file. Cancelled."
                 elif "***" in lines[-1] or "***" in lines[-2] or "slurmstepd" in lines[-1]:
-                    badstr = f"{dn} Bad {hetdex_log} file. Last: {lines[-1].rstrip()}"
-                elif "FIRST PART" in lines[-1] or len(lines[-1]) < 3:
+                    badstr = f"{dn} Bad {hetdex_log} file. Last line: {lines[-1].rstrip()}"
+                elif "FIRST PART" in lines[-1] or "Running" in lines[-1] or len(lines[-1]) < 3:
                     in_progress_dirs.append(dn)
                     continue #this is okay, just skip and keep going
                 else:
-                    badstr = f"{dn} Bad {hetdex_log} file. Last: {lines[-1].rstrip()}"
+                    badstr = f"{dn} Bad? {hetdex_log} file. Last line: {lines[-1].rstrip()}"
 
                 bad_dirs.append(badstr)
 
@@ -249,3 +249,7 @@ print(f"{len(done_dirs)} done")
 with open("move_to_done.txt","w") as f:
     for dn in done_dirs:
         f.write(f"mv {dn} done \n")
+
+with open("move_to_bad.txt","w") as f:
+    for dn in bad_dirs:
+        f.write(f"mv {dn} bad \n")

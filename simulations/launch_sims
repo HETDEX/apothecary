@@ -35,7 +35,7 @@ for shot in shots_todo:
 	simname = f"{shot[0:8]}v{shot[8:]}s666.sim"
 	#skip if I have it already or Karl has it already
 	#note: Owen has been running on lonestar6 and we can't readily see that /scratch from here
-	if  os.path.exists(dirname) or os.path.exists(os.path.join("done",dirname)) or \
+	if  os.path.exists(dirname) or os.path.exists(os.path.join("done",dirname)) or os.path.exists(os.path.join("bad",dirname)) or \
 		os.path.exists(os.path.join("/scratch/00115/gebhardt/sim",dirname)) or \
         os.path.isfile(os.path.join("/corral-repl/utexas/Hobby-Eberly-Telesco/sims/orig",simname)) or \
 		os.path.isfile(os.path.join("/corral-repl/utexas/Hobby-Eberly-Telesco/sims_dd/orig", simname)) or \
