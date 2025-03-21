@@ -48,6 +48,7 @@ bad_dirs = []
 possible_bad_dirs = []
 not_yet_run_dirs = []
 in_progress_dirs = []
+done_dirs = []
 
 for dn in tqdm(dirnames):
     #check HETDEX.o* file (at least last line)
@@ -179,6 +180,12 @@ for dn in tqdm(dirnames):
                     possible_bad_dirs.append(badstr)
                     if PRINT_INTERMEDIATE:
                         print(badstr)
+
+            continue
+
+        #we made it to the end, assume good
+        done_dirs.append(dn)
+
     except:
         if PRINT_EXCEPTIONS:
             print(traceback.format_exc())
@@ -235,5 +242,10 @@ print("-------------------------------")
 print(f"Checked {len(dirnames)} sim directories")
 print(f"{len(bad_dirs)} bad")
 print(f"{len(possible_bad_dirs)} possibly bad")
-print(f"{len(in_progress_dirs)} still running")
 print(f"{len(not_yet_run_dirs)} waiting to run")
+print(f"{len(in_progress_dirs)} still running")
+print(f"{len(done_dirs)} done")
+
+with open("move_to_done.txt","w") as f:
+    for dn in done_dirs:
+        f.write(f"mv {dn} done \n")
