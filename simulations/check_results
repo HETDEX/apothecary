@@ -46,6 +46,8 @@ ampflag_table = Table.read(hetdex_api_config.badamp) #shotid multifraem flag   (
 
 bad_dirs = []
 possible_bad_dirs = []
+not_yet_run_dirs = []
+in_progress_dirs = []
 
 for dn in tqdm(dirnames):
     #check HETDEX.o* file (at least last line)
@@ -55,6 +57,10 @@ for dn in tqdm(dirnames):
         hetdex_log = sorted(glob.glob(f"{dn}/HETDEX.o*")) #may be more than one
         if len(hetdex_log) > 0:
             hetdex_log = hetdex_log[-1]
+        else:
+            #this one has not executed yet
+            not_yet_run_dirs.append(dn)
+            continue
 
         with open(os.path.join(hetdex_log),"r") as f:
             lines = f.readlines()
@@ -62,8 +68,25 @@ for dn in tqdm(dirnames):
                 #something is wrong
                 #print(lines[-2])
                 #print(lines[-1])
-                badstr = f"{dn} Bad {hetdex_log} file."
+
+            #FIRST PART
+            #slurmstepd: error: *** JOB 1697795 ON c511-063 CANCELLED AT 2025-03-17T23:25:09 DUE TO TIME LIMIT ***
+
+                if "CANCELLED" in lines[-1]:
+                    if "TIME LIMIT" in lines[-1]:
+                        badstr = f"{dn} Bad {hetdex_log} file. Timed out."
+                    else:
+                        badstr = f"{dn} Bad {hetdex_log} file. Cancelled."
+                elif "***" in lines[-1] or "***" in lines[-2] or "slurmstepd" in lines[-1]:
+                    badstr = f"{dn} Bad {hetdex_log} file. Last: {lines[-1].rstrip()}"
+                elif "FIRST PART" in lines[-1] or len(lines[-1]) < 3:
+                    in_progress_dirs.append(dn)
+                    continue #this is okay, just skip and keep going
+                else:
+                    badstr = f"{dn} Bad {hetdex_log} file. Last: {lines[-1].rstrip()}"
+
                 bad_dirs.append(badstr)
+
                 if PRINT_INTERMEDIATE:
                     print(badstr)
 
@@ -212,3 +235,5 @@ print("-------------------------------")
 print(f"Checked {len(dirnames)} sim directories")
 print(f"{len(bad_dirs)} bad")
 print(f"{len(possible_bad_dirs)} possibly bad")
+print(f"{len(in_progress_dirs)} still running")
+print(f"{len(not_yet_run_dirs)} waiting to run")
