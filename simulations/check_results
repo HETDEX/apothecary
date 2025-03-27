@@ -46,6 +46,7 @@ ampflag_table = Table.read(hetdex_api_config.badamp) #shotid multifraem flag   (
 
 bad_dirs = []
 possible_bad_dirs = []
+possible_bad_string =[]
 not_yet_run_dirs = []
 in_progress_dirs = []
 done_dirs = []
@@ -78,13 +79,15 @@ for dn in tqdm(dirnames):
                         badstr = f"{dn} Bad {hetdex_log} file. Timed out."
                     else:
                         badstr = f"{dn} Bad {hetdex_log} file. Cancelled."
+                elif "paramiko.ssh_exception" in lines[-1]:
+                    badstr = f"{dn} Bad {hetdex_log} file. Last line: {lines[-1].rstrip()}"
                 elif "***" in lines[-1] or "***" in lines[-2] or "slurmstepd" in lines[-1]:
                     badstr = f"{dn} Bad {hetdex_log} file. Last line: {lines[-1].rstrip()}"
                 elif "FIRST PART" in lines[-1] or "Running" in lines[-1] or len(lines[-1]) < 3:
                     in_progress_dirs.append(dn)
                     continue #this is okay, just skip and keep going
                 else:
-                    badstr = f"{dn} Bad? {hetdex_log} file. Last line: {lines[-1].rstrip()}"
+                    badstr = f"{dn} Bad? {hetdex_log} file. [Need to check again]. Last line: {lines[-1].rstrip()}"
 
                 bad_dirs.append(badstr)
 
@@ -166,18 +169,21 @@ for dn in tqdm(dirnames):
                 if zero_ct % 3 == 0: #a multiple of 3, bad/masked IFU/amps
                     if at_least_one_bad_amp > 0 and at_least_one_bad_amp %3 == 0:
                         badstr = f"{dn} Possible bad output/*.find files. {zero_ct} / {len(findfiles)} zero size. Some masked IFUs/Amps."
-                        possible_bad_dirs.append(badstr)
+                        possible_bad_dirs.append(dn)
+                        possible_bad_string.append(badstr)
                         if PRINT_INTERMEDIATE:
                             print(badstr)
                     else:
 
                         badstr =f"{dn} Possible bad output/*.find files. {zero_ct} / {len(findfiles)} zero size."
-                        possible_bad_dirs.append(badstr)
+                        possible_bad_dirs.append(dn)
+                        possible_bad_string.append(badstr)
                         if PRINT_INTERMEDIATE:
                             print(badstr)
                 else:
                     badstr =f"{dn} Possible bad output/*.find files. {zero_ct} / {len(findfiles)} zero size."
-                    possible_bad_dirs.append(badstr)
+                    possible_bad_dirs.append(dn)
+                    possible_bad_string.append(badstr)
                     if PRINT_INTERMEDIATE:
                         print(badstr)
 
@@ -234,8 +240,8 @@ if len(bad_dirs) > 0:
     for dn in bad_dirs:
         print(dn)
 
-if len(possible_bad_dirs) > 0:
-    for dn in possible_bad_dirs:
+if len(possible_bad_string) > 0:
+    for dn in possible_bad_string:
         print(dn)
 
 print("-------------------------------")
@@ -253,3 +259,7 @@ with open("move_to_done.txt","w") as f:
 with open("move_to_bad.txt","w") as f:
     for dn in bad_dirs:
         f.write(f"mv {dn} bad \n")
+
+with open("possibly_bad.txt","w") as f:
+    for dn in possible_bad_dirs:
+        f.write(f"mv {dn} bad_possible \n")
