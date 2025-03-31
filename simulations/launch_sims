@@ -25,7 +25,8 @@ elif queue == "spr":
 else:
 	print("invalid queue")
 	exit(-1)
-	
+
+all_cosmology_shots = np.loadtxt("all_official.shots",unpack=True,dtype=str)
 
 shots_todo = np.loadtxt("todo.txt",unpack=True,dtype=str)
 
@@ -42,6 +43,9 @@ for shot in shots_todo:
 		os.path.isfile(os.path.join("/corral-repl/utexas/Hobby-Eberly-Telesco/sims_dd/orig", simname)) or \
 		os.path.isfile(os.path.join("/work/06890/ochase10/ls6/random_sims/sims", simname)):
 		#print(f"{shot} already done or in-progress. Skipping.")
+		continue
+
+	if shot not in all_cosmology_shots: #this is not a shot we want to use for cosomology simulations
 		continue
 
 	print(f"\n{shot} not found. Creating ... ")

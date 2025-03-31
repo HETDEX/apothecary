@@ -38,12 +38,22 @@ for shot in tqdm(all_shots):
 	simname = f"{shot[0:8]}v{shot[8:]}s666.sim"
 	#skip if I have it already or Karl has it already
 	#note: Owen has been running on lonestar6 and we can't readily see that /scratch from here
-	if  os.path.exists(dirname) or os.path.exists(os.path.join("done",dirname)) or \
-		os.path.exists(os.path.join("/scratch/00115/gebhardt/sim",dirname)) or \
-                os.path.isfile(os.path.join("/corral-repl/utexas/Hobby-Eberly-Telesco/sims/orig",simname)) or \
-		os.path.isfile(os.path.join("/corral-repl/utexas/Hobby-Eberly-Telesco/sims_dd/orig", simname)) or \
-		os.path.isfile(os.path.join("/work/06890/ochase10/ls6/random_sims/sims", simname)):
-	#	print(f"{shot} already done or in-progress. Skipping.")
+	# if  os.path.exists(dirname) or os.path.exists(os.path.join("done",dirname)) or \
+	# 	os.path.exists(os.path.join("/scratch/00115/gebhardt/sim",dirname)) or \
+    #             os.path.isfile(os.path.join("/corral-repl/utexas/Hobby-Eberly-Telesco/sims/orig",simname)) or \
+	# 	os.path.isfile(os.path.join("/corral-repl/utexas/Hobby-Eberly-Telesco/sims_dd/orig", simname)) or \
+	# 	os.path.isfile(os.path.join("/work/06890/ochase10/ls6/random_sims/sims", simname)):
+	# #	print(f"{shot} already done or in-progress. Skipping.")
+	# 	continue
+
+	if os.path.exists(dirname) or os.path.exists(os.path.join("done", dirname)) or os.path.exists(
+			os.path.join("bad", dirname)) or \
+			os.path.exists(os.path.join("bad_possible", dirname)) or \
+			os.path.exists(os.path.join("/scratch/00115/gebhardt/sim", dirname)) or \
+			os.path.isfile(os.path.join("/corral-repl/utexas/Hobby-Eberly-Telesco/sims/orig", simname)) or \
+			os.path.isfile(os.path.join("/corral-repl/utexas/Hobby-Eberly-Telesco/sims_dd/orig", simname)) or \
+			os.path.isfile(os.path.join("/work/06890/ochase10/ls6/random_sims/sims", simname)):
+		# print(f"{shot} already done or in-progress. Skipping.")
 		continue
 
 	todo_count += 1
