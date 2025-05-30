@@ -165,6 +165,8 @@ for j in range(job_count):
 			f.write("WORKDIR=$LAUNCHER_WORKDIR\n")
 			f.write("\n")
 
+			f.write(f"touch {change_datevshot}.running \n")  # set a run flag as a file for easy checking
+
 			f.write(f"distribute.bash	raw/{change_date}/virus/virus0000{change_shot}.tar\n")
 			f.write(f"distribute.bash	datafiles/{change_datevshot}.dithall\n")
 			f.write(f"distribute.bash	datafiles/{change_datevshot}sedtp_f.dat\n")
@@ -191,6 +193,7 @@ for j in range(job_count):
 			f.write("\n")
 			f.write("runpost\n")
 			f.write(f"echo \"Done sim #{simnum} ({change_datevshot})... \"\n")
+			f.write(f"touch {change_datevshot}.done \n") #set a done flag as a file for easy checking
 			f.write(f"cd .. \n")
 
 os.chdir(original_basedir)
