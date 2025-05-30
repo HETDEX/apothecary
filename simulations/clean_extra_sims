@@ -1,0 +1,23 @@
+#!/usr/bin/env python
+
+# mv simulation output belonging to shots not on the official list
+
+import numpy as np
+import os
+import glob
+import sys
+from tqdm import tqdm
+
+
+all_fns = glob.glob("2*.sim")
+
+all_shots = np.loadtxt("../all_official.shots",unpack=True,dtype=str)
+
+with open("mv_extra_sims.txt","w") as f:
+	for fn in tqdm(all_fns):
+		#20231015v018s666.sim
+		shot = os.path.basename(fn)
+		shot = shot[0:8]+shot[9:12]
+
+		if shot not in all_shots:
+			f.write(f"mv {fn} extras \n")

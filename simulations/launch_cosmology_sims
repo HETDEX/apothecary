@@ -1,0 +1,196 @@
+#!/usr/bin/env python
+
+# takes two arguments: (1) which queue ... string: [skx, spr]
+#                      (2) how many (N) shots to put into each job
+#                      (3) how many jobs
+# then reads todo.txt and builds/queues the first N that do not already have a directory created or is already done or /corral/
+# ASSUMES the rmksim0c/d ends with the call to rstep1 (otherwise, if that is commented out, the directory is created, but the job is not queued)
+#
+# NOTICE: each directory can take a few minutes to create due to the fetching and untarring
+#
+
+import numpy as np
+import os
+import sys
+from tqdm import tqdm
+import glob
+import shutil
+
+
+basedir = os.getcwd() #or spcify
+original_basedir = os.getcwd()
+#basedir = ""
+os.chdir(basedir)
+
+cl_args = list(map(str.lower,sys.argv))
+
+queue = cl_args[1]
+per_job_shot_count = int(cl_args[2])
+job_count = int(cl_args[3])
+rgetran = None
+
+if queue == "skx":
+	rgetran = "./rgetran_noqueue"
+elif queue == "spr":
+	rgetran = "./rgetran_spr_noqueue"
+else:
+	print("invalid queue")
+	exit(-1)
+
+all_cosmology_shots = np.loadtxt("all_official.shots",unpack=True,dtype=str)
+
+shots_todo = np.loadtxt("todo.txt",unpack=True,dtype=str)
+shot_idx = 0
+
+
+#what job prefixes are already in in use
+#form of jXXX/sim20190730v004s666
+#to try and not confuse folks, start with 001
+#existing_job_dirs = np.unique([os.path.basename(x).split["_"][0] for x in glob.glob(f"j*sim*")])
+existing_job_dirs = glob.glob(f"j???")
+if len(existing_job_dirs) > 0:
+	next_j = np.max([int(x[1:]) for x in existing_job_dirs]) + 1
+else:
+	next_j = 1
+
+
+#just the sim* directory strings
+existing_sims = [os.path.basename(x) for x in glob.glob(f"j???/sim*")]
+
+for j in tqdm(range(job_count)):
+
+	print(f"Working on job {j+1} / {job_count} ...")
+	count = per_job_shot_count #reset the count down for this job
+	dir_j = f"j{str(next_j).zfill(3)}"
+	next_j += 1
+
+	#create the new jobdir
+	os.makedirs(dir_j, exist_ok=True)
+
+
+	all_date = []
+	all_shotnum = []
+	all_subdir = []
+
+
+	for shot in (shots_todo[shot_idx:]):
+
+		#shot is a string: YYYYMMDDSSS  e.g. 20230714001
+
+		shot_idx += 1 #advance to next shot on next loop regardless of what happens here
+		dirname = f"sim{shot[0:8]}v{shot[8:]}s666"
+		simname = f"{shot[0:8]}v{shot[8:]}s666.sim"
+		#skip if I have it already or Karl has it already
+		#note: Owen has been running on lonestar6 and we can't readily see that /scratch from here
+
+		if dirname in existing_sims:
+			continue #already exists ... note this requires user to remove any that fail
+
+
+		#todo: update paths to check ... currently these are for the older random (no cosmology) sims
+		# if  os.path.exists(dirname) or os.path.exists(os.path.join("done",dirname)) or os.path.exists(os.path.join("bad",dirname)) or \
+		# 	os.path.exists(os.path.join("bad_possible",dirname)) or \
+		# 	os.path.exists(os.path.join("/scratch/00115/gebhardt/sim",dirname)) or \
+		# 	os.path.isfile(os.path.join("/corral-repl/utexas/Hobby-Eberly-Telesco/sims/orig",simname)) or \
+		# 	os.path.isfile(os.path.join("/corral-repl/utexas/Hobby-Eberly-Telesco/sims_dd/orig", simname)) or \
+		# 	os.path.isfile(os.path.join("/work/06890/ochase10/ls6/random_sims/sims", simname)):
+		# 	#print(f"{shot} already done or in-progress. Skipping.")
+		# 	continue
+
+		if shot not in all_cosmology_shots: #this is not a shot we want to use for cosomology simulations
+			continue
+
+		print(f"\n{shot} not found. Creating ... ")
+		print(f"{count} remaining ...")
+
+		all_date.append(shot[0:8])
+		all_shotnum.append(shot[8:])
+		all_subdir.append(dirname)
+
+		#update existing_sims for this one
+		existing_sims.append(dirname)
+
+		cmd = f"$({rgetran} {shot[0:8]} {shot[8:]})"
+		#cmd = f"echo testing dummy  command {rgetran}  {shot[0:8]} {shot[8:]}"
+		os.system(cmd)  #this is a blocking command, so is okay
+
+		#this has its own slurm file (rt1.slurm) but it will not be executed
+
+		#move the newly created directory under the new job directory
+		#no try here ... want this to abend if it fails
+		shutil.move(dirname, dir_j)
+		count -= 1
+
+		if count == 0:
+			break
+		
+
+	#all sims created under THIS job
+	#NOW create the top SLURM file (based on rt1.slurm)
+
+	print(f"Writing job slurm file: {dir_j}.slurm ...")
+
+	with open(f"{dir_j}.slurm","w") as f:
+
+		f.write("#!/bin/bash \n")
+		f.write("#SBATCH -J hetdex                # Job name\n")
+		f.write("#SBATCH -N 1                     # Total number of nodes requested\n")
+		f.write("#SBATCH --ntasks 48              # using --ntasks for consistency with spr, but same as --ntasks_per_node\n")
+		f.write("#SBATCH -p skx                   # Queue name\n")
+		f.write(f"#SBATCH -o HETDEX{dir_j}.o%j    # Name of stdout output file (%j expands to jobid)\n")
+		f.write("#SBATCH -t 13:00:00              # Run time (hh:mm:ss)\n")
+		f.write("#SBATCH -A Hobby-Eberly-Telesco\n")
+		f.write("#SBATCH --mail-user dustin@astro.as.utexas.edu\n")
+		f.write("#SBATCH --mail-type all\n")
+		f.write("\n")
+		f.write("module load pylauncher / 5.2\n")
+		f.write("module load cdtools\n")
+		f.write("\n")
+		f.write("export LAUNCHER_WORKDIR =$(pwd)\n")
+		f.write("WORKDIR =$LAUNCHER_WORKDIR\n")
+		f.write("\n")
+
+
+		#serialize over the individual sims here
+		#change_date, change_shot, change_datevshot
+		simnum = 0
+		for change_date,change_shot,subdir in zip(all_date,all_shotnum,all_subdir):
+			simnum += 1
+			change_datevshot = f"{change_date}v{change_shot}"
+			f.write("\n")
+			f.write("##########################################\n")
+			f.write(f"echo \"Starting sim #{simnum} ({change_datevshot})... \"\n")
+			f.write(f"cd {subdir}\n")
+			f.write("export LAUNCHER_WORKDIR =$(pwd)\n")
+			f.write("WORKDIR =$LAUNCHER_WORKDIR\n")
+			f.write("\n")
+
+			f.write(f"distribute.bash	raw/{change_date}/virus/virus0000{change_shot}.tar\n")
+			f.write(f"distribute.bash	datafiles/{change_datevshot}.dithall\n")
+			f.write(f"distribute.bash	datafiles/{change_datevshot}sedtp_f.dat\n")
+			f.write("distribute.bash	datafiles/fluxcor.use\n")
+			f.write("distribute.bash	datafiles/fwhm.use\n")
+			f.write("distribute.bash	datafiles/norm.dat\n")
+			f.write("wait\n")
+			f.write("\n")
+			f.write("export LAUNCHER_WORKDIR =$(pwd)\n")
+			f.write("export LAUNCHER_JOB_FILE = rt1c\n")
+			f.write("WORKDIR =$LAUNCHER_WORKDIR\n")
+			f.write("CONTROL_FILE =$LAUNCHER_JOB_FILE\n")
+			f.write("cd $WORKDIR /\n")
+			f.write("echo \" WORKING DIR:   $WORKDIR/\"\n")
+			f.write("run_pylauncher\n")
+			f.write("\n")
+			f.write("wait\n")
+			f.write(f"echo \"FIRST PART\" {change_datevshot} \n")
+			f.write("\n")
+			f.write("export LAUNCHER_JOB_FILE = rt1\n")
+			f.write("CONTROL_FILE =$LAUNCHER_JOB_FILE\n")
+			f.write("run_pylauncher\n")
+			f.write("wait\n")
+			f.write("\n")
+			f.write("runpost\n")
+			f.write(f"echo \"Done sim #{simnum} ({change_datevshot})... \"\n")
+			f.write(f"cd .. \n")
+
+os.chdir(original_basedir)

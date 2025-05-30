@@ -18,14 +18,14 @@ from packaging.version import Version as V
 cores_per_node_from_environment = False
 
 try:
-  version = pylauncher.pylauncher_version
-  print(f"*** pylauncher ({version})")
+    version = pylauncher.pylauncher_version
+    print(f"*** pylauncher ({version})")
 
-  if V(version) > V("5.2"):
-    cores_per_node_from_environment = True
+    if V(version) > V("5.2"):
+        cores_per_node_from_environment = True
 
 except:
-  version = None
+    version = None
 
 
 #print(f"SLURM ID: {os.environ['SLURM_JOB_ID']}")
