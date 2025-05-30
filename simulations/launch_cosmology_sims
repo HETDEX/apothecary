@@ -54,7 +54,10 @@ else:
 
 
 #just the sim* directory strings
-existing_sims = [os.path.basename(x) for x in glob.glob(f"j???/sim*")]
+existing_sims = [os.path.basename(x) for x in glob.glob(f"j???/sim*")] + \
+				[os.path.basename(x) for x in glob.glob(f"done/sim*")] + \
+				[os.path.basename(x) for x in glob.glob(f"bad/sim*")]
+
 
 for j in range(job_count):
 

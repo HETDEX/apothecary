@@ -30,7 +30,7 @@ except:
 
 
 if shot is None:
-    dirnames = sorted(glob.glob("sim20*s666")) #skip those that have some extra extension, like .timeout
+    dirnames = sorted(glob.glob("j???/sim20*s666")) #skip those that have some extra extension, like .timeout
 else:
     if "sim" in shot:
         dirnames = [shot] #assume of form: sim20171019v003s666
@@ -57,7 +57,16 @@ for dn in tqdm(dirnames):
     #sim20170327v011s666
     #shotid = int(f"{dn[3:11]}{dn[12:15]}")
     try:
-        hetdex_log = sorted(glob.glob(f"{dn}/HETDEX.o*")) #may be more than one
+
+
+        #todo: multiple shots (dirnames) per output file now
+        # get the jXXX from the dirname?
+        # scan for the datevshot ... see if it completed
+        job = dn.split("/")[-2]
+        datevshot = dn.split("/")[-1][3:-4]
+
+
+        hetdex_log = sorted(glob.glob(f"HETDEX{job}.o*")) #may be more than one
         if len(hetdex_log) > 0:
             hetdex_log = hetdex_log[-1]
         else:
@@ -66,42 +75,73 @@ for dn in tqdm(dirnames):
             continue
 
         with open(os.path.join(hetdex_log),"r") as f:
+
+            #todo: here find the lines that deal with THIS shot
             lines = f.readlines()
-            if not ("Cleaning up ..." in lines[-2] and "Removed." in lines[-1]):
-                #something is wrong
-                #print(lines[-2])
-                #print(lines[-1])
+            shot_done = False
 
-            #FIRST PART
-            #slurmstepd: error: *** JOB 1697795 ON c511-063 CANCELLED AT 2025-03-17T23:25:09 DUE TO TIME LIMIT ***
+            #find the lines (indices) for the start and finish of THIS job
+            sel2 = np.array([("Done sim" in line) and (datevshot in line) for line in lines])
+            if np.count_nonzero(sel2) > 0:
+                try:
+                    idx2 = np.where(sel2)[0][0]
+                    shot_done = True
+                except:
+                    idx2 = idx2 = len(lines)-1 #this one is not done OR it died
 
-                if "CANCELLED" in lines[-1]:
-                    if "TIME LIMIT" in lines[-1]:
-                        badstr = f"{dn} Bad {hetdex_log} file. Timed out."
-                    else:
-                        badstr = f"{dn} Bad {hetdex_log} file. Cancelled."
-                elif "paramiko.ssh_exception" in lines[-1]:
-                    badstr = f"{dn} Bad {hetdex_log} file. Last line: {lines[-1].rstrip()}"
-                elif "***" in lines[-1] or "***" in lines[-2] or "slurmstepd" in lines[-1]:
-                    badstr = f"{dn} Bad {hetdex_log} file. Last line: {lines[-1].rstrip()}"
-                elif "FIRST PART" in lines[-1] or "Running" in lines[-1] or len(lines[-1]) < 3:
-                    in_progress_dirs.append(dn)
-                    continue #this is okay, just skip and keep going
+
+            if not shot_done:
+
+                #need to find where it started
+                sel1 = np.array([("Starting" in line) and (datevshot in line) for line in lines])
+                if np.count_nonzero(sel1) > 0:
+                    try:
+                        idx1 = np.where(sel1)[0][0]
+                    except:
+                        idx1 = None
+
+                if idx1:
+                    #get the indices
+                    lines = lines[idx1:idx2+1]
+
+                    if not ("Cleaning up ..." in lines[-2] and "Removed." in lines[-1]):
+                        #something is wrong
+                        #print(lines[-2])
+                        #print(lines[-1])
+
+                    #FIRST PART
+                    #slurmstepd: error: *** JOB 1697795 ON c511-063 CANCELLED AT 2025-03-17T23:25:09 DUE TO TIME LIMIT ***
+
+                        if "CANCELLED" in lines[-1]:
+                            if "TIME LIMIT" in lines[-1]:
+                                badstr = f"{dn} Bad {hetdex_log} file. Timed out."
+                            else:
+                                badstr = f"{dn} Bad {hetdex_log} file. Cancelled."
+                        elif "paramiko.ssh_exception" in lines[-1]:
+                            badstr = f"{dn} Bad {hetdex_log} file. Last line: {lines[-1].rstrip()}"
+                        elif "***" in lines[-1] or "***" in lines[-2] or "slurmstepd" in lines[-1]:
+                            badstr = f"{dn} Bad {hetdex_log} file. Last line: {lines[-1].rstrip()}"
+                        elif "FIRST PART" in lines[-1] or "Running" in lines[-1] or len(lines[-1]) < 3:
+                            in_progress_dirs.append(dn)
+                            continue #this is okay, just skip and keep going
+                        else:
+                            badstr = f"{dn} Bad? {hetdex_log} file. [Need to check again]. Last line: {lines[-1].rstrip()}"
+
+                        bad_dirs_string.append(badstr)
+                        bad_dirs.append(dn)
+
+                        if PRINT_INTERMEDIATE:
+                            print(badstr)
+
+                        continue
                 else:
-                    badstr = f"{dn} Bad? {hetdex_log} file. [Need to check again]. Last line: {lines[-1].rstrip()}"
-
-                bad_dirs_string.append(badstr)
-                bad_dirs.append(dn)
-
-                if PRINT_INTERMEDIATE:
-                    print(badstr)
-
-                continue
+                    # this one is not done and has not started
+                    continue
     except:
         if PRINT_EXCEPTIONS:
             print(traceback.format_exc())
         #this is a fail
-        badstr = f"{dn} Bad HETDEX.o* file."
+        badstr = f"{dn} Bad HETDEX{job}.o* file."
         bad_dirs_string.append(badstr)
         bad_dirs.append(dn)
         if PRINT_INTERMEDIATE:
@@ -111,7 +151,7 @@ for dn in tqdm(dirnames):
     #check ./output directory .find files are not zero length
     try:
         findfiles = sorted(glob.glob(os.path.join(dn,"output","*.find")))
-        if len(findfiles) < 500: #depending on the shot there should be 900+ up to almost 5200 (e.g. 66 x 78 IFUs)
+        if len(findfiles) < 5: #there should be 1 per IFU ... fewest is actually 9, I think in early 2017
             badstr =f"{dn} Bad output/*.find files. Too few: {len(findfiles)}"
             bad_dirs_string.append(badstr)
             bad_dirs.append(dn)
