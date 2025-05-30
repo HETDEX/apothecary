@@ -12,7 +12,6 @@
 import numpy as np
 import os
 import sys
-from tqdm import tqdm
 import glob
 import shutil
 
@@ -57,7 +56,7 @@ else:
 #just the sim* directory strings
 existing_sims = [os.path.basename(x) for x in glob.glob(f"j???/sim*")]
 
-for j in tqdm(range(job_count)):
+for j in range(job_count):
 
 	print(f"Working on job {j+1} / {job_count} ...")
 	count = per_job_shot_count #reset the count down for this job
@@ -143,11 +142,12 @@ for j in tqdm(range(job_count)):
 		f.write("#SBATCH --mail-user dustin@astro.as.utexas.edu\n")
 		f.write("#SBATCH --mail-type all\n")
 		f.write("\n")
-		f.write("module load pylauncher / 5.2\n")
+		f.write("module load pylauncher/5.2\n")
 		f.write("module load cdtools\n")
 		f.write("\n")
-		f.write("export LAUNCHER_WORKDIR =$(pwd)\n")
-		f.write("WORKDIR =$LAUNCHER_WORKDIR\n")
+		f.write(f"cd {dir_j}\n")
+		f.write("export LAUNCHER_WORKDIR=$(pwd)\n") #just temporary, actual workdir will be in each shot directory
+		f.write("WORKDIR=$LAUNCHER_WORKDIR\n")
 		f.write("\n")
 
 
@@ -161,8 +161,8 @@ for j in tqdm(range(job_count)):
 			f.write("##########################################\n")
 			f.write(f"echo \"Starting sim #{simnum} ({change_datevshot})... \"\n")
 			f.write(f"cd {subdir}\n")
-			f.write("export LAUNCHER_WORKDIR =$(pwd)\n")
-			f.write("WORKDIR =$LAUNCHER_WORKDIR\n")
+			f.write("export LAUNCHER_WORKDIR=$(pwd)\n")
+			f.write("WORKDIR=$LAUNCHER_WORKDIR\n")
 			f.write("\n")
 
 			f.write(f"distribute.bash	raw/{change_date}/virus/virus0000{change_shot}.tar\n")
@@ -173,19 +173,19 @@ for j in tqdm(range(job_count)):
 			f.write("distribute.bash	datafiles/norm.dat\n")
 			f.write("wait\n")
 			f.write("\n")
-			f.write("export LAUNCHER_WORKDIR =$(pwd)\n")
-			f.write("export LAUNCHER_JOB_FILE = rt1c\n")
-			f.write("WORKDIR =$LAUNCHER_WORKDIR\n")
-			f.write("CONTROL_FILE =$LAUNCHER_JOB_FILE\n")
-			f.write("cd $WORKDIR /\n")
+			f.write("export LAUNCHER_WORKDIR=$(pwd)\n")
+			f.write("export LAUNCHER_JOB_FILE=rt1c\n")
+			f.write("WORKDIR=$LAUNCHER_WORKDIR\n")
+			f.write("CONTROL_FILE=$LAUNCHER_JOB_FILE\n")
+			f.write("cd $WORKDIR/\n")
 			f.write("echo \" WORKING DIR:   $WORKDIR/\"\n")
 			f.write("run_pylauncher\n")
 			f.write("\n")
 			f.write("wait\n")
-			f.write(f"echo \"FIRST PART\" {change_datevshot} \n")
+			f.write(f"echo \"FIRST PART {change_datevshot}\" \n")
 			f.write("\n")
-			f.write("export LAUNCHER_JOB_FILE = rt1\n")
-			f.write("CONTROL_FILE =$LAUNCHER_JOB_FILE\n")
+			f.write("export LAUNCHER_JOB_FILE=rt1\n")
+			f.write("CONTROL_FILE=$LAUNCHER_JOB_FILE\n")
 			f.write("run_pylauncher\n")
 			f.write("wait\n")
 			f.write("\n")
