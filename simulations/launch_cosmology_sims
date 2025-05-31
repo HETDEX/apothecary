@@ -76,6 +76,8 @@ for j in range(job_count):
 	dir_j = f"j{str(next_j).zfill(3)}"
 	next_j += 1
 
+	min_source_fns = 99999
+
 	#create the new jobdir
 	os.makedirs(dir_j, exist_ok=True)
 
@@ -122,7 +124,7 @@ for j in range(job_count):
 
 
 		print(f"\n{shot} not found. Creating ... ")
-		print(f"{count} / {per_job_shot_count} remaining for job #{dir_j} ({j+1} / {job_count})...")
+		print(f"{count} / {per_job_shot_count} shots remaining for job #{dir_j} ({j+1} / {job_count}) ...")
 
 		all_date.append(shot[0:8])
 		all_shotnum.append(shot[8:])
@@ -149,6 +151,10 @@ for j in range(job_count):
 
 		#update the allsource file
 		source_fns = sorted(glob.glob(f"{dirname}/sources/*source*.???"))
+		if len(source_fns) > 0:
+			min_source_fns = min(min_source_fns,len(source_fns))
+
+
 		with open(f"{dirname}/allsource","w") as f:
 			for source_fn in source_fns:
 				bn = os.path.basename(source_fn)
@@ -184,12 +190,15 @@ for j in range(job_count):
 
 	print(f"Writing job slurm file: {dir_j}.slurm ...")
 
+
+	ntasks = min(48,min_source_fns) #limit the job ntasks (per node) to the smallest of the shots within the job
+
 	with open(f"{dir_j}.slurm","w") as f:
 
 		f.write("#!/bin/bash \n")
 		f.write("#SBATCH -J hetdex                # Job name\n")
 		f.write("#SBATCH -N 1                     # Total number of nodes requested\n")
-		f.write("#SBATCH --ntasks 48              # using --ntasks for consistency with spr, but same as --ntasks_per_node\n")
+		f.write(f"#SBATCH --ntasks {ntasks}        # using --ntasks for consistency with spr, but same as --ntasks_per_node\n")
 		f.write("#SBATCH -p skx                   # Queue name\n")
 		f.write(f"#SBATCH -o HETDEX{dir_j}.o%j    # Name of stdout output file (%j expands to jobid)\n")
 		f.write("#SBATCH -t 13:00:00              # Run time (hh:mm:ss)\n")
