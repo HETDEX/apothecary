@@ -15,6 +15,15 @@ import sys
 import glob
 import shutil
 
+
+#todo: if multiple people are going to run this simultaneous, should us filelock as semaphore so
+# only one runs at a time to eliminate duplicate runs
+# HOWEVER, I think you really only need to replace the /sources/XXX.001  files and can run as is to get
+# a new cosmology, so it maybe more efficient to just pre-build jobs in sets of 50 or 100 and allow a
+# script to clean a shot directory and replace the /sources/*001 files and then can run again
+# since this launcher has to copy a lot of data, it can take a minute or more PER SHOT to set up, so a job
+# might take around an hour just to set up
+
 owen_source_dir = "/work/06890/ochase10/stampede3/mocks/mock2"
 
 basedir = os.getcwd() #or spcify
@@ -113,7 +122,7 @@ for j in range(job_count):
 
 
 		print(f"\n{shot} not found. Creating ... ")
-		print(f"{count} remaining ...")
+		print(f"{count} / {per_job_shot_count} remaining for job #{dir_j} ({j+1} / {job_count})...")
 
 		all_date.append(shot[0:8])
 		all_shotnum.append(shot[8:])

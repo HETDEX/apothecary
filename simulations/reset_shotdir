@@ -1,0 +1,52 @@
+#!/usr/bin/env python
+
+#takes one parameter, shotdir or shotid
+# otherwise assumes cwd is in the shotdir
+
+
+
+import numpy as np
+import os
+import sys
+
+cl_args = list(map(str,sys.argv))
+
+try:
+    if len(cl_args) == 2:
+        shot = str((cl_args[1]))
+    else:
+        shot = None
+except:
+    shot = None
+
+
+if shot is None:
+    dirname = None
+else:
+    if "sim" in shot:
+        dirname = shot #assume of form: sim20171019v003s666
+    elif "v" in shot: #assume of form 20171019v003
+        dirname = f"sim{shot}s666"
+    else: #assume just 20171019003
+        dirname = f"sim{shot[0:8]}v{shot[8:]}s666"
+
+if dirname is not None:
+    os.chdir(dirname)
+
+cmd = f"rm queuestate a1 rsep"
+os.system(cmd)
+
+cmd = f"rm 20*.sim"
+os.system(cmd)
+
+cmd = f"rm det.20*"
+os.system(cmd)
+
+cmd = f"rm 20*.done"
+os.system(cmd)
+
+cmd = f"rm 20*.running"
+os.system(cmd)
+
+cmd = f"rm output/*"
+os.system(cmd)
