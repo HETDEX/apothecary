@@ -1,0 +1,15 @@
+cat rt1 | grep "001$" > rt1.new
+rm rt1
+mv rt1.new rt1
+chmod 755 rt1
+
+cat rt2 | grep "001$" > rt2.new
+rm rt2
+mv rt2.new rt2
+chmod 755 rt2
+
+
+cat rtmp | grep "001$" > rtmp.new
+rm rtmp
+mv rtmp.new rtmp
+chmod 755 rtmp

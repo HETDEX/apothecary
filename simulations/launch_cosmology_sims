@@ -15,6 +15,7 @@ import sys
 import glob
 import shutil
 
+owen_source_dir = "/work/06890/ochase10/stampede3/mocks/mock2"
 
 basedir = os.getcwd() #or spcify
 original_basedir = os.getcwd()
@@ -102,6 +103,15 @@ for j in range(job_count):
 		if shot not in all_cosmology_shots: #this is not a shot we want to use for cosomology simulations
 			continue
 
+
+		#only if owen has mocks
+		if not os.path.exists(os.path.join(owen_source_dir,dirname[3:])):
+			print(f"No mocks for {dirname}. Skipping ... ")
+			continue
+
+
+
+
 		print(f"\n{shot} not found. Creating ... ")
 		print(f"{count} remaining ...")
 
@@ -115,6 +125,39 @@ for j in range(job_count):
 		cmd = f"$({rgetran} {shot[0:8]} {shot[8:]})"
 		#cmd = f"echo testing dummy  command {rgetran}  {shot[0:8]} {shot[8:]}"
 		os.system(cmd)  #this is a blocking command, so is okay
+
+
+		#now, clear out the /sources and replace with Owen's
+		cmd = f"rm {dirname}/sources/*source*.???"
+		os.system(cmd)
+
+		#remove the original allsource file (will make a new one a little below)
+		cmd = f"rm {dirname}/allsource"
+		os.system(cmd)
+
+		cmd = f"cp {os.path.join(owen_source_dir,dirname[3:],'*source*.???')} {dirname}/sources/"
+		os.system(cmd)
+
+		#update the allsource file
+		source_fns = sorted(glob.glob(f"{dirname}/sources/*source*.???"))
+		with open(f"{dirname}/allsource","w") as f:
+			for source_fn in source_fns:
+				bn = os.path.basename(source_fn)
+				toks = bn.split("_sources.")
+				f.write(f"{toks[0]} {toks[1]}\n")
+
+
+
+		#update rt1
+		cmd = f"cp trim_rt1 {dirname}"
+		os.system(cmd)
+
+		os.chdir(dirname)
+		cmd = f"source trim_rt1"
+		os.system(cmd)
+
+		os.chdir("..")
+
 
 		#this has its own slurm file (rt1.slurm) but it will not be executed
 
@@ -195,6 +238,13 @@ for j in range(job_count):
 			f.write("wait\n")
 			f.write("\n")
 			f.write("runpost\n")
+			f.write("echo \"cleaning /tmp ...\"\n")
+			f.write("rm -rf /tmp/virus*\n")
+			f.write("rm -rf /tmp/20*\n")
+			f.write("rm -rf /tmp/ras20*\n")
+			f.write("rm -rf /tmp/fluxcor.use\n")
+			f.write("rm -rf /tmp/fwhm.use\n")
+			f.write("rm -rf /tmp/norm.dat\n")
 			f.write(f"echo \"Done sim #{simnum} ({change_datevshot})... \"\n")
 			f.write(f"touch {change_datevshot}.done \n") #set a done flag as a file for easy checking
 			f.write(f"cd .. \n")

@@ -79,6 +79,8 @@ for dn in tqdm(dirnames):
             #todo: here find the lines that deal with THIS shot
             lines = f.readlines()
             shot_done = False
+            idx1 = None
+            idx2 = None
 
             #find the lines (indices) for the start and finish of THIS job
             sel2 = np.array([("Done sim" in line) and (datevshot in line) for line in lines])
@@ -87,7 +89,9 @@ for dn in tqdm(dirnames):
                     idx2 = np.where(sel2)[0][0]
                     shot_done = True
                 except:
-                    idx2 = idx2 = len(lines)-1 #this one is not done OR it died
+                    idx2 = len(lines)-1 #this one is not done OR it died
+            else:
+                idx2 = len(lines) - 1  # this one is not done OR it died
 
 
             if not shot_done:
@@ -100,7 +104,8 @@ for dn in tqdm(dirnames):
                     except:
                         idx1 = None
 
-                if idx1:
+
+                if idx1 is not None:
                     #get the indices
                     lines = lines[idx1:idx2+1]
 
@@ -136,6 +141,7 @@ for dn in tqdm(dirnames):
                         continue
                 else:
                     # this one is not done and has not started
+                    not_yet_run_dirs.append(dn)
                     continue
     except:
         if PRINT_EXCEPTIONS:
