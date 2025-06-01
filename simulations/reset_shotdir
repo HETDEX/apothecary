@@ -8,45 +8,66 @@
 import numpy as np
 import os
 import sys
+import glob
+from tqdm import tqdm
 
 cl_args = list(map(str,sys.argv))
 
+#print(cl_args)
+
 try:
     if len(cl_args) == 2:
-        shot = str((cl_args[1]))
+        arg = str((cl_args[1]))
     else:
-        shot = None
+        arg = None
+
 except:
-    shot = None
+    arg = None
 
 
-if shot is None:
-    dirname = None
+if arg is None:
+    if len(cl_args) > 2:
+        dirnames =  cl_args[1:]
+    else:
+        print("usage: reset_shotdir <directory>    can use wildcards")
+        exit(0)
 else:
-    if "sim" in shot:
-        dirname = shot #assume of form: sim20171019v003s666
-    elif "v" in shot: #assume of form 20171019v003
-        dirname = f"sim{shot}s666"
-    else: #assume just 20171019003
-        dirname = f"sim{shot[0:8]}v{shot[8:]}s666"
+    dirnames = glob.glob(arg)
 
-if dirname is not None:
+# if shot is None:
+#     dirname = None
+# else:
+#     if "sim" in shot:
+#         dirname = shot #assume of form: sim20171019v003s666
+#     elif "v" in shot: #assume of form 20171019v003
+#         dirname = f"sim{shot}s666"
+#     else: #assume just 20171019003
+#         dirname = f"sim{shot[0:8]}v{shot[8:]}s666"
+
+
+#print(dirnames)
+cwd = os.getcwd()
+
+for dirname in tqdm(dirnames):
+
     os.chdir(dirname)
 
-cmd = f"rm queuestate a1 rsep"
-os.system(cmd)
+    cmd = f"rm -f queuestate a1 rsep"
+    os.system(cmd)
 
-cmd = f"rm 20*.sim"
-os.system(cmd)
+    cmd = f"rm -f 20*.sim"
+    os.system(cmd)
 
-cmd = f"rm det.20*"
-os.system(cmd)
+    cmd = f"rm -f det.20*"
+    os.system(cmd)
 
-cmd = f"rm 20*.done"
-os.system(cmd)
+    cmd = f"rm -f 20*.done"
+    os.system(cmd)
 
-cmd = f"rm 20*.running"
-os.system(cmd)
+    cmd = f"rm -f 20*.running"
+    os.system(cmd)
 
-cmd = f"rm output/*"
-os.system(cmd)
+    cmd = f"rm -f output/*"
+    os.system(cmd)
+
+    os.chdir(cwd)
