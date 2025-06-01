@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 
-#takes one parameter, shotdir or shotid
-# otherwise assumes cwd is in the shotdir
-
-
+#takes one parameter, shotdir  (can use wildcards)
 
 import numpy as np
 import os
