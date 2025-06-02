@@ -2,6 +2,11 @@
 
 #takes one parameter, shotdir  (can use wildcards)
 
+
+#clears out run data, but DOES NOT change the sources/*.001 files
+# !!! if you want a new cosmology mock, run THIS on the shot directory, then replace the sources/*.001 files
+
+
 import numpy as np
 import os
 import sys
@@ -24,7 +29,7 @@ except:
 
 if arg is None:
     if len(cl_args) > 2:
-        dirnames =  cl_args[1:]
+        dirnames = cl_args[1:]
     else:
         print("usage: reset_shotdir <directory>    can use wildcards")
         exit(0)
