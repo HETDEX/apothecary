@@ -85,7 +85,7 @@ for j in range(job_count):
 	all_date = []
 	all_shotnum = []
 	all_subdir = []
-
+	total_ifus = 0 #reset ... total ifus in THIS job
 
 	for shot in (shots_todo[shot_idx:]):
 
@@ -153,6 +153,7 @@ for j in range(job_count):
 		source_fns = sorted(glob.glob(f"{dirname}/sources/*source*.???"))
 		if len(source_fns) > 0:
 			min_source_fns = min(min_source_fns,len(source_fns))
+			total_ifus += len(source_fns)
 
 
 		with open(f"{dirname}/allsource","w") as f:
@@ -193,6 +194,12 @@ for j in range(job_count):
 
 	ntasks = min(48,min_source_fns) #limit the job ntasks (per node) to the smallest of the shots within the job
 
+	#approximate time needed, with slop for variablility in TACC I/O performance
+	# time depends on size of copy (which is largely proportional to the number of IFUs) and number of IFUs
+	hours = 0.2 * per_job_shot_count + total_ifus / 500
+	minutes = int((hours - int(hours)) * 60)
+	hours = int(hours)
+
 	with open(f"{dir_j}.slurm","w") as f:
 
 		f.write("#!/bin/bash \n")
@@ -201,7 +208,7 @@ for j in range(job_count):
 		f.write(f"#SBATCH --ntasks {ntasks}        # using --ntasks for consistency with spr, but same as --ntasks_per_node\n")
 		f.write("#SBATCH -p skx                   # Queue name\n")
 		f.write(f"#SBATCH -o HETDEX{dir_j}.o%j    # Name of stdout output file (%j expands to jobid)\n")
-		f.write("#SBATCH -t 13:00:00              # Run time (hh:mm:ss)\n")
+		f.write(f"#SBATCH -t {hours}:{minutes}:00              # Run time (hh:mm:ss)\n")
 		f.write("#SBATCH -A Hobby-Eberly-Telesco\n")
 		f.write("#SBATCH --mail-user dustin@astro.as.utexas.edu\n")
 		f.write("#SBATCH --mail-type all\n")
@@ -223,48 +230,54 @@ for j in range(job_count):
 			change_datevshot = f"{change_date}v{change_shot}"
 			f.write("\n")
 			f.write("##########################################\n")
-			f.write(f"echo \"Starting sim #{simnum} ({change_datevshot})... \"\n")
-			f.write(f"cd {subdir}\n")
-			f.write("export LAUNCHER_WORKDIR=$(pwd)\n")
-			f.write("WORKDIR=$LAUNCHER_WORKDIR\n")
+			f.write(f"if [ -f {subdir}/{change_date}v{change_shot}.running ]; then\n")
+			f.write(f"  echo skipping {change_date}v{change_shot}. Already done or in-progress.\n")
+
+			f.write(f"else\n")
+			#ELSE branch ... exectue the shot mock
+			f.write(f"  echo \"Starting sim #{simnum} ({change_datevshot})... \"\n")
+			f.write(f"  cd {subdir}\n")
+			f.write("  export LAUNCHER_WORKDIR=$(pwd)\n")
+			f.write("  WORKDIR=$LAUNCHER_WORKDIR\n")
 			f.write("\n")
 
-			f.write(f"touch {change_datevshot}.running \n")  # set a run flag as a file for easy checking
+			f.write(f"  touch {change_datevshot}.running \n")  # set a run flag as a file for easy checking
 
-			f.write(f"distribute.bash	raw/{change_date}/virus/virus0000{change_shot}.tar\n")
-			f.write(f"distribute.bash	datafiles/{change_datevshot}.dithall\n")
-			f.write(f"distribute.bash	datafiles/{change_datevshot}sedtp_f.dat\n")
-			f.write("distribute.bash	datafiles/fluxcor.use\n")
-			f.write("distribute.bash	datafiles/fwhm.use\n")
-			f.write("distribute.bash	datafiles/norm.dat\n")
-			f.write("wait\n")
+			f.write(f"  distribute.bash	raw/{change_date}/virus/virus0000{change_shot}.tar\n")
+			f.write(f"  distribute.bash	datafiles/{change_datevshot}.dithall\n")
+			f.write(f"  distribute.bash	datafiles/{change_datevshot}sedtp_f.dat\n")
+			f.write("  distribute.bash	datafiles/fluxcor.use\n")
+			f.write("  distribute.bash	datafiles/fwhm.use\n")
+			f.write("  distribute.bash	datafiles/norm.dat\n")
+			f.write("  wait\n")
 			f.write("\n")
-			f.write("export LAUNCHER_WORKDIR=$(pwd)\n")
-			f.write("export LAUNCHER_JOB_FILE=rt1c\n")
-			f.write("WORKDIR=$LAUNCHER_WORKDIR\n")
-			f.write("CONTROL_FILE=$LAUNCHER_JOB_FILE\n")
-			f.write("cd $WORKDIR/\n")
-			f.write("echo \" WORKING DIR:   $WORKDIR/\"\n")
-			f.write("run_pylauncher\n")
+			f.write("  export LAUNCHER_WORKDIR=$(pwd)\n")
+			f.write("  export LAUNCHER_JOB_FILE=rt1c\n")
+			f.write("  WORKDIR=$LAUNCHER_WORKDIR\n")
+			f.write("  CONTROL_FILE=$LAUNCHER_JOB_FILE\n")
+			f.write("  cd $WORKDIR/\n")
+			f.write("  echo \" WORKING DIR:   $WORKDIR/\"\n")
+			f.write("  run_pylauncher\n")
 			f.write("\n")
-			f.write("wait\n")
-			f.write(f"echo \"FIRST PART {change_datevshot}\" \n")
+			f.write("  wait\n")
+			f.write(f"  echo \"FIRST PART {change_datevshot}\" \n")
 			f.write("\n")
-			f.write("export LAUNCHER_JOB_FILE=rt1\n")
-			f.write("CONTROL_FILE=$LAUNCHER_JOB_FILE\n")
-			f.write("run_pylauncher\n")
-			f.write("wait\n")
+			f.write("  export LAUNCHER_JOB_FILE=rt1\n")
+			f.write("  CONTROL_FILE=$LAUNCHER_JOB_FILE\n")
+			f.write("  run_pylauncher\n")
+			f.write("  wait\n")
 			f.write("\n")
-			f.write("runpost\n")
-			f.write("echo \"cleaning /tmp ...\"\n")
-			f.write("rm -rf /tmp/virus*\n")
-			f.write("rm -rf /tmp/20*\n")
-			f.write("rm -rf /tmp/ras20*\n")
-			f.write("rm -rf /tmp/fluxcor.use\n")
-			f.write("rm -rf /tmp/fwhm.use\n")
-			f.write("rm -rf /tmp/norm.dat\n")
-			f.write(f"echo \"Done sim #{simnum} ({change_datevshot})... \"\n")
-			f.write(f"touch {change_datevshot}.done \n") #set a done flag as a file for easy checking
-			f.write(f"cd .. \n")
+			f.write("  runpost\n")
+			f.write("  echo \"cleaning /tmp ...\"\n")
+			f.write("  rm -rf /tmp/virus*\n")
+			f.write("  rm -rf /tmp/20*\n")
+			f.write("  rm -rf /tmp/ras20*\n")
+			f.write("  rm -rf /tmp/fluxcor.use\n")
+			f.write("  rm -rf /tmp/fwhm.use\n")
+			f.write("  rm -rf /tmp/norm.dat\n")
+			f.write(f"  echo \"Done sim #{simnum} ({change_datevshot})... \"\n")
+			f.write(f"  touch {change_datevshot}.done \n") #set a done flag as a file for easy checking
+			f.write(f"  cd .. \n")
+			f.write(f"fi\n")
 
 os.chdir(original_basedir)
