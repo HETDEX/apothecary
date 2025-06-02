@@ -81,7 +81,7 @@ with open(slurm_fn,"r") as f:
 #get the total number of IFUEs
 total_ifus = 0 #reset ... total ifus in THIS job
 for subdir in (all_subdir):
-	total_ifus += len(glob.glob(f"{subdir}/sources/*.001"))
+	total_ifus += len(glob.glob(f"{dir_j}/{subdir}/sources/*.001"))
 
 
 
@@ -91,6 +91,9 @@ hours = 0.2 * per_job_shot_count + total_ifus / 500
 minutes = int((hours - int(hours)) * 60)
 hours = int(hours)
 
+print(f"{per_job_shot_count} shots")
+print(f"{total_ifus} total_ifus")
+print(f"{hours}:{minutes}:00")
 
 #copy the original
 cmd = f"cp {slurm_fn} {slurm_fn}.original"
