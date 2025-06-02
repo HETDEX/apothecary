@@ -91,7 +91,12 @@ hours = 0.2 * per_job_shot_count + total_ifus / 500
 minutes = int((hours - int(hours)) * 60)
 hours = int(hours)
 
-with open(f"{slurm_fn}.new","w") as f:
+
+#copy the original
+cmd = f"cp {slurm_fn} {slurm_fn}.original"
+os.system(cmd)
+
+with open(f"{slurm_fn}","w") as f:
 
 	f.write("#!/bin/bash \n")
 	f.write("#SBATCH -J hetdex                # Job name\n")
