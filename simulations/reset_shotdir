@@ -57,6 +57,9 @@ for dirname in tqdm(dirnames):
     cmd = f"rm -f queuestate a1 rsep"
     os.system(cmd)
 
+    cmd = f"rm -rf pylauncher_tmp*"
+    os.system(cmd)
+
     cmd = f"rm -f 20*.sim"
     os.system(cmd)
 
