@@ -201,6 +201,7 @@ for dn in tqdm(dirnames):
                     zero_ct += 1
 
         if zero_ct > 0:
+            do_continue = True
             if zero_ct == len(findfiles):
                 badstr =f"{dn} Bad output/*.find files. ALL zero size."
                 bad_dirs_string.append(badstr)
@@ -218,7 +219,13 @@ for dn in tqdm(dirnames):
             else:
                 # !!! BUT do not skip to the next directory,
                 # !!! go ahead and continue
-                if zero_ct % 3 == 0: #a multiple of 3, bad/masked IFU/amps
+
+                if zero_ct <= np.ceil(0.1 * len(findfiles)): #probably this is okay
+                    do_continue = False #do not reset to top of loop, this one is still okay
+                    if PRINT_INTERMEDIATE:
+                        badstr = f"{dn} Will count as okay, but output/*.find files. {zero_ct} / {len(findfiles)} zero size."
+                        print(badstr)
+                elif zero_ct % 3 == 0: #a multiple of 3, bad/masked IFU/amps
                     if at_least_one_bad_amp > 0 and at_least_one_bad_amp %3 == 0:
                         badstr = f"{dn} Possible bad output/*.find files. {zero_ct} / {len(findfiles)} zero size. Some masked IFUs/Amps."
                         possible_bad_dirs.append(dn)
@@ -239,7 +246,8 @@ for dn in tqdm(dirnames):
                     if PRINT_INTERMEDIATE:
                         print(badstr)
 
-            continue
+            if do_continue:
+                continue
 
         #we made it to the end, assume good
         done_dirs.append(dn)

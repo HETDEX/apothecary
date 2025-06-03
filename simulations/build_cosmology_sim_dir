@@ -1,0 +1,75 @@
+#!/usr/bin/env python
+
+# takes one arguments: (1)  shotid
+
+#
+# builds a single cosmology shot directory (like a single iteration of interior loop of launch_cosmology_sims)
+# DOES NOT do anything with SLURM
+
+import numpy as np
+import os
+import sys
+import glob
+import shutil
+
+
+owen_source_dir = "/work/06890/ochase10/stampede3/mocks/mock2"
+
+cl_args = list(map(str.lower,sys.argv))
+
+shot = cl_args[1].replace('v','')
+rgetran = "./rgetran_noqueue"
+
+#just the sim* directory strings
+existing_sims = [os.path.basename(x) for x in glob.glob(f"j???/sim*")] + \
+				[os.path.basename(x) for x in glob.glob(f"done/sim*")] + \
+				[os.path.basename(x) for x in glob.glob(f"bad/sim*")]
+
+
+#shot is a string: YYYYMMDDSSS  e.g. 20230714001
+dirname = f"sim{shot[0:8]}v{shot[8:]}s666"
+simname = f"{shot[0:8]}v{shot[8:]}s666.sim"
+#skip if I have it already or Karl has it already
+#note: Owen has been running on lonestar6 and we can't readily see that /scratch from here
+
+
+#only if owen has mocks
+if not os.path.exists(os.path.join(owen_source_dir,dirname[3:])):
+	print(f"No mocks for {dirname}. Skipping ... ")
+	exit(-1)
+
+
+cmd = f"$({rgetran} {shot[0:8]} {shot[8:]})"
+#cmd = f"echo testing dummy  command {rgetran}  {shot[0:8]} {shot[8:]}"
+os.system(cmd)  #this is a blocking command, so is okay
+
+
+#now, clear out the /sources and replace with Owen's
+cmd = f"rm {dirname}/sources/*source*.???"
+os.system(cmd)
+
+#remove the original allsource file (will make a new one a little below)
+cmd = f"rm {dirname}/allsource"
+os.system(cmd)
+
+cmd = f"cp {os.path.join(owen_source_dir,dirname[3:],'*source*.???')} {dirname}/sources/"
+os.system(cmd)
+
+#update the allsource file
+source_fns = sorted(glob.glob(f"{dirname}/sources/*source*.???"))
+
+with open(f"{dirname}/allsource","w") as f:
+	for source_fn in source_fns:
+		bn = os.path.basename(source_fn)
+		toks = bn.split("_sources.")
+		f.write(f"{toks[0]} {toks[1]}\n")
+
+
+
+#update rt1
+cmd = f"cp trim_rt1 {dirname}"
+os.system(cmd)
+
+os.chdir(dirname)
+cmd = f"source trim_rt1"
+os.system(cmd)
