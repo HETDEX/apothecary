@@ -87,14 +87,14 @@ for dn in tqdm(dirnames):
             if np.count_nonzero(sel2) > 0:
                 try:
                     idx2 = np.where(sel2)[0][0]
-                    shot_done = True
+                    shot_done = True #BUT even if DONE, could be a problem, like paramiko
                 except:
                     idx2 = len(lines)-1 #this one is not done OR it died
             else:
                 idx2 = len(lines) - 1  # this one is not done OR it died
 
 
-            if not shot_done:
+            if True: #not shot_done:  #BUT even if DONE, could be a problem, like paramiko
 
                 #need to find where it started
                 sel1 = np.array([("Starting" in line) and (datevshot in line) for line in lines])
@@ -108,6 +108,7 @@ for dn in tqdm(dirnames):
                 if idx1 is not None:
                     #get the indices
                     lines = lines[idx1:idx2+1]
+                    flat_lines = "".join(lines)
 
                     if not ("Cleaning up ..." in lines[-2] and "Removed." in lines[-1]):
                         #something is wrong
@@ -117,32 +118,56 @@ for dn in tqdm(dirnames):
                     #FIRST PART
                     #slurmstepd: error: *** JOB 1697795 ON c511-063 CANCELLED AT 2025-03-17T23:25:09 DUE TO TIME LIMIT ***
 
-                        if "CANCELLED" in lines[-1]:
-                            if "TIME LIMIT" in lines[-1]:
+                        if "CANCELLED" in flat_lines:
+                            if "TIME LIMIT" in flat_lines:
                                 badstr = f"{dn} Bad {hetdex_log} file. Timed out."
                             else:
                                 badstr = f"{dn} Bad {hetdex_log} file. Cancelled."
-                        elif "paramiko.ssh_exception" in lines[-1]:
-                            badstr = f"{dn} Bad {hetdex_log} file. Last line: {lines[-1].rstrip()}"
-                        elif "***" in lines[-1] or "***" in lines[-2] or "slurmstepd" in lines[-1]:
-                            badstr = f"{dn} Bad {hetdex_log} file. Last line: {lines[-1].rstrip()}"
+                        elif "paramiko.ssh_exception" in flat_lines:
+                            sel_idx = ["paramiko.ssh_exception" in l for l in lines]
+                            badstr = f"{dn} Bad {hetdex_log} file. line: {np.array(lines)[sel_idx][-1].rstrip()}"
+                        #elif "***" in lines[-1] or "***" in lines[-2] or "slurmstepd" in lines[-1]:
+                        elif "slurmstepd" in flat_lines:
+                            sel_idx = ["slurmstepd" in l for l in lines]
+                            badstr = f"{dn} Bad {hetdex_log} file. line: {np.array(lines)[sel_idx][-1].rstrip()}"
                         elif "FIRST PART" in lines[-1] or "Running" in lines[-1] or len(lines[-1]) < 3:
                             in_progress_dirs.append(dn)
                             continue #this is okay, just skip and keep going
+                        elif shot_done: #this is probably good
+                            badstr = None
+                            pass
                         else:
                             badstr = f"{dn} Bad? {hetdex_log} file. [Need to check again]. Last line: {lines[-1].rstrip()}"
 
-                        bad_dirs_string.append(badstr)
-                        bad_dirs.append(dn)
+                        if badstr is not None:
+                            bad_dirs_string.append(badstr)
+                            bad_dirs.append(dn)
 
-                        if PRINT_INTERMEDIATE:
-                            print(badstr)
+                            if PRINT_INTERMEDIATE:
+                                print(badstr)
 
-                        continue
+                            continue
+                        #else this is probably still good, keep going
                 else:
                     # this one is not done and has not started
-                    not_yet_run_dirs.append(dn)
-                    continue
+
+
+                    #might have been skipped on a re-run
+                    sel1 = np.array([("skipping" in line) and (datevshot in line) for line in lines])
+                    idx1 = None
+                    if np.count_nonzero(sel1) > 0:
+                        try:
+                            idx1 = np.where(sel1)[0][0]
+                        except:
+                            idx1 = None
+                    if idx1 is None:
+                        not_yet_run_dirs.append(dn)
+                        continue
+                    else:
+                        #this has been skipped ... so count it as done?
+                        done_dirs.append(dn)
+                        continue
+
     except:
         if PRINT_EXCEPTIONS:
             print(traceback.format_exc())
@@ -313,18 +338,44 @@ print("-------------------------------")
 print(f"Checked {len(dirnames)} sim directories")
 print(f"{len(bad_dirs)} bad")
 print(f"{len(possible_bad_dirs)} possibly bad")
-print(f"{len(not_yet_run_dirs)} waiting to run")
+print(f"{len(not_yet_run_dirs)} waiting to run (or not found)")
 print(f"{len(in_progress_dirs)} still running")
 print(f"{len(done_dirs)} done")
 
-with open("move_to_done.txt","w") as f:
+
+#temporary
+# print("\n ... not yet run??? ...")
+# for x in not_yet_run_dirs:
+#     print(x)
+
+
+os.makedirs("done_good", exist_ok=True)
+os.makedirs("done_bad", exist_ok=True)
+os.makedirs("done_bad_possible", exist_ok=True)
+
+with open("copy_good.txt","w") as f:
     for dn in done_dirs:
-        f.write(f"mv {dn} done \n")
+        bn = os.path.basename(dn) #e.g. simYYYYMMDDvSSSs666
+        sim = bn[3:] + ".sim" #e.g YYYYMMDDvSSSs666.sim
+        f.write(f"cp {dn}/{sim} done_good \n")
 
-with open("move_to_bad.txt","w") as f:
+with open("copy_bad.txt","w") as f:
     for dn in bad_dirs:
-        f.write(f"mv {dn} bad \n")
+        bn = os.path.basename(dn) #e.g. simYYYYMMDDvSSSs666
+        sim = bn[3:] + ".sim" #e.g YYYYMMDDvSSSs666.sim
+        if os.path.exists(f"{dn}/{sim}"):
+            f.write(f"cp {dn}/{sim} done_bad \n")
+        else:
+            f.write(f"touch done_bad/{sim} \n")
 
-with open("possibly_bad.txt","w") as f:
+with open("copy_bad_possible.txt","w") as f:
+    bn = os.path.basename(dn)  # e.g. simYYYYMMDDvSSSs666
+    sim = bn[3:] + ".sim"  # e.g YYYYMMDDvSSSs666.sim
     for dn in possible_bad_dirs:
-        f.write(f"mv {dn} bad_possible \n")
+        f.write(f"cp {dn}/{sim} done_bad_possible \n")
+
+# a little dangerous since these are not always "bad" and can include some that are in-progress but in
+# a weird intermediate state
+# with open("reset_bad.txt","w") as f:
+#     for dn in bad_dirs:
+#         f.write(f"reset_shotdir {dn} \n")
