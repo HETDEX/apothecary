@@ -52,6 +52,17 @@ not_yet_run_dirs = []
 in_progress_dirs = []
 done_dirs = []
 
+
+def write_status(path,shot,status):
+    try:
+        with open(os.path.join(path,f"{shot}.status"),"w") as f:
+            f.write(status)
+            f.write("\n")
+    except Exception as e:
+        print("Failure to record status file.",e)
+
+
+
 for dn in tqdm(dirnames):
     #check HETDEX.o* file (at least last line)
     #sim20170327v011s666
@@ -143,6 +154,8 @@ for dn in tqdm(dirnames):
                             bad_dirs_string.append(badstr)
                             bad_dirs.append(dn)
 
+                            write_status(path=dn,shot=datevshot,status=badstr)
+
                             if PRINT_INTERMEDIATE:
                                 print(badstr)
 
@@ -175,6 +188,7 @@ for dn in tqdm(dirnames):
         badstr = f"{dn} Bad HETDEX{job}.o* file."
         bad_dirs_string.append(badstr)
         bad_dirs.append(dn)
+        write_status(path=dn, shot=datevshot, status=badstr)
         if PRINT_INTERMEDIATE:
             print(badstr)
         continue
@@ -186,6 +200,7 @@ for dn in tqdm(dirnames):
             badstr =f"{dn} Bad output/*.find files. Too few: {len(findfiles)}"
             bad_dirs_string.append(badstr)
             bad_dirs.append(dn)
+            write_status(path=dn, shot=datevshot, status=badstr)
             if PRINT_INTERMEDIATE:
                 print(badstr)
             continue
@@ -231,6 +246,7 @@ for dn in tqdm(dirnames):
                 badstr =f"{dn} Bad output/*.find files. ALL zero size."
                 bad_dirs_string.append(badstr)
                 bad_dirs.append(dn)
+                write_status(path=dn, shot=datevshot, status=badstr)
                 if PRINT_INTERMEDIATE:
                     print(badstr)
                 continue
@@ -238,6 +254,7 @@ for dn in tqdm(dirnames):
                 badstr =f"{dn} Bad output/*.find files. Most ({zero_ct} / {len(findfiles)}) are zero size."
                 bad_dirs_string.append(badstr)
                 bad_dirs.append(dn)
+                write_status(path=dn, shot=datevshot, status=badstr)
                 if PRINT_INTERMEDIATE:
                     print(badstr)
                 continue
@@ -250,11 +267,13 @@ for dn in tqdm(dirnames):
                     if PRINT_INTERMEDIATE:
                         badstr = f"{dn} Will count as okay, but output/*.find files. {zero_ct} / {len(findfiles)} zero size."
                         print(badstr)
+                        write_status(path=dn, shot=datevshot, status=badstr)
                 elif zero_ct % 3 == 0: #a multiple of 3, bad/masked IFU/amps
                     if at_least_one_bad_amp > 0 and at_least_one_bad_amp %3 == 0:
                         badstr = f"{dn} Possible bad output/*.find files. {zero_ct} / {len(findfiles)} zero size. Some masked IFUs/Amps."
                         possible_bad_dirs.append(dn)
                         possible_bad_string.append(badstr)
+                        write_status(path=dn, shot=datevshot, status=badstr)
                         if PRINT_INTERMEDIATE:
                             print(badstr)
                     else:
@@ -262,12 +281,14 @@ for dn in tqdm(dirnames):
                         badstr =f"{dn} Possible bad output/*.find files. {zero_ct} / {len(findfiles)} zero size."
                         possible_bad_dirs.append(dn)
                         possible_bad_string.append(badstr)
+                        write_status(path=dn, shot=datevshot, status=badstr)
                         if PRINT_INTERMEDIATE:
                             print(badstr)
                 else:
                     badstr =f"{dn} Possible bad output/*.find files. {zero_ct} / {len(findfiles)} zero size."
                     possible_bad_dirs.append(dn)
                     possible_bad_string.append(badstr)
+                    write_status(path=dn, shot=datevshot, status=badstr)
                     if PRINT_INTERMEDIATE:
                         print(badstr)
 
@@ -276,6 +297,8 @@ for dn in tqdm(dirnames):
 
         #we made it to the end, assume good
         done_dirs.append(dn)
+        #note: checks below may overwrite this status
+        write_status(path=dn, shot=datevshot, status=f"{dn} good")
 
     except:
         if PRINT_EXCEPTIONS:
@@ -283,6 +306,7 @@ for dn in tqdm(dirnames):
         badstr = f"{dn} Bad output/*.find files."
         bad_dirs_string.append(badstr)
         bad_dirs.append(dn)
+        write_status(path=dn, shot=datevshot, status=badstr)
         if PRINT_INTERMEDIATE:
             print(badstr)
         continue
@@ -294,6 +318,7 @@ for dn in tqdm(dirnames):
             badstr =f"{dn} Missing *.sim file."
             bad_dirs_string.append(badstr)
             bad_dirs.append(dn)
+            write_status(path=dn, shot=datevshot, status=badstr)
             if PRINT_INTERMEDIATE:
                 print(badstr)
 
@@ -302,6 +327,7 @@ for dn in tqdm(dirnames):
             badstr = f"{dn} Too many *.sim files. {len(simfile)}"
             bad_dirs_string.append(badstr)
             bad_dirs.append(dn)
+            write_status(path=dn, shot=datevshot, status=badstr)
             if PRINT_INTERMEDIATE:
                 print(badstr)
             continue
@@ -312,6 +338,7 @@ for dn in tqdm(dirnames):
                 badstr = f"{dn} Zero length *.sim file."
                 bad_dirs_string.append(badstr)
                 bad_dirs.append(dn)
+                write_status(path=dn, shot=datevshot, status=badstr)
                 if PRINT_INTERMEDIATE:
                     print(badstr)
                 continue
@@ -321,6 +348,7 @@ for dn in tqdm(dirnames):
         badstr = f"{dn} Bad *.sim file."
         bad_dirs_string.append(badstr)
         bad_dirs.append(dn)
+        write_status(path=dn, shot=datevshot, status=badstr)
         if PRINT_INTERMEDIATE:
             print(badstr)
         continue
