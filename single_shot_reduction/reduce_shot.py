@@ -249,6 +249,14 @@ def run1s(cfg):
     """
 
     #probably should change to use subprocess
+    if cfg.exp > 0:
+        exps = [cfg.exp]
+    else:
+        exps = np.arange(1,cfg.numexp+1)
+
+    for exp in exps:
+        #run1s 20240730 009 exp01 202407
+        os.system(f"run1s {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} exp{str(exp).zfill(2)} {cfg.datevshot[0:6]}")
 
 
 
@@ -258,6 +266,10 @@ def run1s(cfg):
 # Main (section)
 #   notice: no actual main function
 ########################################################################
+
+###########
+# setup
+###########
 
 cfg.numexp = num_exposures_in_shot(cfg.shotid)
 
@@ -277,7 +289,10 @@ rc = initial_setup(cfg)
 if rc < 0:
     Quit(cfg,rc,"Could not complete initial setup.")
 
-
+###########
+# step1
+###########
+run1s(cfg)
 
 
 
