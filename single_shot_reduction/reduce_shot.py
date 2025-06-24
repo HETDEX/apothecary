@@ -122,7 +122,7 @@ def initial_setup(cfg):
             shutil.rmtree(workdir)
         else:
             print(f"Shot directory already exists here! {workdir}")
-        return -1
+            return -1
 
     os.makedirs(workdir)
     os.chdir(workdir)
@@ -130,6 +130,8 @@ def initial_setup(cfg):
 
     shutil.copy2(os.path.join(ScriptRepo, "science_reductions", "rsetups"),".")
     shutil.copy2(os.path.join(ScriptRepo, "science_reductions", "rfixspec"),".")
+
+    shutil.copytree(os.path.join(ScriptRepo,"science_reductions","vdrp"), "vdrp", dirs_exist_ok=True)
 
 
 
