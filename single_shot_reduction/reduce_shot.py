@@ -44,7 +44,8 @@ LocalScriptRepo = "./local_script_repo" #useful if running multiple single shots
 
 WorkDirRoot = "./"
 
-
+HETRaw = "/corral-repl/utexas/Hobby-Eberly-Telesco/het_raw/"
+karlgettar = "/work/00115/gebhardt/maverick/gettar/"
 
 ########################################################################
 # !!! DO NOT MODIFY BELOW
@@ -59,7 +60,8 @@ class Config:
     overwrite: bool = False
     shotid: int = 0
     datevshot: str = ""
-    exp: int = 0
+    exp: int = 0  #specific exposure number to reduce
+    numexp: int = 0 #number of exposures in the shot
     cwd_orig: str = os.getcwd()
     cwd: str = os.getcwd()
     scriptdir: str = ""
@@ -87,7 +89,12 @@ if "-overwrite" in args:
 
 if "-exp" in args:
     i = args.index("-exp")
-    cfg.exp = int(args[i+1])
+    try:
+        cfg.exp = int(args[i+1])
+    except:
+        print(f"Invalid -exp specified")
+        exit(-1)
+
     del args[i+1]  # args.pop(0) #remove THIS file
     args.remove("-exp")
 
@@ -183,8 +190,56 @@ def initial_setup(cfg):
 
     return 0
 
+def num_exposures_in_shot(shotid):
+    """
 
-def run1s():
+    uses runs<YYYMM> or runt<YYYMM> under Karl's gettar directory
+
+    prior to and including 202407 it is runsYYYYMM
+    202408 to 202412 is runs202488
+    2025xx is 202500
+
+    :param shotid:
+    :return:
+    """
+
+    mth = str(shotid)[0:6]
+    if int(mth) < 202408:
+        fn = os.path.join(karlgettar,f"run?{mth}")
+    elif 202408 <= int(mth) <= 202412:
+        fn = os.path.join(karlgettar, f"run?202488")
+    elif 202500 < int(mth):
+        fn = os.path.join(karlgettar, f"run?{mth[0:4]}00")
+
+
+    #the ? could be s or t
+    try:
+        idx = -1
+        date, shot, exp = np.loadtxt(fn.replace('?','s'),usecols=[1,2,3],unpack=True,dtype=str)
+        dse = sorted(np.unique([d + s + e for d, s, e in zip(date, shot, exp)]))
+        ds = np.array([x[:-5] for x in dse])
+        ct = np.count_nonzero(ds == str(shotid))
+
+    except:
+        pass
+
+    #t
+    if ct <= 0:
+        try:
+            ct = 0
+            date, shot, exp = np.loadtxt(fn.replace('?', 't'), usecols=[1, 2, 3], unpack=True, dtype=str)
+            dse = sorted(np.unique([d + s + e for d, s, e in zip(date, shot, exp)]))
+            ds = np.array([x[:-5] for x in dse])
+            ct = np.count_nonzero(ds==str(shotid))
+
+        except:
+            pass
+
+    #otherwise we did find it ... how may exposures?
+    return ct
+
+
+def run1s(cfg):
     """
 
     science_reduction/sciscripts/run1  batch file
@@ -192,6 +247,9 @@ def run1s():
 
     :return:
     """
+
+    #probably should change to use subprocess
+
 
 
 
@@ -201,10 +259,26 @@ def run1s():
 #   notice: no actual main function
 ########################################################################
 
+cfg.numexp = num_exposures_in_shot(cfg.shotid)
+
+if cfg.numexp <= 0:
+    Quit(cfg, -1, f"Could not find shot {cfg.shotid}")
+
+if cfg.exp <= 0:
+    print(f"Working on {cfg.datevshot} with {cfg.numexp} exposure(s) ...")
+else:
+    if cfg.exp <= cfg.numexp:
+        print(f"Working on {cfg.datevshot} exposure #{cfg.exp} ...")
+    else:
+        Quit(cfg, -1, f"Invalid exposure. Requesting exp #{cfg.exp} but {cfg.datevshot} has only {cfg.numexp}")
+
 rc = initial_setup(cfg)
 
 if rc < 0:
     Quit(cfg,rc,"Could not complete initial setup.")
+
+
+
 
 
 
