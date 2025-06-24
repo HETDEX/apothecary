@@ -47,6 +47,7 @@ WorkDirRoot = "./"
 @dataclass
 class Config:
     clean: bool
+    overwrite: bool
     shotid: int
     datevshot: str
     cwd_orig: str
@@ -59,13 +60,18 @@ class Config:
 
 args = list(sys.argv) #python3 map is no longer a list, so need to cast here
 args.pop(0) #remove THIS file
+args = [x.replace("--","-") for x in args]
 
-cfg = Config(False,0,"",os.getcwd(),os.getcwd())
+cfg = Config(False,False,0,"",os.getcwd(),os.getcwd())
 
 if "-clean" in args:
     cfg.clean = True
     #idx = args.index("-clean")
     args.remove("-clean")
+
+if "-overwrite" in args:
+    cfg.overwrite = True
+    args.remove("-overwrite")
 
 #whatever is left should be the shot
 if len(args) != 1:
@@ -91,6 +97,14 @@ else:
 # worker functions
 ########################################################################
 
+def Quit(cfg,rc,msg=None):
+    if msg is not None:
+        print(f"({rc})",msg)
+    else:
+        print(f"({rc})")
+    exit(rc)
+
+
 def initial_setup(cfg):
     """
     copy from script repo(s)
@@ -103,7 +117,11 @@ def initial_setup(cfg):
     workdir = os.path.join(WorkDirRoot,f"sci{cfg.datevshot}")
 
     if os.path.exists(workdir):
-        print("Shot directory already exists here!")
+        if cfg.overwrite:
+            print(f"Overwriting directory {workdir} ... ")
+            shutil.rmtree(workdir)
+        else:
+            print(f"Shot directory already exists here! {workdir}")
         return -1
 
     os.makedirs(workdir)
@@ -114,7 +132,7 @@ def initial_setup(cfg):
     shutil.copy2(os.path.join(ScriptRepo, "science_reductions", "rfixspec"),".")
 
 
-    print(f"Working under: {os.getcwd()}")
+
     return 0
 
 
@@ -126,9 +144,9 @@ def initial_setup(cfg):
 rc = initial_setup(cfg)
 
 if rc < 0:
-    exit(rc)
+    Quit(cfg,rc,"Could not complete initial setup.")
 
-print(f"Working under: {os.getcwd()}")
+
 
 
 
