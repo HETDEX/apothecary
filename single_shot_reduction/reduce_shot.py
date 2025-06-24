@@ -6,6 +6,8 @@ Perform science reduction (astrometry, flux calibration, line and continuum dete
 
   input: [required] shotid (or datevshot)
          [optional] -clean  (clean up workfiles, leaving only the output and logs)
+         [optional] -overwrite (delete and overwrite the datevshot directory)
+         [optional] -exp <##> (specify a single exposure to reduce, if there is more than one in the shot; 0 = all)
 
 
 
@@ -52,13 +54,16 @@ WorkDirRoot = "./"
 
 @dataclass
 class Config:
-    clean: bool
-    overwrite: bool
-    shotid: int
-    datevshot: str
-    cwd_orig: str
-    cwd: str
-    scriptdir: str
+
+    clean: bool = False
+    overwrite: bool = False
+    shotid: int = 0
+    datevshot: str = ""
+    exp: int = 0
+    cwd_orig: str = os.getcwd()
+    cwd: str = os.getcwd()
+    scriptdir: str = ""
+
 
 
 ########################################################################
@@ -66,10 +71,10 @@ class Config:
 ########################################################################
 
 args = list(sys.argv) #python3 map is no longer a list, so need to cast here
-args.pop(0) #remove THIS file
+del args[0] #args.pop(0) #remove THIS file
 args = [x.replace("--","-") for x in args]
 
-cfg = Config(False,False,0,"",os.getcwd(),os.getcwd(),"")
+cfg = Config()
 
 if "-clean" in args:
     cfg.clean = True
@@ -79,6 +84,13 @@ if "-clean" in args:
 if "-overwrite" in args:
     cfg.overwrite = True
     args.remove("-overwrite")
+
+if "-exp" in args:
+    i = args.index("-exp")
+    cfg.exp = int(args[i+1])
+    del args[i+1]  # args.pop(0) #remove THIS file
+    args.remove("-exp")
+
 
 #whatever is left should be the shot
 if len(args) != 1:
@@ -150,7 +162,7 @@ def initial_setup(cfg):
             cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
     else:
         print("Using main script repo (may be remote) ...")
-        cfg.scriptdir = ScriptRepo
+        cfg.scriptdir = os.path.join(ScriptRepo,"science_reductions")
 
     os.chdir(workdir)
     cfg.cwd = workdir #now under the sci<shot> directory
