@@ -28,9 +28,6 @@ from dataclasses import dataclass
 
 import traceback
 
-
-DEBUG_NO_COPY = False
-
 ########################################################################
 # CONFIGURATION
 ########################################################################
@@ -46,6 +43,7 @@ WorkDirRoot = "./"
 
 HETRaw = "/corral-repl/utexas/Hobby-Eberly-Telesco/het_raw/"
 karlgettar = "/work/00115/gebhardt/maverick/gettar/"
+karlhome = "/home1/00115/gebhardt"
 
 ########################################################################
 # !!! DO NOT MODIFY BELOW
@@ -65,6 +63,7 @@ class Config:
     cwd_orig: str = os.getcwd()
     cwd: str = os.getcwd()
     scriptdir: str = ""
+    gettar_fn: str =  ""  # the runs* or runt* file from karlgettar folder with the date, shot, exp data
 
 
 
@@ -146,11 +145,8 @@ def initial_setup(cfg):
 
     if os.path.exists(workdir):
         if cfg.overwrite:
-            if DEBUG_NO_COPY:
-                print("DEBUG ... skip overwrite directory")
-            else:
-                print(f"Overwriting directory {workdir} ... ")
-                shutil.rmtree(workdir)
+            print(f"Overwriting directory {workdir} ... ")
+            shutil.rmtree(workdir)
         else:
             print(f"Shot directory already exists here! {workdir}")
             return -1
@@ -172,11 +168,8 @@ def initial_setup(cfg):
         cfg.scriptdir = os.path.join(ScriptRepo,"science_reductions")
 
     os.chdir(workdir)
-    cfg.cwd = workdir #now under the sci<shot> directory
+    cfg.cwd = os.getcwd() #now under the sci<shot> directory
 
-    if DEBUG_NO_COPY:
-        print("DEBUG ... skip source code copy")
-        return 0
 
     print("Copying source code ...")
 
@@ -186,7 +179,16 @@ def initial_setup(cfg):
     shutil.copytree(os.path.join(cfg.scriptdir, "sciscripts"), ".", dirs_exist_ok=True)
     shutil.copytree(os.path.join(cfg.scriptdir,"vdrp"), "vdrp", dirs_exist_ok=True)
 
+    #update the "home" path tilde
+    os.system(f"sed -i s#~gebhardt#{karlhome}# rbfits")  # use '#' as sed separator rather than "/"
+    os.system(f"sed -i s#~gebhardt#{karlhome}# rbfits_fix")  # use '#' as sed separator rather than "/"
+    os.system(f"sed -i s#~gebhardt#{karlhome}# rback_field")  # use '#' as sed separator rather than "/"
+    os.system(f"sed -i s#~gebhardt#{karlhome}# rback_fix")  # use '#' as sed separator rather than "/"
+    os.system(f"sed -i s#~gebhardt#{karlhome}# rbacks")  # use '#' as sed separator rather than "/"
+    os.system(f"sed -i s#~gebhardt#{karlhome}# rbfits_s")  # use '#' as sed separator rather than "/"
+    os.system(f"sed -i s#~gebhardt#{karlhome}# rimarb")  # use '#' as sed separator rather than "/"
 
+    #os.system(f"sed -i s/ChangeMe/${mth}/ run1s")
 
     return 0
 
@@ -200,7 +202,7 @@ def num_exposures_in_shot(shotid):
     2025xx is 202500
 
     :param shotid:
-    :return:
+    :return: number of expsoures in the shot and which file was used
     """
 
     mth = str(shotid)[0:6]
@@ -219,6 +221,7 @@ def num_exposures_in_shot(shotid):
         dse = sorted(np.unique([d + s + e for d, s, e in zip(date, shot, exp)]))
         ds = np.array([x[:-5] for x in dse])
         ct = np.count_nonzero(ds == str(shotid))
+        fn = fn.replace('?', 's')
 
     except:
         pass
@@ -231,12 +234,13 @@ def num_exposures_in_shot(shotid):
             dse = sorted(np.unique([d + s + e for d, s, e in zip(date, shot, exp)]))
             ds = np.array([x[:-5] for x in dse])
             ct = np.count_nonzero(ds==str(shotid))
+            fn = fn.replace('?', 't')
 
         except:
             pass
 
     #otherwise we did find it ... how may exposures?
-    return ct
+    return ct, fn
 
 
 def run1s(cfg):
@@ -248,6 +252,8 @@ def run1s(cfg):
     :return:
     """
 
+
+    print("run1s ...")
     #probably should change to use subprocess
     if cfg.exp > 0:
         exps = [cfg.exp]
@@ -256,6 +262,22 @@ def run1s(cfg):
 
     for exp in exps:
         #run1s 20240730 009 exp01 202407
+
+        #sed -i s/\.\.\/runsChangeMe/${mth}/ run1s
+        #sed -i s/ChangeMe/${mth}/ run2s
+        #sed -i s/ChangeMe/${mth}/ rtaremc
+
+
+        os.system(f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# run1s") #use '#' as sed separator rather than "/"
+        os.system(f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# run2s")  # use '#' as sed separator rather than "/"
+        #os.system(f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# rtaremc")  # use '#' as sed separator rather than "/"
+
+        #cmd = "sed -i s#\${scriptdir}"+f"#{cfg.scriptdir}/sciscripts/# run1s"
+        #scripts have already been copied to shot workding dir
+        cmd = "sed -i s#\${scriptdir}" + f"#{cfg.cwd}/# run1s"
+        os.system(cmd)  # use '#' as sed separator rather than "/"
+
+        #actually run it here
         os.system(f"run1s {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} exp{str(exp).zfill(2)} {cfg.datevshot[0:6]}")
 
 
@@ -271,7 +293,7 @@ def run1s(cfg):
 # setup
 ###########
 
-cfg.numexp = num_exposures_in_shot(cfg.shotid)
+cfg.numexp, cfg.gettar_fn = num_exposures_in_shot(cfg.shotid)
 
 if cfg.numexp <= 0:
     Quit(cfg, -1, f"Could not find shot {cfg.shotid}")
