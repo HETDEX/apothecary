@@ -212,6 +212,9 @@ def num_exposures_in_shot(shotid):
         fn = os.path.join(karlgettar, f"run?202488")
     elif 202500 < int(mth):
         fn = os.path.join(karlgettar, f"run?{mth[0:4]}00")
+    else:
+        print(f"Invalid shotid? {shotid}")
+        return -1, None
 
 
     #the ? could be s or t
