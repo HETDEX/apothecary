@@ -45,6 +45,13 @@ HETRaw = "/corral-repl/utexas/Hobby-Eberly-Telesco/het_raw/"
 karlgettar = "/work/00115/gebhardt/maverick/gettar/"
 karlhome = "/home1/00115/gebhardt"
 
+
+#execute steps
+s01_run1s = True
+
+s02_vdrp = True
+
+
 ########################################################################
 # !!! DO NOT MODIFY BELOW
 #     unless you REALLY known
@@ -141,21 +148,21 @@ def Quit(cfg,rc,msg=None):
     else:
         print(f"({rc})")
 
-    if cfg.orig_stdout:
+   # if cfg.orig_stdout:
+   #     sys.stdout = cfg.orig_stdout
 
-        sys.stdout = cfg.orig_stdout
-
-    if cfg.orig_stderr:
-        sys.stderr = cfg.orig_stderr
+    #if cfg.orig_stderr:
+    #    sys.stderr = cfg.orig_stderr
 
     if cfg.file_stdout:
+        cfg.file_stdout.flush()
         cfg.file_stdout.close()
 
         #repeat the final message to the console
-        if msg is not None:
-            print(f"({rc})", msg)
-        else:
-            print(f"({rc})")
+       # if msg is not None:
+        #    print(f"({rc})", msg)
+        #else:
+        #    print(f"({rc})")
 
     exit(rc)
 
@@ -383,22 +390,28 @@ if rc < 0:
 
 print(f"Starting reduction {cfg.datevshot} ... ")
 
-cfg.orig_stdout = sys.stdout
-cfg.orig_stderr = sys.stderr
+#cfg.orig_stdout = sys.stdout
+#cfg.orig_stderr = sys.stderr
 cfg.file_stdout = open(f"{cfg.datevshot}.log","w")
-print(f"Logging now redirected to: {cfg.file_stdout.name}")
-sys.stderr = cfg.file_stdout
-sys.stdout = cfg.file_stdout
+print(f"Logging redirected to: {cfg.cwd}/{cfg.file_stdout.name}")
+#sys.stderr = cfg.file_stdout
+#sys.stdout = cfg.file_stdout
 
 
 ###########
 # step1
 ###########
-run1s(cfg)
+if s01_run1s:
+    run1s(cfg)
+else:
+    print("Skipping run1s")
 
+###########
+# step2
+# VDRP
+###########
 
-
-
+#change dir
 
 
 ##########
