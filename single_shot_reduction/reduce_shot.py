@@ -160,6 +160,21 @@ def Quit(cfg,rc,msg=None):
     exit(rc)
 
 
+def system_command(cfg,cmd):
+    """
+
+    wrapper to execute a system command
+
+    :param cfg:
+    :param cmd:
+    :return:
+    """
+
+    if cfg.file_stdout:
+        os.system(f"{cmd} &>> {cfg.file_stdout.name}")
+    else:
+        os.system(f"{cmd}")
+
 def initial_setup(cfg):
     """
     copy from script repo(s)
@@ -210,13 +225,21 @@ def initial_setup(cfg):
     shutil.copytree(os.path.join(cfg.scriptdir,"vdrp"), "vdrp", dirs_exist_ok=True)
 
     #update the "home" path tilde
-    os.system(f"sed -i s#~gebhardt#{karlhome}# rbfits")  # use '#' as sed separator rather than "/"
-    os.system(f"sed -i s#~gebhardt#{karlhome}# rbfits_fix")  # use '#' as sed separator rather than "/"
-    os.system(f"sed -i s#~gebhardt#{karlhome}# rback_field")  # use '#' as sed separator rather than "/"
-    os.system(f"sed -i s#~gebhardt#{karlhome}# rback_fix")  # use '#' as sed separator rather than "/"
-    os.system(f"sed -i s#~gebhardt#{karlhome}# rbacks")  # use '#' as sed separator rather than "/"
-    os.system(f"sed -i s#~gebhardt#{karlhome}# rbfits_s")  # use '#' as sed separator rather than "/"
-    os.system(f"sed -i s#~gebhardt#{karlhome}# rimarb")  # use '#' as sed separator rather than "/"
+    # os.system(f"sed -i s#~gebhardt#{karlhome}# rbfits")  # use '#' as sed separator rather than "/"
+    # os.system(f"sed -i s#~gebhardt#{karlhome}# rbfits_fix")  # use '#' as sed separator rather than "/"
+    # os.system(f"sed -i s#~gebhardt#{karlhome}# rback_field")  # use '#' as sed separator rather than "/"
+    # os.system(f"sed -i s#~gebhardt#{karlhome}# rback_fix")  # use '#' as sed separator rather than "/"
+    # os.system(f"sed -i s#~gebhardt#{karlhome}# rbacks")  # use '#' as sed separator rather than "/"
+    # os.system(f"sed -i s#~gebhardt#{karlhome}# rbfits_s")  # use '#' as sed separator rather than "/"
+    # os.system(f"sed -i s#~gebhardt#{karlhome}# rimarb")  # use '#' as sed separator rather than "/"
+
+    system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits")
+    system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits_fix")  # use '#' as sed separator rather than "/"
+    system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rback_field")  # use '#' as sed separator rather than "/"
+    system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rback_fix")  # use '#' as sed separator rather than "/"
+    system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbacks")  # use '#' as sed separator rather than "/"
+    system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits_s")  # use '#' as sed separator rather than "/"
+    system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rimarb")  # use '#' as sed separator rather than "/"
 
     #os.system(f"sed -i s/ChangeMe/${mth}/ run1s")
 
@@ -294,26 +317,34 @@ def run1s(cfg):
         exps = np.arange(1,cfg.numexp+1)
 
     for exp in exps:
-        #run1s 20240730 009 exp01 202407
+        #example run1s 20240730 009 exp01 202407
 
-        #sed -i s/\.\.\/runsChangeMe/${mth}/ run1s
-        #sed -i s/ChangeMe/${mth}/ run2s
-        #sed -i s/ChangeMe/${mth}/ rtaremc
+        # os.system(f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# run1s") #use '#' as sed separator rather than "/"
+        # os.system(f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# run2s")  # use '#' as sed separator rather than "/"
+        # #os.system(f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# rtaremc")  # use '#' as sed separator rather than "/"
+        #
+        # #cmd = "sed -i s#\${scriptdir}"+f"#{cfg.scriptdir}/sciscripts/# run1s"
+        # #scripts have already been copied to shot workding dir
+        # cmd = "sed -i s#\${scriptdir}" + f"#{cfg.cwd}/# run1s"
+        # os.system(cmd)  # use '#' as sed separator rather than "/"
+        #
+        # #actually run it here
+        # os.system(f"run1s {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} exp{str(exp).zfill(2)} {cfg.datevshot[0:6]}")
+        #
 
 
-        os.system(f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# run1s") #use '#' as sed separator rather than "/"
-        os.system(f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# run2s")  # use '#' as sed separator rather than "/"
+
+        system_command(cfg,f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# run1s") #use '#' as sed separator rather than "/"
+        system_command(cfg,f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# run2s")  # use '#' as sed separator rather than "/"
         #os.system(f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# rtaremc")  # use '#' as sed separator rather than "/"
 
         #cmd = "sed -i s#\${scriptdir}"+f"#{cfg.scriptdir}/sciscripts/# run1s"
         #scripts have already been copied to shot workding dir
         cmd = "sed -i s#\${scriptdir}" + f"#{cfg.cwd}/# run1s"
-        os.system(cmd)  # use '#' as sed separator rather than "/"
+        system_command(cfg,cmd)  # use '#' as sed separator rather than "/"
 
         #actually run it here
-        os.system(f"run1s {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} exp{str(exp).zfill(2)} {cfg.datevshot[0:6]}")
-
-
+        system_command(cfg,f"run1s {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} exp{str(exp).zfill(2)} {cfg.datevshot[0:6]}")
 
 
 
@@ -350,20 +381,20 @@ if rc < 0:
 # after the initial setup, move stdout and stderr to a log file
 #########
 
+print(f"Starting reduction {cfg.datevshot} ... ")
+
 cfg.orig_stdout = sys.stdout
 cfg.orig_stderr = sys.stderr
 cfg.file_stdout = open(f"{cfg.datevshot}.log","w")
+print(f"Logging now redirected to: {cfg.file_stdout.name}")
 sys.stderr = cfg.file_stdout
 sys.stdout = cfg.file_stdout
 
 
-
-print("this is just a log test ....")
-
 ###########
 # step1
 ###########
-#run1s(cfg)
+run1s(cfg)
 
 
 
