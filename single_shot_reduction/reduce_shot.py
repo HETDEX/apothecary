@@ -232,14 +232,6 @@ def initial_setup(cfg):
     shutil.copytree(os.path.join(cfg.scriptdir,"vdrp"), "vdrp", dirs_exist_ok=True)
 
     #update the "home" path tilde
-    # os.system(f"sed -i s#~gebhardt#{karlhome}# rbfits")  # use '#' as sed separator rather than "/"
-    # os.system(f"sed -i s#~gebhardt#{karlhome}# rbfits_fix")  # use '#' as sed separator rather than "/"
-    # os.system(f"sed -i s#~gebhardt#{karlhome}# rback_field")  # use '#' as sed separator rather than "/"
-    # os.system(f"sed -i s#~gebhardt#{karlhome}# rback_fix")  # use '#' as sed separator rather than "/"
-    # os.system(f"sed -i s#~gebhardt#{karlhome}# rbacks")  # use '#' as sed separator rather than "/"
-    # os.system(f"sed -i s#~gebhardt#{karlhome}# rbfits_s")  # use '#' as sed separator rather than "/"
-    # os.system(f"sed -i s#~gebhardt#{karlhome}# rimarb")  # use '#' as sed separator rather than "/"
-
     system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits")
     system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits_fix")  # use '#' as sed separator rather than "/"
     system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rback_field")  # use '#' as sed separator rather than "/"
@@ -248,7 +240,14 @@ def initial_setup(cfg):
     system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits_s")  # use '#' as sed separator rather than "/"
     system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rimarb")  # use '#' as sed separator rather than "/"
 
-    #os.system(f"sed -i s/ChangeMe/${mth}/ run1s")
+
+    #update the old red1 path
+    system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# rback_field")  # use '#' as sed separator rather than "/"
+    system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# rback_fix")
+    system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# rerun2")
+    system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# rtaremc") #not necessary, just for completeness
+    system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# runtar")
+    system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# runtarm.defunct") #not necessary, just for completeness
 
     return 0
 
@@ -326,24 +325,10 @@ def run1s(cfg):
     for exp in exps:
         #example run1s 20240730 009 exp01 202407
 
-        # os.system(f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# run1s") #use '#' as sed separator rather than "/"
-        # os.system(f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# run2s")  # use '#' as sed separator rather than "/"
-        # #os.system(f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# rtaremc")  # use '#' as sed separator rather than "/"
-        #
-        # #cmd = "sed -i s#\${scriptdir}"+f"#{cfg.scriptdir}/sciscripts/# run1s"
-        # #scripts have already been copied to shot workding dir
-        # cmd = "sed -i s#\${scriptdir}" + f"#{cfg.cwd}/# run1s"
-        # os.system(cmd)  # use '#' as sed separator rather than "/"
-        #
-        # #actually run it here
-        # os.system(f"run1s {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} exp{str(exp).zfill(2)} {cfg.datevshot[0:6]}")
-        #
-
-
 
         system_command(cfg,f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# run1s") #use '#' as sed separator rather than "/"
         system_command(cfg,f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# run2s")  # use '#' as sed separator rather than "/"
-        #os.system(f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# rtaremc")  # use '#' as sed separator rather than "/"
+        #system_command(cfg,f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# rtaremc")  # use '#' as sed separator rather than "/"
 
         #cmd = "sed -i s#\${scriptdir}"+f"#{cfg.scriptdir}/sciscripts/# run1s"
         #scripts have already been copied to shot workding dir
@@ -403,6 +388,14 @@ print(f"Logging redirected to: {cfg.cwd}/{cfg.file_stdout.name}")
 ###########
 if s01_run1s:
     run1s(cfg)
+
+    #todo: enumerate any checks
+    #todo: this would be manual here, I think, but CAN copy /red1/xxx to /scratch/local/projects
+    #  all the various CoFe*.fits and multi*.fits ... these are also in the
+    #  local d<shot><exp> folder in the two tar files (_co.tar and _mu.tar for the CoFe*.fits and multi*.fits respectively)
+
+
+
 else:
     print("Skipping run1s")
 
