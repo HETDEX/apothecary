@@ -65,6 +65,11 @@ class Config:
     scriptdir: str = ""
     gettar_fn: str =  ""  # the runs* or runt* file from karlgettar folder with the date, shot, exp data
 
+    orig_stdout = None
+    orig_stderr = None
+    file_stdout = None
+
+
 
 
 ########################################################################
@@ -123,10 +128,35 @@ else:
 ########################################################################
 
 def Quit(cfg,rc,msg=None):
+    """
+
+    :param cfg:
+    :param rc:
+    :param msg:
+    :return:
+    """
+
     if msg is not None:
         print(f"({rc})",msg)
     else:
         print(f"({rc})")
+
+    if cfg.orig_stdout:
+
+        sys.stdout = cfg.orig_stdout
+
+    if cfg.orig_stderr:
+        sys.stderr = cfg.orig_stderr
+
+    if cfg.file_stdout:
+        cfg.file_stdout.close()
+
+        #repeat the final message to the console
+        if msg is not None:
+            print(f"({rc})", msg)
+        else:
+            print(f"({rc})")
+
     exit(rc)
 
 
@@ -296,10 +326,11 @@ def run1s(cfg):
 # setup
 ###########
 
+
 cfg.numexp, cfg.gettar_fn = num_exposures_in_shot(cfg.shotid)
 
 if cfg.numexp <= 0:
-    Quit(cfg, -1, f"Could not find shot {cfg.shotid}")
+    Quit(cfg, -1, f"Could not find shot {cfg.datevshot}")
 
 if cfg.exp <= 0:
     print(f"Working on {cfg.datevshot} with {cfg.numexp} exposure(s) ...")
@@ -314,13 +345,33 @@ rc = initial_setup(cfg)
 if rc < 0:
     Quit(cfg,rc,"Could not complete initial setup.")
 
+
+#########
+# after the initial setup, move stdout and stderr to a log file
+#########
+
+cfg.orig_stdout = sys.stdout
+cfg.orig_stderr = sys.stderr
+cfg.file_stdout = open(f"{cfg.datevshot}.log","w")
+sys.stderr = cfg.file_stdout
+sys.stdout = cfg.file_stdout
+
+
+
+print("this is just a log test ....")
+
 ###########
 # step1
 ###########
-run1s(cfg)
+#run1s(cfg)
 
 
 
 
 
 
+##########
+# DONE
+##########
+
+Quit(cfg, 0, f"Complete: {cfg.datevshot}")
