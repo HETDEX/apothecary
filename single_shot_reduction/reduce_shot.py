@@ -32,6 +32,7 @@ import traceback
 ########################################################################
 # CONFIGURATION
 ########################################################################
+EchoCmds = True #if True echo system commands to the log
 FutureShotDateLimit = 20490101000  # do not allow shots after this dave+shot
 
 ScriptRepo = "/work/03261/polonius/hetdex/single_shot"
@@ -49,7 +50,7 @@ karlhome = "/home1/00115/gebhardt"
 
 
 #execute steps
-s01_run1s = False
+s01_run1s = True
 s02_vdrp = True
 
 
@@ -184,7 +185,9 @@ def system_command(cfg,cmd):
     """
 
     #echo the command
-    print("CMD: ", cmd)
+    if EchoCmds:
+        print("CMD: ", cmd)
+
     if cfg.file_stdout:
         os.system(f"{cmd} &>> {cfg.file_stdout.name}")
     else:
@@ -272,12 +275,27 @@ def initial_setup(cfg):
         shutil.copy2(os.path.join(karlfplane, f"fp{cfg.datevshot[0:8]}"), os.path.join(cfg.cwd,"vdrp/fplane"))
 
         #fix paths in the . cfg files
-        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# vdrp/vdrp.config") #not necessary, just for completeness
-        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# vdrp/vdrp.config.original") #not necessary, just for completeness
-        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# vdrp/vdrp.config.gaia") #not necessary, just for completeness
-        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# vdrp/vdrp.config.panstarrs") #not necessary, just for completeness
-        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# vdrp/vdrp.config.sdss") #not necessary, just for completeness
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# vdrp/vdrp.config")
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# vdrp/vdrp.config.original")
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# vdrp/vdrp.config.gaia")
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# vdrp/vdrp.config.sdss")
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# vdrp/vdrp.config.panstarrs")
 
+        system_command(cfg, f"sed -i s#/work/03261/polonius/hetdex/science/sciscripts#{cfg.cwd}# vdrp/vdrp.config")
+        system_command(cfg, f"sed -i s#/work/03261/polonius/hetdex/science/sciscripts#{cfg.cwd}# vdrp/vdrp.config.original")
+        system_command(cfg, f"sed -i s#/work/03261/polonius/hetdex/science/sciscripts#{cfg.cwd}# vdrp/vdrp.config.gaia")
+        system_command(cfg, f"sed -i s#/work/03261/polonius/hetdex/science/sciscripts#{cfg.cwd}# vdrp/vdrp.config.sdss")
+        system_command(cfg, f"sed -i s#/work/03261/polonius/hetdex/science/sciscripts#{cfg.cwd}# vdrp/vdrp.config.panstarrs")
+
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/science_reductions#{cfg.cwd}# vdrp/vdrp.config")
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/science_reductions#{cfg.cwd}# vdrp/vdrp.config.original")
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/science_reductions#{cfg.cwd}# vdrp/vdrp.config.gaia")
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/science_reductions#{cfg.cwd}# vdrp/vdrp.config.sdss")
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/science_reductions#{cfg.cwd}# vdrp/vdrp.config.panstarrs")
+
+        system_command(cfg, f"sed -i s#/scratch/00115/gebhardt#{cfg.cwd}# vdrp/shifts/runsh1")
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/science_reductions#{cfg.cwd}# vdrp/shifts/runsh2")
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/single_shot/science_reductions#{cfg.cwd}# vdrp/shifts/run_shifts.sh")
 
         #vdrp: need the runshifts for the shot (from karlgettar)
         #e.g. run_shifts.sh 20240730 009 16.317927 33.689304 1
@@ -289,6 +307,8 @@ def initial_setup(cfg):
             for d,s,ra,dec,v in zip(rta_date[sel], rta_shot[sel], rta_ra[sel], rta_dec[sel], rta_v[sel]):
                 f.write(f"run_shifts.sh {d} {s} {ra} {dec} {v} \n")
 
+
+        return 0
 
     return 0
 
@@ -380,6 +400,10 @@ def run_run1s(cfg):
         system_command(cfg,f"run1s {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} exp{str(exp).zfill(2)} {cfg.datevshot[0:6]}")
 
 
+    #need this later for vdrp pathing
+    system_command(cfg,"ln -s ../reductions reductions")
+
+
 def check_run1s(cfg):
     """
     todo: any automated checks that can be performed
@@ -405,6 +429,7 @@ def vdrp_check_norms(cfg):
     :return:
     """
 
+    print("check norms ... ")
     #only run IF there are dithers (multiple exposures ... assume dither)
     if cfg.exp == 0 and cfg.numexp > 1:
         rc = 0
@@ -422,8 +447,10 @@ def vdrp_check_norms(cfg):
                 print("Possible bad dither norm:", os.path.basename(fn), norms)
                 rc = -1
 
+        print("check norms ... fail")
         return rc
     else:
+        print("check norms ... OK")
         return 0
 
 def vdrp_check_shout_ifu(cfg):
@@ -440,6 +467,7 @@ def vdrp_check_shout_ifu(cfg):
     path = "./"  # /scratch/03261/polonius/science_reductions/vdrp/shifts/"
     rc = 0
 
+    print("check shout ifu ... ")
     try:
         wildcard = cfg.datevshot[0:6]
     except:
@@ -469,6 +497,10 @@ def vdrp_check_shout_ifu(cfg):
         except Exception as E:
             print(f"{basedir} : unknown or missing shout.ifu")
 
+    if rc != 0:
+        print("check shout ifu ... fail ")
+    else:
+        print("check shout ifu ... OK")
     return rc
 
 def vdrp_cp2dithall(cfg,catalog=None):
@@ -478,8 +510,10 @@ def vdrp_cp2dithall(cfg,catalog=None):
     :return:
     """
 
+    print("cp2dithall ... ")
     rc = 0
-    dirs = glob.glob(f"./{cfg.datevshot[0:6]}??v*")
+    dirs = glob.glob(f"./{cfg.datevshot[0:6]}??v???")
+    #note: do not want the log file YYYYMMDDvSSS.log
     if catalog is None:
         dithall_dir = "dithall"
     else:
@@ -487,9 +521,16 @@ def vdrp_cp2dithall(cfg,catalog=None):
 
     for d in dirs:
         try:
-            with open(os.path.join(d, "dithall.use"), "r") as f1:
+            dithall_use = os.path.join(d, "dithall.use")
+            if not os.path.exists(dithall_use):
+                rc = -1
+                print(f"cp2dithall ... fail. File does not exist {dithall_use}")
+                continue
+
+            with open(dithall_use, "r") as f1:
                 # skip 1st line
                 _ = f1.readline()
+                os.makedirs(dithall_dir,exist_ok=True)
                 outfn = os.path.basename(d)
                 outfn = os.path.join("./", f"{dithall_dir}/{outfn}.dithall")
                 with open(outfn, "w+") as f2:
@@ -499,6 +540,10 @@ def vdrp_cp2dithall(cfg,catalog=None):
             print(E)
             rc = -1
 
+    if rc != 0:
+        print("cp2dithall ... fail")
+    else:
+        print("cp2dithall ... OK")
     return rc
 
 def run_vdrp(cfg):
@@ -513,30 +558,32 @@ def run_vdrp(cfg):
     # since we do not know if we will need all of GAIA, SDSS and PanSTARRS at this point,
     #    run all three of them
 
+
     os.chdir(os.path.join(cfg.cwd,"vdrp/shifts"))
 
 
     #GAIA first
     #command is based on rta.YYYYMM
     #run_shifts 20240730 009 16.317927 33.689304 1  20240730 GAIA
+
     print("VDRP: GAIA")
-    with open(f"rta.{cfg.datevshot[0:6]}","r") as rta:
-        for line in rta: #really should only be one line
-            if len(line) > 10:
-                #we DON'T want the carriage return
-                line = line.rstrip('\n')
-                system_command(cfg,f"{line} {cfg.datevshot[0:8]} GAIA")
+    try:
+        with open(f"rta.{cfg.datevshot[0:6]}","r") as rta:
+            for line in rta: #really should only be one line
+                if len(line) > 10:
+                    #we DON'T want the carriage return
+                    line = line.rstrip('\n')
+                    system_command(cfg,f"{line} {cfg.datevshot[0:8]} GAIA")
 
 
-    print("Early exit for testing ...")
-    return 0
-
-    vdrp_check_norms(cfg)
-    vdrp_check_shout_ifu(cfg)
-    vdrp_cp2dithall(cfg,"gaia")
-    #move the output under gaia
-    os.makedirs("gaia",exist_ok=True)
-    system_command(cfg,f"mv {cfg.datevshot[0:6]}??v??? gaia")
+        vdrp_check_norms(cfg)
+        vdrp_check_shout_ifu(cfg)
+        vdrp_cp2dithall(cfg,"gaia")
+        #move the output under gaia
+        os.makedirs("gaia",exist_ok=True)
+        system_command(cfg,f"mv {cfg.datevshot[0:6]}??v??? gaia")
+    except Exception as e:
+        print(f"VDRP: GAIA fail.",e,  "\n", traceback.format_exc())
 
 
     #!!! notice: we are doing limited checking here ... that will be done later
@@ -549,37 +596,41 @@ def run_vdrp(cfg):
 
     #SDSS
     print("VDRP: SDSS")
-    with open(f"rta.{cfg.datevshot[0:6]}","r") as rta:
-        for line in rta: #really should only be one line
-            if len(line) > 10:
-                #we DON'T want the carriage return
-                line = line.rstrip('\n')
-                system_command(cfg,f"{line} {cfg.datevshot[0:8]} SDSS")
+    try:
+        with open(f"rta.{cfg.datevshot[0:6]}","r") as rta:
+            for line in rta: #really should only be one line
+                if len(line) > 10:
+                    #we DON'T want the carriage return
+                    line = line.rstrip('\n')
+                    system_command(cfg,f"{line} {cfg.datevshot[0:8]} SDSS")
 
-    vdrp_check_norms(cfg)
-    vdrp_check_shout_ifu(cfg)
-    vdrp_cp2dithall(cfg,"sdss")
-    #move the output under sdss
-    os.makedirs("sdss",exist_ok=True)
-    system_command(cfg,f"mv {cfg.datevshot[0:6]}??v??? sdss")
-
+        vdrp_check_norms(cfg)
+        vdrp_check_shout_ifu(cfg)
+        vdrp_cp2dithall(cfg,"sdss")
+        #move the output under sdss
+        os.makedirs("sdss",exist_ok=True)
+        system_command(cfg,f"mv {cfg.datevshot[0:6]}??v??? sdss")
+    except Exception as e:
+        print(f"VDRP: SDSS fail.", e, "\n", traceback.format_exc())
 
     #PanSTARRS
     print("VDRP: PANSTARRS")
-    with open(f"rta.{cfg.datevshot[0:6]}","r") as rta:
-        for line in rta: #really should only be one line
-            if len(line) > 10:
-                #we DON'T want the carriage return
-                line = line.rstrip('\n')
-                system_command(cfg,f"{line} {cfg.datevshot[0:8]} PANSTARRS")
+    try:
+        with open(f"rta.{cfg.datevshot[0:6]}","r") as rta:
+            for line in rta: #really should only be one line
+                if len(line) > 10:
+                    #we DON'T want the carriage return
+                    line = line.rstrip('\n')
+                    system_command(cfg,f"{line} {cfg.datevshot[0:8]} PANSTARRS")
 
-    vdrp_check_norms(cfg)
-    vdrp_check_shout_ifu(cfg)
-    vdrp_cp2dithall(cfg,"panstarrs")
-    #move the output under panstarrs
-    os.makedirs("panstarrs",exist_ok=True)
-    system_command(cfg,f"mv {cfg.datevshot[0:6]}??v??? panstarrs")
-
+        vdrp_check_norms(cfg)
+        vdrp_check_shout_ifu(cfg)
+        vdrp_cp2dithall(cfg,"panstarrs")
+        #move the output under panstarrs
+        os.makedirs("panstarrs",exist_ok=True)
+        system_command(cfg,f"mv {cfg.datevshot[0:6]}??v??? panstarrs")
+    except Exception as e:
+        print(f"VDRP: PANSTARRS fail.", e, "\n", traceback.format_exc())
 
     #todo: which is the main dithall, etc????
     print("todo: copy GAIA, SDSS or PanSTARRS to main ....")
