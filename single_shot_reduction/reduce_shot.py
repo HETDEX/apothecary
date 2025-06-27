@@ -50,8 +50,9 @@ karlhome = "/home1/00115/gebhardt"
 
 
 #execute steps
-s01_run1s = True
-s02_vdrp = True
+s01_run1s = False
+s02_vdrp = False
+s03_fluxcal = True
 
 
 ########################################################################
@@ -633,7 +634,7 @@ def run_vdrp(cfg):
         print(f"VDRP: PANSTARRS fail.", e, "\n", traceback.format_exc())
 
     #todo: which is the main dithall, etc????
-    print("todo: copy GAIA, SDSS or PanSTARRS to main ....")
+    print("!!! todo: copy GAIA dithaall to /scatch/projects and /corral-repl ???")
 
     os.chdir(cfg.cwd)
 
@@ -645,6 +646,27 @@ def check_vdrp(cfg):
     :return:
     """
     print("todo: check vdrp ... ")
+    return 0
+
+
+
+def run_fluxcalibration(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+    print("todo: DO flux calibration ... ")
+    return 0
+
+
+def check_fluxcalibration(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+    print("todo: check flux calibration ... ")
     return 0
 
 ########################################################################
@@ -720,8 +742,27 @@ if s02_vdrp:
     run_vdrp(cfg)
 
     check_vdrp(cfg)
+
+    #todo: optional manual step here (need to be hetdex user), copy the *.dithall to
+    #  /scratch/projects/hetdex/detect/dithall   (and /coral-repl/...)
+
 else:
     print("Skipping vdrp")
+
+
+
+###########
+# step3
+# detect (Flux Calibration)
+# rallcal stuff
+###########
+
+if s03_fluxcal:
+    run_fluxcalibration(cfg)
+
+    check_fluxcalibration(cfg)
+else:
+    print("Skipping flux calibration")
 
 
 ##########
@@ -729,3 +770,18 @@ else:
 ##########
 
 Quit(cfg, 0, f"Complete: {cfg.datevshot}")
+
+##############################
+# Manual Step Reminders
+##############################
+
+print(f"\nOPTIONAL manual INSPECTION steps. You may want to: \n"
+      f"* check the log files (under each subdir) for issues.\n"
+      f"* examine the focal plane images (d<date>s<shot>exp<??>/*.png)\n"
+      f"* examine the dither images (if dithered)\n")
+
+print(f"\nOPTIONAL manual COPY steps. You may want to: \n"
+      f"* copy {cfg.cwd_orig}/reductions/{cfg.datevshot[0:6]}/...  to another reductions directory\n"
+      f"* copy {cfg.cwd}/vdrp/shifts/dithall.gaia/*.dithall to /scratch/projects/hetdex/detect/dithall/  and /corral-repl \n"
+      f"        note: you would need to be the hetdex user\n"
+      f"")
