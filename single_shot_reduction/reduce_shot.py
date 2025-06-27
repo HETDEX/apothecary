@@ -23,6 +23,7 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 import numpy as np
 import sys
 import os
+import glob
 import shutil
 from dataclasses import dataclass
 
@@ -43,12 +44,12 @@ WorkDirRoot = "./"
 
 HETRaw = "/corral-repl/utexas/Hobby-Eberly-Telesco/het_raw/"
 karlgettar = "/work/00115/gebhardt/maverick/gettar/"
+karlfplane = "/work/00115/gebhardt/maverick/fplane/"
 karlhome = "/home1/00115/gebhardt"
 
 
 #execute steps
-s01_run1s = True
-
+s01_run1s = False
 s02_vdrp = True
 
 
@@ -63,6 +64,7 @@ class Config:
 
     clean: bool = False
     overwrite: bool = False
+    resume: bool = False
     shotid: int = 0
     datevshot: str = ""
     exp: int = 0  #specific exposure number to reduce
@@ -97,6 +99,10 @@ if "-clean" in args:
 if "-overwrite" in args:
     cfg.overwrite = True
     args.remove("-overwrite")
+
+if "-resume" in args: #opposide of --overwite ... do NOT touch the (intermediate) output of the working directory
+    cfg.resume = True
+    args.remove("-resume")
 
 if "-exp" in args:
     i = args.index("-exp")
@@ -195,59 +201,84 @@ def initial_setup(cfg):
 
     workdir = os.path.join(WorkDirRoot,f"sci{cfg.datevshot}")
 
+    resume = False #notice: cfg.resume MAY be true and this can still be false if the directory does not already exist
     if os.path.exists(workdir):
-        if cfg.overwrite:
+        if cfg.resume:
+            print(f"Resuming. Leave directory intact: {workdir}")
+            resume = True
+        elif cfg.overwrite:
             print(f"Overwriting directory {workdir} ... ")
             shutil.rmtree(workdir)
         else:
             print(f"Shot directory already exists here! {workdir}")
             return -1
 
-    os.makedirs(workdir)
+    if not resume:
+        os.makedirs(workdir)
 
-    if LocalScriptRepo is not None:
-        if os.path.exists(LocalScriptRepo): #we want to use it
-            print("Using existing local repo ...")
-            cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+        if LocalScriptRepo is not None:
+            if os.path.exists(LocalScriptRepo): #we want to use it
+                print("Using existing local repo ...")
+                cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+            else:
+                #copy first to local script repo
+                print("Copying to local repo ...")
+                shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
+                                os.path.join(os.getcwd(),LocalScriptRepo), dirs_exist_ok=True)
+                cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
         else:
-            #copy first to local script repo
-            print("Copying to local repo ...")
-            shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
-                            os.path.join(os.getcwd(),LocalScriptRepo), dirs_exist_ok=True)
-            cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
-    else:
-        print("Using main script repo (may be remote) ...")
-        cfg.scriptdir = os.path.join(ScriptRepo,"science_reductions")
+            print("Using main script repo (may be remote) ...")
+            cfg.scriptdir = os.path.join(ScriptRepo,"science_reductions")
 
     os.chdir(workdir)
     cfg.cwd = os.getcwd() #now under the sci<shot> directory
 
+    if not resume:
+        print("Copying source code ...")
+        ## if ANY of this fails it is fatal
 
-    print("Copying source code ...")
+        #shutil.copy2(os.path.join(cfg.scriptdir, "science_reductions", "rsetups"),".") #no, this function is its equivalent
 
-    #shutil.copy2(os.path.join(cfg.scriptdir, "science_reductions", "rsetups"),".") #no, this function is its equivalent
+        shutil.copy2(os.path.join(cfg.scriptdir, "rfixspec"), ".")
+        shutil.copytree(os.path.join(cfg.scriptdir, "sciscripts"), ".", dirs_exist_ok=True)
+        shutil.copytree(os.path.join(cfg.scriptdir,"vdrp"), "vdrp", dirs_exist_ok=True)
 
-    shutil.copy2(os.path.join(cfg.scriptdir, "rfixspec"), ".")
-    shutil.copytree(os.path.join(cfg.scriptdir, "sciscripts"), ".", dirs_exist_ok=True)
-    shutil.copytree(os.path.join(cfg.scriptdir,"vdrp"), "vdrp", dirs_exist_ok=True)
-
-    #update the "home" path tilde
-    system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits")
-    system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits_fix")  # use '#' as sed separator rather than "/"
-    system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rback_field")  # use '#' as sed separator rather than "/"
-    system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rback_fix")  # use '#' as sed separator rather than "/"
-    system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbacks")  # use '#' as sed separator rather than "/"
-    system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits_s")  # use '#' as sed separator rather than "/"
-    system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rimarb")  # use '#' as sed separator rather than "/"
+        #update the "home" path tilde
+        system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits")
+        system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits_fix")  # use '#' as sed separator rather than "/"
+        system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rback_field")  # use '#' as sed separator rather than "/"
+        system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rback_fix")  # use '#' as sed separator rather than "/"
+        system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbacks")  # use '#' as sed separator rather than "/"
+        system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits_s")  # use '#' as sed separator rather than "/"
+        system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rimarb")  # use '#' as sed separator rather than "/"
 
 
-    #update the old red1 path
-    system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# rback_field")  # use '#' as sed separator rather than "/"
-    system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# rback_fix")
-    system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# rerun2")
-    system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# rtaremc") #not necessary, just for completeness
-    system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# runtar")
-    system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# runtarm.defunct") #not necessary, just for completeness
+        #update the old red1 path
+        #yes, I want cwd_orig ... I want a single "reductions" direcetory off the top with all the sciXXX as siblings
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# rback_field")  # use '#' as sed separator rather than "/"
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# rback_fix")
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# rerun2")
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# rtaremc") #not necessary, just for completeness
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# runtar")
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# runtarm.defunct") #not necessary, just for completeness
+
+
+        #extra files needed
+
+        #vdrp : /work/00115/gebhardt/maverick/fplane ... need the fplane for the date
+        os.makedirs(os.path.join(cfg.cwd,"vdrp/fplane"), exist_ok=True)
+        shutil.copy2(os.path.join(karlfplane, f"fp{cfg.datevshot[0:8]}"), os.path.join(cfg.cwd,"vdrp/fplane"))
+
+        #vdrp: need the runshifts for the shot (from karlgettar)
+        #e.g. run_shifts.sh 20240730 009 16.317927 33.689304 1
+        # (formerly, this was the "clean_rta" script
+        rta_date, rta_shot, rta_ra, rta_dec, rta_v = np.loadtxt(os.path.join(karlgettar,f"rta.{cfg.datevshot[0:6]}"),
+                                                                usecols=[1,2,3,4,5],unpack=True,dtype=str)
+        sel = (rta_date == cfg.datevshot[0:8]) * (rta_shot == cfg.datevshot[-3:])
+        with open(os.path.join(cfg.cwd,f"vdrp/shifts/rta.{cfg.datevshot[0:6]}"),"w") as f:
+            for d,s,ra,dec,v in zip(rta_date[sel], rta_shot[sel], rta_ra[sel], rta_dec[sel], rta_v[sel]):
+                f.write(f"run_shifts {d} {s} {ra} {dec} {v} \n")
+
 
     return 0
 
@@ -305,7 +336,7 @@ def num_exposures_in_shot(shotid):
     return ct, fn
 
 
-def run1s(cfg):
+def run_run1s(cfg):
     """
 
     science_reduction/sciscripts/run1  batch file
@@ -339,10 +370,219 @@ def run1s(cfg):
         system_command(cfg,f"run1s {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} exp{str(exp).zfill(2)} {cfg.datevshot[0:6]}")
 
 
+def check_run1s(cfg):
+    """
+    todo: any automated checks that can be performed
+          correct any possible
+          log non-fatal issues
+          terminate if fatal
 
+          Previously this is handled in a notebook on my machine: calibrations/check_red1.ipynb
+
+
+    :param cfg:
+    :return:
+    """
+
+    print("todo: check run1s ... see check_red1.ipynb")
+    return 0
+
+
+def vdrp_check_norms(cfg):
+    """
+    basic check on dither norms (if there are any
+    :param cfg:
+    :return:
+    """
+
+    #only run IF there are dithers (multiple exposures ... assume dither)
+    if cfg.exp == 0 and cfg.numexp > 1:
+        rc = 0
+        vdrp_path = "./"
+
+        try:
+            fns = glob.glob(os.path.join(vdrp_path, f"{cfg.datevshot[0:6]}*v???"))
+        except:
+            fns = glob.glob(os.path.join(vdrp_path, "20*v???"))
+
+        fns = sorted(fns)
+        for fn in fns:
+            norms = np.loadtxt(os.path.join(fn, "norm.dat"))  # one line, 3 values
+            if np.count_nonzero(abs(1 - norms) > 0.5) > 0 or np.any(np.isnan(norms)):
+                print("Possible bad dither norm:", os.path.basename(fn), norms)
+                rc = -1
+
+        return rc
+    else:
+        return 0
+
+def vdrp_check_shout_ifu(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+
+
+    # usually a YYYYMM
+   # cl_args = list(map(str.lower, sys.argv))
+
+    path = "./"  # /scratch/03261/polonius/science_reductions/vdrp/shifts/"
+    rc = 0
+
+    try:
+        wildcard = cfg.datevshot[0:6]
+    except:
+        wildcard = ""
+
+    paths = glob.glob(f"{path}{wildcard}*v???")
+
+    print(f"Checking {len(paths)} directories ... ")
+
+    # for path in tqdm(paths):
+    for path in paths:
+        try:
+
+            fn = os.path.join(path, "shout.ifu")
+
+            basedir = os.path.abspath(fn).split("/")[-2]
+
+            stats = os.stat(fn)
+
+            if stats.st_size == 0:
+                print(f"{basedir} : empty shout.ifu")
+                rc = -1
+            elif stats.st_size < 1000:
+                print(f"{basedir} : small shout.ifu ({stats.st_size})")
+                rc = -1
+
+        except Exception as E:
+            print(f"{basedir} : unknown or missing shout.ifu")
+
+    return rc
+
+def vdrp_cp2dithall(cfg,catalog=None):
+    """
+
+    :param cfg:
+    :return:
+    """
+
+    rc = 0
+    dirs = glob.glob(f"./{cfg.datevshot[0:6]}??v*")
+    if catalog is None:
+        dithall_dir = "dithall"
+    else:
+        dithall_dir = "dithall."+catalog
+
+    for d in dirs:
+        try:
+            with open(os.path.join(d, "dithall.use"), "r") as f1:
+                # skip 1st line
+                _ = f1.readline()
+                outfn = os.path.basename(d)
+                outfn = os.path.join("./", f"{dithall_dir}/{outfn}.dithall")
+                with open(outfn, "w+") as f2:
+                    for line in f1:
+                        f2.write(line)
+        except Exception as E:
+            print(E)
+            rc = -1
+
+    return rc
+
+def run_vdrp(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+
+
+    #change to the vdrp/shifts directory
+    # since we do not know if we will need all of GAIA, SDSS and PanSTARRS at this point,
+    #    run all three of them
+
+    os.chdir(os.path.join(cfg.cwd,"vdrp/shifts"))
+
+
+    #GAIA first
+    #command is based on rta.YYYYMM
+    #run_shifts 20240730 009 16.317927 33.689304 1  20240730 GAIA
+    print("VDRP: GAIA")
+    with open(f"rta.{cfg.datevshot[0:6]}","r") as rta:
+        for line in rta: #really should only be one line
+            if len(line) > 10:
+                system_command(cfg,f"{line} {cfg.datevshot[0:8]} GAIA")
+
+    vdrp_check_norms(cfg)
+    vdrp_check_shout_ifu(cfg)
+    vdrp_cp2dithall(cfg,"gaia")
+    #move the output under gaia
+    os.makedirs("gaia",exist_ok=True)
+    system_command(cfg,f"mv {cfg.datevshot[0:6]}??v??? gaia")
+
+
+    #!!! notice: we are doing limited checking here ... that will be done later
+    # previously would run: check_norms YYYYMM   (included)
+    #                       check_shot.ifu YYYYMM (included)
+    #  examine the .pngs manually  NOT DONE
+    #                  run: make_good_shots YYYYMM  NOT DONE
+    #                       cp2dithall YYYYMM  (included)
+
+
+    #SDSS
+    print("VDRP: SDSS")
+    with open(f"rta.{cfg.datevshot[0:6]}","r") as rta:
+        for line in rta: #really should only be one line
+            if len(line) > 10:
+                system_command(cfg,f"{line} {cfg.datevshot[0:8]} SDSS")
+
+    vdrp_check_norms(cfg)
+    vdrp_check_shout_ifu(cfg)
+    vdrp_cp2dithall(cfg,"sdss")
+    #move the output under sdss
+    os.makedirs("sdss",exist_ok=True)
+    system_command(cfg,f"mv {cfg.datevshot[0:6]}??v??? sdss")
+
+
+    #PanSTARRS
+    print("VDRP: PANSTARRS")
+    with open(f"rta.{cfg.datevshot[0:6]}","r") as rta:
+        for line in rta: #really should only be one line
+            if len(line) > 10:
+                system_command(cfg,f"{line} {cfg.datevshot[0:8]} PANSTARRS")
+
+    vdrp_check_norms(cfg)
+    vdrp_check_shout_ifu(cfg)
+    vdrp_cp2dithall(cfg,"panstarrs")
+    #move the output under panstarrs
+    os.makedirs("panstarrs",exist_ok=True)
+    system_command(cfg,f"mv {cfg.datevshot[0:6]}??v??? panstarrs")
+
+
+    #todo: which is the main dithall, etc????
+    print("todo: copy GAIA, SDSS or PanSTARRS to main ....")
+
+    os.chdir(cfg.cwd)
+
+
+def check_vdrp(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+    print("todo: check vdrp ... ")
+    return 0
+
+########################################################################
+########################################################################
 ########################################################################
 # Main (section)
 #   notice: no actual main function
+########################################################################
+########################################################################
 ########################################################################
 
 ###########
@@ -369,6 +609,7 @@ if rc < 0:
     Quit(cfg,rc,"Could not complete initial setup.")
 
 
+
 #########
 # after the initial setup, move stdout and stderr to a log file
 #########
@@ -387,15 +628,14 @@ print(f"Logging redirected to: {cfg.cwd}/{cfg.file_stdout.name}")
 # step1
 ###########
 if s01_run1s:
-    run1s(cfg)
+    run_run1s(cfg)
 
-    #todo: enumerate any checks
+    # todo: run any checks
+    check_run1s(cfg)
+
     #todo: this would be manual here, I think, but CAN copy /red1/xxx to /scratch/local/projects
     #  all the various CoFe*.fits and multi*.fits ... these are also in the
     #  local d<shot><exp> folder in the two tar files (_co.tar and _mu.tar for the CoFe*.fits and multi*.fits respectively)
-
-
-
 else:
     print("Skipping run1s")
 
@@ -405,6 +645,12 @@ else:
 ###########
 
 #change dir
+if s02_vdrp:
+    run_vdrp(cfg)
+
+    check_vdrp(cfg)
+else:
+    print("Skipping vdrp")
 
 
 ##########
