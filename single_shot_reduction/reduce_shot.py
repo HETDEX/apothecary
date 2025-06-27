@@ -183,6 +183,8 @@ def system_command(cfg,cmd):
     :return:
     """
 
+    #echo the command
+    print("CMD: ", cmd)
     if cfg.file_stdout:
         os.system(f"{cmd} &>> {cfg.file_stdout.name}")
     else:
@@ -269,6 +271,14 @@ def initial_setup(cfg):
         os.makedirs(os.path.join(cfg.cwd,"vdrp/fplane"), exist_ok=True)
         shutil.copy2(os.path.join(karlfplane, f"fp{cfg.datevshot[0:8]}"), os.path.join(cfg.cwd,"vdrp/fplane"))
 
+        #fix paths in the . cfg files
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# vdrp/vdrp.config") #not necessary, just for completeness
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# vdrp/vdrp.config.original") #not necessary, just for completeness
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# vdrp/vdrp.config.gaia") #not necessary, just for completeness
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# vdrp/vdrp.config.panstarrs") #not necessary, just for completeness
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# vdrp/vdrp.config.sdss") #not necessary, just for completeness
+
+
         #vdrp: need the runshifts for the shot (from karlgettar)
         #e.g. run_shifts.sh 20240730 009 16.317927 33.689304 1
         # (formerly, this was the "clean_rta" script
@@ -277,7 +287,7 @@ def initial_setup(cfg):
         sel = (rta_date == cfg.datevshot[0:8]) * (rta_shot == cfg.datevshot[-3:])
         with open(os.path.join(cfg.cwd,f"vdrp/shifts/rta.{cfg.datevshot[0:6]}"),"w") as f:
             for d,s,ra,dec,v in zip(rta_date[sel], rta_shot[sel], rta_ra[sel], rta_dec[sel], rta_v[sel]):
-                f.write(f"run_shifts {d} {s} {ra} {dec} {v} \n")
+                f.write(f"run_shifts.sh {d} {s} {ra} {dec} {v} \n")
 
 
     return 0
@@ -513,7 +523,13 @@ def run_vdrp(cfg):
     with open(f"rta.{cfg.datevshot[0:6]}","r") as rta:
         for line in rta: #really should only be one line
             if len(line) > 10:
+                #we DON'T want the carriage return
+                line = line.rstrip('\n')
                 system_command(cfg,f"{line} {cfg.datevshot[0:8]} GAIA")
+
+
+    print("Early exit for testing ...")
+    return 0
 
     vdrp_check_norms(cfg)
     vdrp_check_shout_ifu(cfg)
@@ -536,6 +552,8 @@ def run_vdrp(cfg):
     with open(f"rta.{cfg.datevshot[0:6]}","r") as rta:
         for line in rta: #really should only be one line
             if len(line) > 10:
+                #we DON'T want the carriage return
+                line = line.rstrip('\n')
                 system_command(cfg,f"{line} {cfg.datevshot[0:8]} SDSS")
 
     vdrp_check_norms(cfg)
@@ -551,6 +569,8 @@ def run_vdrp(cfg):
     with open(f"rta.{cfg.datevshot[0:6]}","r") as rta:
         for line in rta: #really should only be one line
             if len(line) > 10:
+                #we DON'T want the carriage return
+                line = line.rstrip('\n')
                 system_command(cfg,f"{line} {cfg.datevshot[0:8]} PANSTARRS")
 
     vdrp_check_norms(cfg)
