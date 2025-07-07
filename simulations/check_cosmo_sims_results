@@ -42,7 +42,10 @@ else:
 
 survey_name = "hdr5"
 hetdex_api_config = HDRconfig(survey_name)
-ampflag_table = Table.read(hetdex_api_config.badamp) #shotid multifraem flag   (0=bad)
+try:
+    ampflag_table = Table.read(hetdex_api_config.badamp) #shotid multifraem flag   (0=bad)
+except:
+    ampflag_table = Table.read("/work/03261/polonius/hetdex/share/amp_flags.fits")
 
 bad_dirs = []
 bad_dirs_string = []

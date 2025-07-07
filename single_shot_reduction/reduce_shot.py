@@ -32,7 +32,7 @@ import traceback
 ########################################################################
 # CONFIGURATION
 ########################################################################
-EchoCmds = True #if True echo system commands to the log
+EchoCmds = False #if True echo system commands to the log
 FutureShotDateLimit = 20490101000  # do not allow shots after this dave+shot
 
 ScriptRepo = "/work/03261/polonius/hetdex/single_shot"
@@ -75,6 +75,8 @@ class Config:
     cwd: str = os.getcwd()
     scriptdir: str = ""
     gettar_fn: str =  ""  # the runs* or runt* file from karlgettar folder with the date, shot, exp data
+    starcat_ast = "gaia" #gaia, sdss, panstarrs   for Astrometry
+    starcat_cal = "sdss" #gaia, sdss, panstarrs   for FluxCalibration
 
     orig_stdout = None
     orig_stderr = None
@@ -235,9 +237,22 @@ def initial_setup(cfg):
         else:
             print("Using main script repo (may be remote) ...")
             cfg.scriptdir = os.path.join(ScriptRepo,"science_reductions")
+    else:
+        if LocalScriptRepo is not None:
+            if os.path.exists(LocalScriptRepo): #we want to use it
+                print("Using existing local repo ...")
+                cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+            else:
+                print("Fatal! --resume selected, but no script repo.")
+                return -1
+        else:
+            print("Using main script repo (may be remote) ...")
+            cfg.scriptdir = os.path.join(ScriptRepo,"science_reductions")
+
 
     os.chdir(workdir)
     cfg.cwd = os.getcwd() #now under the sci<shot> directory
+
 
     if not resume:
         print("Copying source code ...")
@@ -248,6 +263,10 @@ def initial_setup(cfg):
         shutil.copy2(os.path.join(cfg.scriptdir, "rfixspec"), ".")
         shutil.copytree(os.path.join(cfg.scriptdir, "sciscripts"), ".", dirs_exist_ok=True)
         shutil.copytree(os.path.join(cfg.scriptdir,"vdrp"), "vdrp", dirs_exist_ok=True)
+        shutil.copytree(os.path.join(cfg.scriptdir, "detect"), "detect", dirs_exist_ok=True)
+        shutil.copytree(os.path.join(cfg.scriptdir, "getcen"), "getcen", dirs_exist_ok=True)
+        shutil.copytree(os.path.join(cfg.scriptdir, "alldet"), "alldet", dirs_exist_ok=True)
+        shutil.copytree(os.path.join(cfg.scriptdir, "cs"), "cs", dirs_exist_ok=True)
 
         #update the "home" path tilde
         system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits")
@@ -270,7 +289,6 @@ def initial_setup(cfg):
 
 
         #extra files needed
-
         #vdrp : /work/00115/gebhardt/maverick/fplane ... need the fplane for the date
         os.makedirs(os.path.join(cfg.cwd,"vdrp/fplane"), exist_ok=True)
         shutil.copy2(os.path.join(karlfplane, f"fp{cfg.datevshot[0:8]}"), os.path.join(cfg.cwd,"vdrp/fplane"))
@@ -309,7 +327,16 @@ def initial_setup(cfg):
                 f.write(f"run_shifts.sh {d} {s} {ra} {dec} {v} \n")
 
 
+        #fix detect stuff
+        system_command(cfg, f"sed -i s/rsetstar/#/ detect/rallcal") #comment out rsetstar call as we want to run it separately
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/single_shot/science_reductions#{cfg.cwd}# detect/rfitfw0")
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/single_shot/science_reductions#{cfg.cwd}# detect/rsetstar")
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/single_shot/science_reductions#{cfg.cwd}# detect/rsp3f")
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/single_shot/science_reductions#{cfg.cwd}# detect/rsp3fc")
+
+
         return 0
+    #end if not resume
 
     return 0
 
@@ -633,8 +660,13 @@ def run_vdrp(cfg):
     except Exception as e:
         print(f"VDRP: PANSTARRS fail.", e, "\n", traceback.format_exc())
 
-    #todo: which is the main dithall, etc????
-    print("!!! todo: copy GAIA dithaall to /scatch/projects and /corral-repl ???")
+    #todo: which is the main dithall, etc???? (normally it is SDSS for calibration and gaia for astrometry)
+    #print("!!! todo: copy GAIA dithaall to /scatch/projects and /corral-repl ???")
+
+    # set the star catalog to use for calibration (make a softlink to the starcat specific output for this shot)
+    # just in case something went badly wrong, make sure we are in the right directory
+    os.chdir(os.path.join(cfg.cwd, "vdrp/shifts"))
+    system_command(cfg, f"ln -s {cfg.starcat_cal}/{cfg.datevshot} {cfg.datevshot}")
 
     os.chdir(cfg.cwd)
 
@@ -650,13 +682,35 @@ def check_vdrp(cfg):
 
 
 
-def run_fluxcalibration(cfg):
+def run_fluxcalibration(cfg,star_catalog='sdss'):
     """
 
     :param cfg:
     :return:
     """
-    print("todo: DO flux calibration ... ")
+    print("flux calibration (rallcal) ... ")
+
+    #setup the softlink for the star_catalog
+    os.chdir(os.path.join(cfg.cwd, "vdrp/shifts"))
+    if os.path.exists(cfg.datevshot):
+        system_command(cfg, f"unlink {cfg.datevshot}")
+    if os.path.exists("dithall"):
+        system_command(cfg, "unlink dithall")
+
+    system_command(cfg, f"ln -s {star_catalog}/{cfg.datevshot} {cfg.datevshot}")
+    system_command(cfg, f"ln -s dithall.{star_catalog} dithall")
+
+    os.chdir(os.path.join(cfg.cwd,"detect"))
+
+
+    #call rsetstar independently
+    system_command(cfg, f"rsetstar {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} {star_catalog}")
+
+
+    #no longer includes rsetstar
+    system_command(cfg,f"rallcal {cfg.datevshot[0:8]} {cfg.datevshot[-3:]}")
+
+
     return 0
 
 
@@ -667,7 +721,29 @@ def check_fluxcalibration(cfg):
     :return:
     """
     print("todo: check flux calibration ... ")
-    return 0
+    rc = 0
+    #todo: if tp/*setp_.dat is "bad" (last columns all zero)
+    #      the try with a different star catalog ... e.g.
+    #      by default, SDSS is used for calibration, but if that fails
+    #      try GAIA and if that fails
+    #      try PANSTARRS
+    #          >> to do that, need to change the softlink under vdrp/shifts/YYYYMMDDsSSS to gaia/YYYYMMDDvSSS or panstarrs/YYYYMMDDvSSS
+    #          >> if they exist (e.g. that might have failed during vdrp)
+    #          >> then, rerun   run_fluxcalibration() and check again
+
+    try:
+        #20240730v006sedtp_f.dat
+        out = np.loadtxt(f"tp/{cfg.datevshot}sedtp_f.dat")
+        if not np.any(out[:, 5]):  # 5 is the actual throughput, I think and 4 is tied to it? cols 2, 3 don't seem to matter
+            rc = -1
+            print(f"bad throughput {cfg.datevshot}")
+
+    except Exception as E:
+        print(E)
+        rc = -1
+        print(f"bad throughput {cfg.datevshot}")
+
+    return rc
 
 ########################################################################
 ########################################################################
@@ -737,7 +813,6 @@ else:
 # VDRP
 ###########
 
-#change dir
 if s02_vdrp:
     run_vdrp(cfg)
 
@@ -758,9 +833,39 @@ else:
 ###########
 
 if s03_fluxcal:
-    run_fluxcalibration(cfg)
 
-    check_fluxcalibration(cfg)
+    star_cat_list = [] #keep the order
+
+    #this is largely for parallels and we want GAIA for that, so have it first
+    # note: for HETDEX it was SDSS first for flux calibration and GAIA for astrometry
+    if os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.gaia")):
+        star_cat_list.append("gaia")
+
+    if os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.sdss")):
+        star_cat_list.append("sdss")
+
+    if os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.panstarrs")):
+         star_cat_list.append("panstarrs")
+
+    if len(star_cat_list) == 0:
+        Quit(cfg, -1, "FATAL. Something wrong. No star catalogs available under vdrp/shifts.")
+
+
+    for star_cat in star_cat_list:
+        print(f"flux calibration: {star_cat}")
+        run_fluxcalibration(cfg,star_cat)
+
+        if check_fluxcalibration(cfg) < 0:
+            print(f"flux calibration: {star_cat} failed. Trying next ... ")
+        else:
+            break #this one was good
+
+    #todo: optional:  copy detect/tp/yyyymmddvssssedtp_f.dat  to /scratch/projects/hetdex/detectp and /corral-repl/xxx
+
+    #todo: optional: update  /scratch/projects/hetdex/detect/fwhm.all and norm.all
+    #                see update_fwhm_norm script
+    #
+
 else:
     print("Skipping flux calibration")
 
