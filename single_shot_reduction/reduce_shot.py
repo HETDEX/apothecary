@@ -54,6 +54,9 @@ s01_run1s = False
 s02_vdrp = False
 s03_fluxcal = False
 s04_sky_subtraction = True
+s04b_rfft = False
+s04c_rcal_all = True
+s05_detection = True
 
 
 ########################################################################
@@ -786,20 +789,6 @@ def run_rfft(cfg):
     :return:
     """
 
-# rfft 20240730 008 exp01
-# rfft 20240730 008 exp02
-# rfft 20240730 008 exp03
-# rfft 20240730 007 exp01
-# rfft 20240730 007 exp02
-# rfft 20240730 007 exp03
-# rfft 20240730 009 exp01
-# rfft 20240730 009 exp02
-# rfft 20240730 009 exp03
-# rfft 20240730 006 exp01
-# rfft 20240730 006 exp02
-# rfft 20240730 006 exp03
-
-
     try:
         rc = 0
         os.chdir(os.path.join(cfg.cwd, "alldet"))
@@ -820,8 +809,10 @@ def run_rfft(cfg):
             # like: d20230904s011exp01amp.dat
             for suffix in output_suffixes:
                 fn = f"output/d{cfg.datevshot.replace('v','s')}exp{str(exp).zfill(2)}{suffix}"
-                if not os.path.exists(fn):
-                    print(f"Output file not found: {fn}")
+                if os.path.exists(fn):
+                    print(f"[Pass] {fn}")
+                else:
+                    print(f"[FAIL] {fn} file not found")
                     rc = -1 #even though this is fatal, go ahead and loop over all files and expXX so can get into the log
                             #could be a useful diagnoistic
 
@@ -834,6 +825,22 @@ def run_rfft(cfg):
     return rc
 
 
+
+def run_rcal(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+
+    #currently bullet 3,4 under document
+
+    #rcal_all 244.7383880 33.8140602 35 4505 50 512_104_026 20240730v009 1.70 3.0 3.5 0.5 3 106
+    #rcal_all 244.7716830 33.8165741 35 4505 50 513_105_051 20240730v009 1.70 3.0 3.5 0.5 3 106
+    #rcal_all 244.7050930 33.8114395 35 4505 50 514_103_019 20240730v009 1.70 3.0 3.5 0.5 3 106
+
+
+    pass
 
 ########################################################################
 ########################################################################
@@ -968,12 +975,24 @@ else:
 
 if s04_sky_subtraction:
 
+    print("Getting IFU centers ...")
     if run_make_ifucen(cfg) != 0:
         Quit(cfg,-1,"FATAL. Failed to get IFU centers.")
 
+    if s04b_rfft:
+        print("Running rfft (this may take a while) ...")
+        if run_rfft(cfg) != 0:
+            Quit(cfg, -1, "FATAL. rfft fail. One or more expected outputs failed.")
+    else:
+        print("Skipping rfft")
 
-    if run_rfft(cfg) != 0:
-        Quit(cfg, -1, "FATAL. rfft fail. One or more expected outputs failed.")
+    if s04c_rcal_all:
+        print("Running rcal_all ...")
+        if run_rcal(cfg) != 0:
+            Quit(cfg, -1, "FATAL. rcal_all fail.")
+
+    else:
+        print("Skipping rcal_all")
 
 
 
