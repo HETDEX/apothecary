@@ -52,7 +52,8 @@ karlhome = "/home1/00115/gebhardt"
 #execute steps
 s01_run1s = False
 s02_vdrp = False
-s03_fluxcal = True
+s03_fluxcal = False
+s04_sky_subtraction = True
 
 
 ########################################################################
@@ -745,6 +746,95 @@ def check_fluxcalibration(cfg):
 
     return rc
 
+#############################
+#step 04
+#############################
+
+def run_make_ifucen(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+
+    try:
+        os.chdir(os.path.join(cfg.cwd, "getcen"))
+        system_command(cfg, f"rgetifucen {cfg.datevshot[0:8]} {cfg.datevshot[-3:]}")
+
+        #not much to check here
+        if os.path.exists(f"ifucen_{cfg.datevshot}.dat"):
+            #all is good, assume anyway
+            rc = 0
+        else:
+            rc = -1
+
+    except Exception as E:
+        print(E)
+        rc = -1
+        print(f"failed to get IFU centers:  {cfg.datevshot}")
+
+
+    return rc
+
+
+
+
+def run_rfft(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+
+# rfft 20240730 008 exp01
+# rfft 20240730 008 exp02
+# rfft 20240730 008 exp03
+# rfft 20240730 007 exp01
+# rfft 20240730 007 exp02
+# rfft 20240730 007 exp03
+# rfft 20240730 009 exp01
+# rfft 20240730 009 exp02
+# rfft 20240730 009 exp03
+# rfft 20240730 006 exp01
+# rfft 20240730 006 exp02
+# rfft 20240730 006 exp03
+
+
+    try:
+        rc = 0
+        os.chdir(os.path.join(cfg.cwd, "alldet"))
+
+        output_suffixes = ["amp.dat","ds9.reg","sky.dat","sub.fits"]
+
+        #iterate over exp
+        if cfg.exp > 0:
+            exps = [cfg.exp]
+        else:
+            exps = np.arange(1, cfg.numexp + 1)
+
+        for exp in exps:
+            system_command(cfg, f"rfft {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} exp{str(exp).zfill(2)}")
+
+            # check the output direcotry for 4 files per exp
+            # *amp.dat, *ds9.reg, *sky.dat, *sub.fits
+            # like: d20230904s011exp01amp.dat
+            for suffix in output_suffixes:
+                fn = f"output/d{cfg.datevshot.replace('v','s')}exp{str(exp).zfill(2)}{suffix}"
+                if not os.path.exists(fn):
+                    print(f"Output file not found: {fn}")
+                    rc = -1 #even though this is fatal, go ahead and loop over all files and expXX so can get into the log
+                            #could be a useful diagnoistic
+
+    except Exception as E:
+        print(E)
+        rc = -1
+        print(f"failed to get IFU centers:  {cfg.datevshot}")
+
+
+    return rc
+
+
+
 ########################################################################
 ########################################################################
 ########################################################################
@@ -869,6 +959,26 @@ if s03_fluxcal:
 else:
     print("Skipping flux calibration")
 
+
+###########
+# step4
+# detect (Sky Subtractions)
+# getcen and more stuff
+###########
+
+if s04_sky_subtraction:
+
+    if run_make_ifucen(cfg) != 0:
+        Quit(cfg,-1,"FATAL. Failed to get IFU centers.")
+
+
+    if run_rfft(cfg) != 0:
+        Quit(cfg, -1, "FATAL. rfft fail. One or more expected outputs failed.")
+
+
+
+else:
+    print("Skipping sky subtraction")
 
 ##########
 # DONE
