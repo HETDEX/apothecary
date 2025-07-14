@@ -1000,7 +1000,18 @@ def rgetmax(cfg):
         print(f"continuum detections (rgetmax) ...")
         system_command(cfg,f"rgetmax {cfg.datevshot.split('v')[0]} {cfg.datevshot.split('v')[1]}")
 
-        #output is a cs.tar file?
+        #output is a cs.tar file ... not broken up by IFU #20240730v009cs.tar
+        if os.path.exists(f"spec/{cfg.datevshot}cs.tar"):
+            #assume good
+            #contains 1 or more .spec and .list files (one per detection)
+            #a single .cs file (may be coords and counts ... but is longer than expected)
+            #as well as a single .rcs file that seems to just contain excecutable calls to rf1 (prob. to line extract at the position)
+
+            pass
+        else:
+            #a failure, but not fatal
+            rc = 1
+            print(f"Continuum detections fail. Not fatal. cs/spec/{cfg.datevshot}cs.tar not created.")
 
 
     except Exception as E:
@@ -1195,6 +1206,8 @@ if s05_detection:
             Quit(cfg, -1, "FATAL. rdet_rf1 fail.")
         elif rc > 0:
             print("rcal_all: Limited success. Non-fatal. Will continue")
+    else:
+        print("skipping rdet_rf1 (line detection)")
 
     if s05c_rgetmax:
         print("Running rgetmax (continuum detection) ...")
@@ -1203,6 +1216,8 @@ if s05_detection:
             Quit(cfg, -1, "FATAL. rgetmax fail.")
         elif rc > 0:
             print("rgetmax: Limited success. Non-fatal. Will continue")
+    else:
+        print("skipping rgetmax (continuum detection)")
 
 else:
     print("Skipping detections")
