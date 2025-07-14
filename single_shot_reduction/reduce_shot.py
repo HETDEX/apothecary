@@ -53,11 +53,12 @@ karlhome = "/home1/00115/gebhardt"
 s01_run1s = False
 s02_vdrp = False
 s03_fluxcal = False
-s04_sky_subtraction = True
+s04_sky_subtraction = False
 s04b_rfft = False
 s04c_rcal_all = False
 s05_detection = True
-s05b_rdet_rf1 = True
+s05b_rdet_rf1 = False
+s05c_rgetmax = True
 
 
 ########################################################################
@@ -975,6 +976,40 @@ def rdet_rf1(cfg):
     return rc
 
 
+
+#continuum detection
+def rgetmax(cfg):
+    """
+    continuum detections
+
+    :param cfg:
+    :return:
+    """
+
+    try:
+
+
+        failed_list = []
+        #passed_list = []
+        output_extensions = [".list", ".mc", ".spec"]
+
+        rc = 0
+        os.chdir(os.path.join(cfg.cwd, "cs"))  # make sure we are in the right directory
+        os.makedirs("spec", exist_ok=True)
+
+        print(f"continuum detections (rgetmax) ...")
+        system_command(cfg,f"rgetmax {cfg.datevshot.split('v')[0]} {cfg.datevshot.split('v')[1]}")
+
+        #output is a cs.tar file?
+
+
+    except Exception as E:
+        print(E)
+        rc = -1
+        print(f"Fatal exception in rdet_rf1:  {cfg.datevshot}")
+
+    return rc
+
 ########################################################################
 ########################################################################
 ########################################################################
@@ -1102,7 +1137,7 @@ else:
 
 ###########
 # step4
-# detect (Sky Subtractions)
+# Sky Subtractions, flux calibrations
 # getcen and more stuff
 ###########
 
@@ -1145,17 +1180,30 @@ else:
     print("!!! *********************************************************************************************** !!!")
 
 
+###########
+# step5
+# line detections
+# continuum detections
+###########
+
 if s05_detection:
 
     if s05b_rdet_rf1:
-        print("Running rdet_rf1 ...")
+        print("Running rdet_rf1 (line detection) ...")
         rc = rdet_rf1(cfg)
         if rc < 0:
             Quit(cfg, -1, "FATAL. rdet_rf1 fail.")
         elif rc > 0:
             print("rcal_all: Limited success. Non-fatal. Will continue")
 
-    pass
+    if s05c_rgetmax:
+        print("Running rgetmax (continuum detection) ...")
+        rc = rgetmax(cfg)
+        if rc < 0:
+            Quit(cfg, -1, "FATAL. rgetmax fail.")
+        elif rc > 0:
+            print("rgetmax: Limited success. Non-fatal. Will continue")
+
 else:
     print("Skipping detections")
 
