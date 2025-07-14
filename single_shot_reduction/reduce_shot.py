@@ -55,8 +55,9 @@ s02_vdrp = False
 s03_fluxcal = False
 s04_sky_subtraction = True
 s04b_rfft = False
-s04c_rcal_all = True
+s04c_rcal_all = False
 s05_detection = True
+s05b_rdet_rf1 = True
 
 
 ########################################################################
@@ -839,8 +840,140 @@ def run_rcal(cfg):
     #rcal_all 244.7716830 33.8165741 35 4505 50 513_105_051 20240730v009 1.70 3.0 3.5 0.5 3 106
     #rcal_all 244.7050930 33.8114395 35 4505 50 514_103_019 20240730v009 1.70 3.0 3.5 0.5 3 106
 
+    try:
+        failed_rcal_list = []
+        passed_rcal_list = []
+        rc = 0
+        os.chdir(os.path.join(cfg.cwd, "alldet")) #make sure we are in the right directory
+        os.makedirs("cal_out",exist_ok=True)
 
-    pass
+        multis = np.loadtxt(os.path.join("../getcen/",f"ifucen_{cfg.datevshot}.dat"),dtype=str,usecols=(0),unpack=True)
+        ras,decs = np.loadtxt(os.path.join("../getcen/", f"ifucen_{cfg.datevshot}.dat"), dtype=float,usecols=(1,2),unpack=True)
+        print(f"run_rcal ({len(ras)})...")
+        ct = 0
+        for multi,ra,dec in zip(multis,ras,decs):
+            ct +=1
+            print(f"{ct}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ",end="")
+            system_command(cfg,f"rcal_all {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 106")
+
+            #check the output exists cal_out/20240730v009_514_103_019_cal.fits
+            outfn = f"{cfg.datevshot}_{multi[6:]}_cal.fits"
+            if os.path.exists(os.path.join("cal_out/", outfn)):
+                print("pass")
+                passed_rcal_list.append(outfn)
+            else:
+                print("FAIL")
+                failed_rcal_list.append(outfn)
+
+        if len(passed_rcal_list) == len(ras):
+            rc = 0
+            print("All pass")
+        elif len(failed_rcal_list) == len(ras):  # all failed
+            rc = -1
+            print("ALL failed")
+        else:
+            rc = 1
+            print(f"Mixed results of {len(ras)}: {len(passed_rcal_list)} pass, {len(failed_rcal_list)} FAIL")
+
+
+    except Exception as E:
+        print(E)
+        rc = -1
+        print(f"Fatal exception in run_rcal:  {cfg.datevshot}")
+
+
+
+    return rc
+
+
+def rdet_rf1(cfg):
+    """
+    emission line detections
+
+    :param cfg:
+    :return:
+    """
+
+    try:
+        #rf1 244.7716830 33.8165741 35 4505 50 513_105_051 20240730v009 1.70 3.0 3.5 0.5 3 104
+        #rf1 244.7050930 33.8114395 35 4505 50 514_103_019 20240730v009 1.70 3.0 3.5 0.5 3 104
+
+        failed_list = []
+        #passed_list = []
+        output_extensions = [".list", ".mc", ".spec"]
+
+        rc = 0
+        os.chdir(os.path.join(cfg.cwd, "alldet"))  # make sure we are in the right directory
+        os.makedirs("detect_out", exist_ok=True)
+
+        multis = np.loadtxt(os.path.join("../getcen/",f"ifucen_{cfg.datevshot}.dat"),dtype=str,usecols=(0),unpack=True)
+        ras,decs = np.loadtxt(os.path.join("../getcen/", f"ifucen_{cfg.datevshot}.dat"), dtype=float,usecols=(1,2),unpack=True)
+
+        print(f"line detections (rdet_rf1) ({len(ras)})...")
+        ct = 0
+        for multi, ra, dec in zip(multis, ras, decs):
+            ct +=1
+            print(f"{ct}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ",end="")
+            cmd = f"rf1 {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 104\n"
+            system_command(cfg,cmd)
+
+            # check the output exists cal_out/20240730v009_514_103_019_cal.fits
+
+            #todo: assume good for now ... need to check
+            #print("done (todo: check output files)")
+            #check that .list, .mc, .spec exist
+            #20240730v009_025_067_032.list
+
+            output_found = np.array([0,0,0])
+            for i,ext in enumerate(output_extensions):
+                outfn = f"{cfg.datevshot}_{multi[6:]}{ext}"
+
+                if os.path.exists(os.path.join("detect_out/", outfn)):
+                    output_found[i] = 1
+
+            if np.count_nonzero(output_found) != 3:
+                #something failed, we will want to re-run these once
+                failed_list.append(cmd)
+                print(f"FAIL. May re-run at the end.")
+            else:
+                print(f"pass")
+
+
+        if len(failed_list) > 0:
+            if len(failed_list) < len(ras):
+                print(f"{len(failed_list)} failed. Can be transient issues, so will re-run ...")
+                for ct,cmd in enumerate(failed_list):
+                    print(f"{ct} {cmd.split()[1]} {cmd.split()[2]} {cmd.split()[6]} ...",end="")
+                    system_command(cfg, cmd)
+
+                    output_found = np.array([0, 0, 0])
+                    for i, ext in enumerate(output_extensions):
+
+                        outfn = f"{cfg.datevshot}_{cmd.split()[6]}{ext}"
+
+                        if os.path.exists(os.path.join("detect_out/", outfn)):
+                            output_found[i] = 1
+
+                    if np.count_nonzero(output_found) != 3:
+                        # something failed, we will want to re-run these once
+                        #failed_list.append(cmd)
+                        print(f"FAIL. Second attempt. No more retries.")
+                        rc = 1 #some failures, but not all
+                    else:
+                        print(f"pass")
+
+
+            else:
+                print(f"All failed. Will not attempt full re-run.")
+
+
+    except Exception as E:
+        print(E)
+        rc = -1
+        print(f"Fatal exception in rdet_rf1:  {cfg.datevshot}")
+
+    return rc
+
 
 ########################################################################
 ########################################################################
@@ -988,16 +1121,43 @@ if s04_sky_subtraction:
 
     if s04c_rcal_all:
         print("Running rcal_all ...")
-        if run_rcal(cfg) != 0:
+        rc = run_rcal(cfg)
+        if rc < 0:
             Quit(cfg, -1, "FATAL. rcal_all fail.")
+        elif rc > 0:
+            print("rcal_all: Limited success. Non-fatal. Will continue")
+        #else keep going
 
     else:
         print("Skipping rcal_all")
 
-
-
 else:
     print("Skipping sky subtraction")
+
+
+#todo: here ... before detection ... consider checking for/removing bad amps?
+# look at check_amps under local_script_repo/alldet/check_amps
+# may adapt here rather than call separately ...
+# may want to double check and update based on the equivalent under HETDEX_API, which is likely more current
+
+    print("!!! *********************************************************************************************** !!!")
+    print("!!! todo: update check_amps (check for bad amps) and remvoe them before moving on to detections ... !!!")
+    print("!!! *********************************************************************************************** !!!")
+
+
+if s05_detection:
+
+    if s05b_rdet_rf1:
+        print("Running rdet_rf1 ...")
+        rc = rdet_rf1(cfg)
+        if rc < 0:
+            Quit(cfg, -1, "FATAL. rdet_rf1 fail.")
+        elif rc > 0:
+            print("rcal_all: Limited success. Non-fatal. Will continue")
+
+    pass
+else:
+    print("Skipping detections")
 
 ##########
 # DONE
