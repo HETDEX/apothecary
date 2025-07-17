@@ -26,6 +26,10 @@ import os
 import glob
 import shutil
 from dataclasses import dataclass
+from astropy.table import Table
+
+#just want the path for hetdex_api (see later)
+import importlib.util
 
 import traceback
 
@@ -47,19 +51,29 @@ HETRaw = "/corral-repl/utexas/Hobby-Eberly-Telesco/het_raw/"
 karlgettar = "/work/00115/gebhardt/maverick/gettar/"
 karlfplane = "/work/00115/gebhardt/maverick/fplane/"
 karlhome = "/home1/00115/gebhardt"
+hetdex_api_path = os.path.dirname(importlib.util.find_spec("hetdex_api").origin)
+#there is an extra "hetdex_api" at the end that points into the lower level directory for that. h5tools is actually a sibling
+hetdex_api_path = "/".join(hetdex_api_path.split("/")[0:-1])
 
 
 #execute steps
 s01_run1s = False
+
 s02_vdrp = False
+
 s03_fluxcal = False
+
 s04_sky_subtraction = False
 s04b_rfft = False
 s04c_rcal_all = False
+s04_sky_subtraction = s04_sky_subtraction | s04b_rfft | s04c_rcal_all #sanity catch
+
 s05_detection = True
 s05b_rdet_rf1 = False
-s05c_rgetmax = True
-
+s05c_rgetmax = False
+s05d_shot_h5 = True
+s05e_catalogs = True
+s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_shot_h5 | s05e_catalogs  #sanity catch
 
 ########################################################################
 # !!! DO NOT MODIFY BELOW
@@ -1007,7 +1021,8 @@ def rgetmax(cfg):
             #a single .cs file (may be coords and counts ... but is longer than expected)
             #as well as a single .rcs file that seems to just contain excecutable calls to rf1 (prob. to line extract at the position)
 
-            pass
+            #need to untar for use
+            system_command(cfg, f"cd spec; tar -x {cfg.datevshot}cs.tar ; cd ..")
         else:
             #a failure, but not fatal
             rc = 1
@@ -1020,6 +1035,246 @@ def rgetmax(cfg):
         print(f"Fatal exception in rdet_rf1:  {cfg.datevshot}")
 
     return rc
+
+
+
+def build_shot_h5(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+
+    try:
+        print("Constructing shot hdf5 file. This will take a while ... ")
+        rc = 0
+        os.chdir(os.path.join(cfg.cwd))
+
+        #needed for hetdex_api
+        os.makedirs("match_pngs",exist_ok=True)
+
+        #########################
+        # initial hdf5 file
+        ########################
+
+        cmd = f"python3 {hetdex_api_path}/h5tools/create_shot_hdf5.py"
+        cmd += " --tar"
+        cmd += f" --date {cfg.datevshot[0:8]}"
+        cmd += f" --observation \"{cfg.datevshot[-3:]}\""
+        cmd += f" -of \"{cfg.datevshot}.h5\""
+        cmd += f" --rootdir \"{cfg.cwd}\""
+
+        if os.path.exists(f"{cfg.cwd}/vdrp/shifts/dithall.gaia"):
+            cmd += f" --detect_path \"{cfg.cwd}/vdrp/shifts/dithall.gaia\""
+        elif os.path.exists(f"{cfg.cwd}/vdrp/shifts/dithall.sdss"):
+            cmd += f" --detect_path \"{cfg.cwd}/vdrp/shifts/dithall.sdss\""
+        elif os.path.exists(f"{cfg.cwd}/vdrp/shifts/dithall.panstarrs"):
+            cmd += f" --detect_path \"{cfg.cwd}/vdrp/shifts/dithall.panstarrs\""
+        else:
+            print("Fatal: cannot find *.dithall file for this shot")
+            return -1
+
+
+
+        system_command(cfg, cmd)
+
+        #assume good?
+        if not os.path.exists(f"{cfg.datevshot}.h5"):
+            rc = -1
+            return rc
+
+        print(f"Created: {cfg.cwd}/{cfg.datevshot}.h5")
+
+        #########################
+        # now append_calfib
+        ########################
+        print("Appending calibrated fibers ... ")
+        cmd = f"python3 {hetdex_api_path}/h5tools/append_calfib.py"
+        cmd += f" --date {cfg.datevshot[0:8]}"
+        cmd += f" --observation \"{cfg.datevshot[-3:]}\""
+        cmd += f" -of \"{cfg.datevshot}.h5\""
+        cmd += f" --rootdir \"{cfg.cwd}/alldet/cal_out/\""
+
+        system_command(cfg, cmd)
+
+        #assume okay?
+
+
+        #########################
+        # now create_fullsky_model
+        ########################
+        print("Appending fullsky model ... ")
+        cmd = f"python3 {hetdex_api_path}/h5tools/create_fullskymodel_hdf5.py"
+        cmd += " --append"
+        cmd += f" --date {cfg.datevshot[0:8]}"
+        cmd += f" --observation \"{cfg.datevshot[-3:]}\""
+        cmd += f" -of \"{cfg.datevshot}.h5\""
+        cmd += f" -r \"{cfg.cwd}/alldet/output/\""
+
+        system_command(cfg, cmd)
+
+
+        #########################
+        # now create_cal_hdf5
+        ########################
+        print("Create cal hdf5  ... ")
+
+
+        #hetdex_api needs the local fwhm.all in a different format
+        #detect/20240730v009
+        if not os.path.exists(f"{cfg.cwd}/detect/{cfg.datevshot}/fwhm.detail"):
+            system_command(cfg,f"mv {cfg.cwd}/detect/{cfg.datevshot}/fwhm.all {cfg.cwd}/detect/{cfg.datevshot}/fwhm.detail")
+        fwhm, err, ns = np.loadtxt(f"{cfg.cwd}/detect/{cfg.datevshot}/fwhm.detail",unpack=True,usecols=[0,1,2],max_rows=1,dtype=float)
+        with open(f"{cfg.cwd}/detect/{cfg.datevshot}/fwhm.all","w") as f:
+            f.write(f"{cfg.datevshot} {fwhm} {err} {int(ns)}\n")
+
+
+        cmd = f"python3 {hetdex_api_path}/h5tools/create_cal_hdf5.py"
+        cmd += " --append"
+        cmd += f" --date {cfg.datevshot[0:8]}"
+        cmd += f" --observation \"{cfg.datevshot[-3:]}\""
+        cmd += f" -of \"{cfg.datevshot}.h5\""
+        cmd += f" -tp \"{cfg.cwd}/detect/\""
+        cmd += f" -detdir  \"{cfg.cwd}/detect/{cfg.datevshot}/\""
+
+        system_command(cfg, cmd)
+
+
+
+        #########################
+        # now create_astrometry_hdf5
+        ########################
+        print("Create astrometry  ... ")
+        cmd = f"python3 {hetdex_api_path}/h5tools/create_astrometry_hdf5.py"
+        cmd += " --append"
+        cmd += f" --date {cfg.datevshot[0:8]}"
+        cmd += f" --observation \"{cfg.datevshot[-3:]}\""
+        cmd += f" -of \"{cfg.datevshot}.h5\""
+        cmd += f" -detdir  \"{cfg.cwd}/detect/{cfg.datevshot}/\""
+
+        if os.path.exists(f"{cfg.cwd}/vdrp/shifts/gaia/{cfg.datevshot}/all.mch"):
+            cmd += f" -r \"{cfg.cwd}/vdrp/shifts/gaia\""
+        elif os.path.exists(f"{cfg.cwd}/vdrp/shifts/sdss/{cfg.datevshot}/all.mch"):
+            cmd += f" -r \"{cfg.cwd}/vdrp/shifts/sdss\""
+        elif os.path.exists(f"{cfg.cwd}/vdrp/shifts/panstarrs/{cfg.datevshot}/all.mch"):
+            cmd += f" -r \"{cfg.cwd}/vdrp/shifts/panstarrs\""
+        else:
+            print("Fatal: cannot find *.dithall file for this shot")
+            return -1
+
+        system_command(cfg, cmd)
+
+        print(f"Done: {cfg.cwd}/{cfg.datevshot}.h5")
+
+    except Exception as E:
+        print(E)
+        rc = -1
+        print(f"Could not build hdf5 shot file for  {cfg.datevshot}")
+
+    return rc
+
+def build_catalog_tables(cfg):
+    """
+
+    build a catalog astropy table (fits format) for the line and continuum detections
+
+    :param cfg:
+    :return:
+    """
+
+
+    #table definitions
+
+    #since there should never be more than maybe a few thousand lines at MOST (these are single observations)
+    #I don't think there is any need to break up the table creation into chunks and then vstack the chunks
+    #Lines Detections Table
+
+    LT = Table(dtype=[
+        ('detectid', np.int64),      #just a rolling ID number with a prefix
+        ('shotid', np.int64),        #YYYYMMDDSSS these should all be the same shotid, but might be handy if vstacking outside of this use
+        ('ifu','S11'),               #w/o leading "multi_"  so just "123_456_789" (e.g. the IFU)
+        ('amp','S2'),                # "LL,LU,RL,RU"
+        ('fibernum', 'S3'),          #"001"-"112"
+        ('expnum','S2'),             #"01" to "03" (usually)
+        ('ra', np.float32), ('dec', np.float32), #decimal degrees
+        ('xifu', np.float32), ('yifu', np.float32),  # decimal degrees
+        ('xraw', np.float32), ('yraw', np.float32),
+
+        ('sn', np.float32), ('sn_err', np.float32),
+        ('sn_cen', np.float32), ('sn_3fib', np.float32), ('sn_3fib_cen', np.float32),
+        ('noise_ratio', np.float32),
+        ('chi2', np.float32),  ('chi2_err', np.float32),  # of the fit
+        ('chi2fib', np.float32), ('chi2_fix', np.float32),
+        ('apcor', np.float32),
+        ('wave', np.float32), ('wave_err', np.float32),  # AA
+        ('linewidth', np.float32), ('linewidth_err', np.float32),  #fit sigma AA
+        ('lineflux',np.float32), ('lineflux_err',np.float32),  #of ths fit, in ergs/s/cm2
+        ('continuum', np.float32), ('continuum_err', np.float32),  # of ths fit, in ergs/s/cm2/AA
+
+
+
+
+
+
+        ('obs_fluxd', (np.float32, 1036)),      #local sky subtracted, 1d flux in 1e-17 ergs/s/cm2/AA
+        ('obs_fluxd_err', (np.float32, 1036)),
+        ('dust_x', (np.float32, 1036)),         #multiplier for dust correction
+       ])
+
+    #continuum detections table (few different columns)
+    CT = Table(dtype=[
+
+    ])
+
+    try:
+        os.chdir(os.path.join(cfg.cwd))
+        specfns = glob.glob("alldet/detect_out/*.spec")  # should be 1:1 with *.list and *.mc
+
+        #todo: convert flux to fluxd (and flux_err to fluxd_err)
+        # e.g.    like         rowspectra["spec1d"] = dataspec["spec1d_nc"] / dataspec["apcor"]
+        #                      rowspectra["spec1d_err"] = dataspec["spec1d_nc_err"] / dataspec["apcor"]
+        #todo: apply apcor (divide fluxd and fluxd_err by apcor)
+        #todo: fetch and apply dust correction
+        #todo: fetch and apply OTHER corrections (like wd, ... see hetdex_api:create_detecet_hdf5.py
+
+        #todo: check on building shot h5 file ... see Google docs (ingestion) and hetdex_api
+
+
+    except Exception as E:
+        print(E)
+        rc = -1
+        print(f"Exception building line detections table:  {cfg.datevshot}")
+
+    try:
+        os.chdir(os.path.join(cfg.cwd))
+        specfns = glob.glob("cs/spec/*.spec") #should be 1:1 with *.list
+
+
+
+
+    except Exception as E:
+        print(E)
+        rc = -1
+        print(f"Exception building line detections table:  {cfg.datevshot}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ########################################################################
 ########################################################################
@@ -1063,7 +1318,7 @@ print(f"Starting reduction {cfg.datevshot} ... ")
 
 #cfg.orig_stdout = sys.stdout
 #cfg.orig_stderr = sys.stderr
-cfg.file_stdout = open(f"{cfg.datevshot}.log","w")
+cfg.file_stdout = open(f"{cfg.datevshot}.log","a")
 print(f"Logging redirected to: {cfg.cwd}/{cfg.file_stdout.name}")
 #sys.stderr = cfg.file_stdout
 #sys.stdout = cfg.file_stdout
@@ -1219,8 +1474,21 @@ if s05_detection:
     else:
         print("skipping rgetmax (continuum detection)")
 
+
+    if s05d_shot_h5:
+        rc = build_shot_h5(cfg)
+        if rc < 0:
+            Quit(cfg, -1, "FATAL. Could not sbuild shot h5 file. Cannot continue with catalog creation.")
+
+    if s05e_catalogs:
+        rc = build_catalog_tables(cfg)
+
+
 else:
     print("Skipping detections")
+
+
+
 
 ##########
 # DONE
