@@ -26,7 +26,10 @@ import os
 import glob
 import shutil
 from dataclasses import dataclass
+
+import tables
 from astropy.table import Table
+from h5tools import amp_stats as AmpStats
 
 #just want the path for hetdex_api (see later)
 import importlib.util
@@ -57,23 +60,24 @@ hetdex_api_path = "/".join(hetdex_api_path.split("/")[0:-1])
 
 
 #execute steps
-s01_run1s = False
+s01_run1s = True
 
-s02_vdrp = False
+s02_vdrp = True
 
-s03_fluxcal = False
+s03_fluxcal = True
 
-s04_sky_subtraction = False
-s04b_rfft = False
-s04c_rcal_all = False
+s04_sky_subtraction = True
+s04b_rfft = True
+s04c_rcal_all = True
 s04_sky_subtraction = s04_sky_subtraction | s04b_rfft | s04c_rcal_all #sanity catch
 
 s05_detection = True
-s05b_rdet_rf1 = False
-s05c_rgetmax = False
-s05d_shot_h5 = False
-s05e_catalogs = True
-s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_shot_h5 | s05e_catalogs  #sanity catch
+s05b_rdet_rf1 = True
+s05c_rgetmax = True
+s05d_shot_h5 = True
+s05e_amp_stats = True
+s05f_catalogs = True
+s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_shot_h5 | s05e_amp_stats | s05f_catalogs#sanity catch
 
 ########################################################################
 # !!! DO NOT MODIFY BELOW
@@ -572,7 +576,7 @@ def vdrp_cp2dithall(cfg,catalog=None):
             dithall_use = os.path.join(d, "dithall.use")
             if not os.path.exists(dithall_use):
                 rc = -1
-                print(f"cp2dithall ... fail. File does not exist {dithall_use}")
+                print(f"cp2dithall {catalog} ... fail. File does not exist {os.getcwd()} {dithall_use}")
                 continue
 
             with open(dithall_use, "r") as f1:
@@ -589,9 +593,9 @@ def vdrp_cp2dithall(cfg,catalog=None):
             rc = -1
 
     if rc != 0:
-        print("cp2dithall ... fail")
+        print(f"cp2dithall {catalog}... fail")
     else:
-        print("cp2dithall ... OK")
+        print(f"cp2dithall {catalog}... OK")
     return rc
 
 def run_vdrp(cfg):
@@ -768,6 +772,9 @@ def check_fluxcalibration(cfg):
 #############################
 #step 04
 #############################
+
+
+
 
 def run_make_ifucen(cfg):
     """
@@ -1173,6 +1180,65 @@ def build_shot_h5(cfg):
 
     return rc
 
+
+def amp_stats(cfg,shot_h5_fqfn=None):
+    """
+
+    this needs the shot h5 file to have been completed to work
+    :param cfg:
+    :return:
+    """
+
+    try:
+        rc = 0
+        if shot_h5_fqfn is None:
+            shot_h5_fqfn = os.path.join(cfg.cwd,f"{cfg.datevshot}.h5")
+
+        print(f"Computing amp statistics from: {shot_h5_fqfn} ... ")
+        shot_dict = AmpStats.make_stats_for_shot(fqfn=shot_h5_fqfn,save=True,preload=False)
+
+        # if shot_dict is not None:
+        #     #... not sure I want to actually modify the h5 file
+        #     # the code is a bit dated (in hetdex api) and we had discussions about leaving the shot h5 files alone
+        #     # ... this, though, is different now since these are not HETDEX and are working on individual shots
+        #     #needs the actual h5 file
+        #     h5 = tables.open_file(shot_h5_fqfn,mode="a")
+        #     AmpStats.stats_update_shot(h5,shot_dict)
+        # else:
+        #     print(f"FAIL. Could not compute amp stats.")
+        #     rc = -1
+
+
+        if shot_dict is not None:
+            t = AmpStats.stats_shot_dict_to_table(shot_dict)
+            t = t[t['n_lo'] >= 0] #use n_lo column to select ... the -1 values are where this failed
+                                  # (e.g. usually for dithers that don't exist)
+            #???how much of stats_qc needs to be re-done since it is based on 3-dithers and some joint statistics???
+            #several of the checks are looking for extreme variation over the dithers, which can't be done with just one dither
+            t = AmpStats.stats_qc(t, extend=True)
+
+            t.write(f"{cfg.datevshot}_ampstats.fits",format="fits")
+            t.write(f"{cfg.datevshot}_ampstats.tab", format="ascii")
+
+            #always creat the bad amps file, even if none trigger
+            with open(f"{cfg.datevshot}_badamps.txt","w") as f:
+                for row in t[t['flag']>0]:
+                    f.write(f"{row['multiframe']} exp{str(row['expnum']).zfill(2)} \n")
+
+
+
+        else:
+            print(f"FAIL. Could not compute amp stats.")
+            rc = -1
+
+
+    except Exception as E:
+        print(E)
+        rc = -1
+        print(f"Could produce amp statistics for:  {cfg.datevshot}")
+
+    return rc
+
 def build_catalog_tables(cfg):
     """
 
@@ -1241,6 +1307,7 @@ def build_catalog_tables(cfg):
         ('ra', np.float32), ('dec', np.float32),  # decimal degrees
         ('xifu', np.float32), ('yifu', np.float32),  # decimal degrees
         ('xraw', np.float32), ('yraw', np.float32),
+        ('apcor', np.float32),
 
 
         ('obs_fluxd', (np.float32, 1036)), # local sky subtracted, 1d flux in 1e-17 ergs/s/cm2/AA (so /2AA) NOT dust corrected
@@ -1366,7 +1433,7 @@ def build_catalog_tables(cfg):
             bn = os.path.basename(sp)
             datevshot = str(bn[0:12])
             shotid = np.int64(datevshot.replace('v', ''))
-            ifu = str(bn[13:24])  # spec_slot_ifuid"
+            #ifu = str(bn[13:24])  # spec_slot_ifuid"
 
             try:
                 t_sp = Table.read(sp, format="ascii.no_header", names=spec_colnames) #one row for each wavelength bin
@@ -1389,7 +1456,7 @@ def build_catalog_tables(cfg):
             T.add_row([
                     detectid_ct,
                     shotid,
-                    ifu,
+                    t3['multiname'][0][6:17], #ifu
                     t3['multiname'][0].split("_")[4], #amp #multi_323_043_040_LL_093
                     t3['multiname'][0].split("_")[5][0:3],  # fibernum #multi_414_038_035_RL_083.ixy
                     t3['expnum'][0][-2:], #input is "exp01" just want the "01"
@@ -1399,6 +1466,7 @@ def build_catalog_tables(cfg):
                     t3['y_ifu'][0],
                     t3['x_raw'][0],
                     t3['y_raw'][0],
+                    np.mean(t2['apcor']),
 
 
                     np.array(t2['spec1d_nc'] / 2.), # observed flux density (hence the /2.0 AA)
@@ -1576,15 +1644,33 @@ else:
     print("Skipping sky subtraction")
 
 
-#todo: here ... before detection ... consider checking for/removing bad amps?
-# look at check_amps under local_script_repo/alldet/check_amps
-# may adapt here rather than call separately ...
-# may want to double check and update based on the equivalent under HETDEX_API, which is likely more current
+#  this is a bit lower ... we need the shot h5 file first, so this is done later
+# #todo: here ... before detection ... consider checking for/removing bad amps?
+# # look at check_amps under local_script_repo/alldet/check_amps
+# # may adapt here rather than call separately ...
+# # may want to double check and update based on the equivalent under HETDEX_API, which is likely more current
+#
+#     print("!!! *********************************************************************************************** !!!")
+#     print("!!! todo: update check_amps (check for bad amps) and remvoe them before moving on to detections ... !!!")
+#     print("!!! *********************************************************************************************** !!!")
+#
+#
 
-    print("!!! *********************************************************************************************** !!!")
-    print("!!! todo: update check_amps (check for bad amps) and remvoe them before moving on to detections ... !!!")
-    print("!!! *********************************************************************************************** !!!")
 
+# print("************************** TEST build shot file early *******************************")
+# if s05d_shot_h5:
+#     rc = build_shot_h5(cfg)
+#     if rc < 0:
+#         Quit(cfg, -1, "FATAL. Could not build shot h5 file. Cannot continue with catalog creation.")
+#
+# # check stats
+# if s05e_amp_stats:
+#     rc = amp_stats(cfg)
+#     if rc < 0:
+#         print("Non-fatal. Could not compute amp stats from shot h5 file. Will continue anyway with catalog creation.")
+#
+# print("************************** END TEST build shot file early *******************************")
+# Quit(cfg, 0, f"Test COMPLETED: {cfg.datevshot}")
 
 ###########
 # step5
@@ -1618,9 +1704,16 @@ if s05_detection:
     if s05d_shot_h5:
         rc = build_shot_h5(cfg)
         if rc < 0:
-            Quit(cfg, -1, "FATAL. Could not sbuild shot h5 file. Cannot continue with catalog creation.")
+            Quit(cfg, -1, "FATAL. Could not build shot h5 file. Cannot continue with catalog creation.")
 
-    if s05e_catalogs:
+
+    #check stats
+    if s05e_amp_stats:
+        rc = amp_stats(cfg)
+        if rc < 0:
+            print( "Non-fatal. Could not compute amp statis from shot h5 file. Will continue anyway with catalog creation.")
+
+    if s05f_catalogs:
         rc = build_catalog_tables(cfg)
 
 
