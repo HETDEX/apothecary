@@ -63,6 +63,7 @@ hetdex_api_path = "/".join(hetdex_api_path.split("/")[0:-1])
 s01_run1s = True
 
 s02_vdrp = True
+do_panstarrs = False #only run PanSTARRS if true, otherwise just run the usual GAIA and SDSS
 
 s03_fluxcal = True
 
@@ -75,7 +76,7 @@ s05_detection = True
 s05b_rdet_rf1 = True
 s05c_rgetmax = True
 s05d_shot_h5 = True
-s05e_amp_stats = True
+s05e_amp_stats = False
 s05f_catalogs = True
 s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_shot_h5 | s05e_amp_stats | s05f_catalogs#sanity catch
 
@@ -665,24 +666,26 @@ def run_vdrp(cfg):
     except Exception as e:
         print(f"VDRP: SDSS fail.", e, "\n", traceback.format_exc())
 
-    #PanSTARRS
-    print("VDRP: PANSTARRS")
-    try:
-        with open(f"rta.{cfg.datevshot[0:6]}","r") as rta:
-            for line in rta: #really should only be one line
-                if len(line) > 10:
-                    #we DON'T want the carriage return
-                    line = line.rstrip('\n')
-                    system_command(cfg,f"{line} {cfg.datevshot[0:8]} PANSTARRS")
 
-        vdrp_check_norms(cfg)
-        vdrp_check_shout_ifu(cfg)
-        vdrp_cp2dithall(cfg,"panstarrs")
-        #move the output under panstarrs
-        os.makedirs("panstarrs",exist_ok=True)
-        system_command(cfg,f"mv {cfg.datevshot[0:6]}??v??? panstarrs")
-    except Exception as e:
-        print(f"VDRP: PANSTARRS fail.", e, "\n", traceback.format_exc())
+    if do_panstarrs:
+        #PanSTARRS
+        print("VDRP: PANSTARRS")
+        try:
+            with open(f"rta.{cfg.datevshot[0:6]}","r") as rta:
+                for line in rta: #really should only be one line
+                    if len(line) > 10:
+                        #we DON'T want the carriage return
+                        line = line.rstrip('\n')
+                        system_command(cfg,f"{line} {cfg.datevshot[0:8]} PANSTARRS")
+
+            vdrp_check_norms(cfg)
+            vdrp_check_shout_ifu(cfg)
+            vdrp_cp2dithall(cfg,"panstarrs")
+            #move the output under panstarrs
+            os.makedirs("panstarrs",exist_ok=True)
+            system_command(cfg,f"mv {cfg.datevshot[0:6]}??v??? panstarrs")
+        except Exception as e:
+            print(f"VDRP: PANSTARRS fail.", e, "\n", traceback.format_exc())
 
     #todo: which is the main dithall, etc???? (normally it is SDSS for calibration and gaia for astrometry)
     #print("!!! todo: copy GAIA dithaall to /scatch/projects and /corral-repl ???")
@@ -1029,7 +1032,7 @@ def rgetmax(cfg):
             #as well as a single .rcs file that seems to just contain excecutable calls to rf1 (prob. to line extract at the position)
 
             #need to untar for use
-            system_command(cfg, f"cd spec; tar -x {cfg.datevshot}cs.tar ; cd ..")
+            system_command(cfg, f"cd spec; tar -xf {cfg.datevshot}cs.tar ; cd ..")
         else:
             #a failure, but not fatal
             rc = 1
@@ -1712,6 +1715,8 @@ if s05_detection:
         rc = amp_stats(cfg)
         if rc < 0:
             print( "Non-fatal. Could not compute amp statis from shot h5 file. Will continue anyway with catalog creation.")
+    else:
+        print("Skipping amp stats / bad amp detection ...")
 
     if s05f_catalogs:
         rc = build_catalog_tables(cfg)
