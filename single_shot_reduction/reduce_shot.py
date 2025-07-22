@@ -70,15 +70,15 @@ s03_fluxcal = True
 s04_sky_subtraction = True
 s04b_rfft = True
 s04c_rcal_all = True
-s04_sky_subtraction = s04_sky_subtraction | s04b_rfft | s04c_rcal_all #sanity catch
+s04d_shot_h5 = True
+s04e_amp_stats = True
+s04_sky_subtraction = s04_sky_subtraction | s04b_rfft | s04c_rcal_all | s04d_shot_h5 | s04e_amp_stats #sanity catch
 
 s05_detection = True
 s05b_rdet_rf1 = True
 s05c_rgetmax = True
-s05d_shot_h5 = True
-s05e_amp_stats = False
-s05f_catalogs = True
-s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_shot_h5 | s05e_amp_stats | s05f_catalogs#sanity catch
+s05d_catalogs = True
+s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_catalogs#sanity catch
 
 ########################################################################
 # !!! DO NOT MODIFY BELOW
@@ -1643,37 +1643,19 @@ if s04_sky_subtraction:
     else:
         print("Skipping rcal_all")
 
+    if s04d_shot_h5:
+        rc = build_shot_h5(cfg)
+        if rc < 0:
+            Quit(cfg, -1, "FATAL. Could not build shot h5 file. Cannot continue with catalog creation.")
+
+    # check stats
+    if s04e_amp_stats:
+        rc = amp_stats(cfg)
+        if rc < 0:
+            print("Non-fatal. Could not compute amp stats from shot h5 file. Will continue anyway with catalog creation.")
 else:
     print("Skipping sky subtraction")
 
-
-#  this is a bit lower ... we need the shot h5 file first, so this is done later
-# #todo: here ... before detection ... consider checking for/removing bad amps?
-# # look at check_amps under local_script_repo/alldet/check_amps
-# # may adapt here rather than call separately ...
-# # may want to double check and update based on the equivalent under HETDEX_API, which is likely more current
-#
-#     print("!!! *********************************************************************************************** !!!")
-#     print("!!! todo: update check_amps (check for bad amps) and remvoe them before moving on to detections ... !!!")
-#     print("!!! *********************************************************************************************** !!!")
-#
-#
-
-
-# print("************************** TEST build shot file early *******************************")
-# if s05d_shot_h5:
-#     rc = build_shot_h5(cfg)
-#     if rc < 0:
-#         Quit(cfg, -1, "FATAL. Could not build shot h5 file. Cannot continue with catalog creation.")
-#
-# # check stats
-# if s05e_amp_stats:
-#     rc = amp_stats(cfg)
-#     if rc < 0:
-#         print("Non-fatal. Could not compute amp stats from shot h5 file. Will continue anyway with catalog creation.")
-#
-# print("************************** END TEST build shot file early *******************************")
-# Quit(cfg, 0, f"Test COMPLETED: {cfg.datevshot}")
 
 ###########
 # step5
@@ -1689,7 +1671,7 @@ if s05_detection:
         if rc < 0:
             Quit(cfg, -1, "FATAL. rdet_rf1 fail.")
         elif rc > 0:
-            print("rcal_all: Limited success. Non-fatal. Will continue")
+            print("rdet_rf1: Limited success. Non-fatal. Will continue")
     else:
         print("skipping rdet_rf1 (line detection)")
 
@@ -1704,21 +1686,7 @@ if s05_detection:
         print("skipping rgetmax (continuum detection)")
 
 
-    if s05d_shot_h5:
-        rc = build_shot_h5(cfg)
-        if rc < 0:
-            Quit(cfg, -1, "FATAL. Could not build shot h5 file. Cannot continue with catalog creation.")
-
-
-    #check stats
-    if s05e_amp_stats:
-        rc = amp_stats(cfg)
-        if rc < 0:
-            print( "Non-fatal. Could not compute amp statis from shot h5 file. Will continue anyway with catalog creation.")
-    else:
-        print("Skipping amp stats / bad amp detection ...")
-
-    if s05f_catalogs:
+    if s05d_catalogs:
         rc = build_catalog_tables(cfg)
 
 
