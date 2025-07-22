@@ -28,8 +28,10 @@ import shutil
 from dataclasses import dataclass
 
 import tables
-from astropy.table import Table
+from astropy.table import Table, unique, vstack, join, Column, hstack
 from h5tools import amp_stats as AmpStats
+import hetdex_tools.fof_kdtree as fof
+
 
 #just want the path for hetdex_api (see later)
 import importlib.util
@@ -41,6 +43,7 @@ import traceback
 ########################################################################
 EchoCmds = False #if True echo system commands to the log
 FutureShotDateLimit = 20490101000  # do not allow shots after this dave+shot
+ElixerSnrThresh = 4.5 #do not run elixer on line sources where the S/N < 4.5
 
 ScriptRepo = "/work/03261/polonius/hetdex/single_shot"
 LocalScriptRepo = "./local_script_repo" #useful if running multiple single shots ... can copy remotely once
@@ -77,8 +80,52 @@ s04_sky_subtraction = s04_sky_subtraction | s04b_rfft | s04c_rcal_all | s04d_sho
 s05_detection = True
 s05b_rdet_rf1 = True
 s05c_rgetmax = True
-s05d_catalogs = True
-s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_catalogs#sanity catch
+s05d_detection_tables = True
+s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_detection_tables #sanity catch
+
+
+s06_catalogs = True
+s06b_fof = True      #cluster the lines and continuum sources (separately)
+s06c_diagnose = True #run Diagnose
+s06d_elixer = True   #run elixer
+s06e_source_cat = True #make a source catalog
+
+s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
+
+if False: #testing
+    print("#################### TESTING ##########################")
+    # execute steps
+    s01_run1s = False
+
+    s02_vdrp = False
+    do_panstarrs = False  # only run PanSTARRS if true, otherwise just run the usual GAIA and SDSS
+
+    s03_fluxcal = False
+
+    s04_sky_subtraction = False
+    s04b_rfft = False
+    s04c_rcal_all = False
+    s04d_shot_h5 = False
+    s04e_amp_stats = False
+    s04_sky_subtraction = s04_sky_subtraction | s04b_rfft | s04c_rcal_all | s04d_shot_h5 | s04e_amp_stats  # sanity catch
+
+    s05_detection = False
+    s05b_rdet_rf1 = False
+    s05c_rgetmax = False
+    s05d_detection_tables = False
+    s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_detection_tables  # sanity catch
+
+    s06_catalogs = True
+    s06b_fof = True  # cluster the lines and continuum sources (separately)
+    s06c_diagnose = True  # run Diagnose
+    s06d_elixer = True  # run elixer
+    s06e_source_cat = True  # make a source catalog
+
+    s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
+
+
+
+
 
 ########################################################################
 # !!! DO NOT MODIFY BELOW
@@ -220,6 +267,203 @@ def system_command(cfg,cmd):
         os.system(f"{cmd} &>> {cfg.file_stdout.name}")
     else:
         os.system(f"{cmd}")
+
+
+def make_3d_friend_table_for_shot(detect_table, dsky_3D=6.0, dwave=4.0):
+    """
+    mostly lifted from hetdex_api
+
+    using dwave to determine line vs cont (dwave == 0 ==> continuum source)
+
+    :param detect_table:
+    :param dsky_3D:
+    :param dwave: (dwave == 0 ==> continuum source), note: all continuum sources get wave = 45
+    :return:
+    """
+
+
+    if "line_detectid" in detect_table.columns:
+        detid_col = "line_detectid"
+        flux_col = "lineflux"
+    elif "cont_detectid" in detect_table.columns:
+        #this is assumed to be a continuum table or will ignore the wavelength
+        if "wave" not in detect_table.columns:
+            detect_table["wave"] = 4505.0 #set in the middle
+        if "contflux" not in detect_table.columns:
+            detect_table["contflux"] = [np.nanmedian(x[200:800]) for x in detect_table['obs_fluxd']]
+
+        flux_col = "contflux"
+        detid_col = "cont_detectid"
+    else:
+        print("ERROR! Unknown input table for make_3d_friend_table_for_shot()")
+        return None
+
+
+    kdtree, r = fof.mktree(
+        detect_table["ra"],
+        detect_table["dec"],
+        detect_table["wave"],
+        dsky=dsky_3D,
+        dwave=dwave,
+    )
+
+    wfriend_lst = fof.frinds_of_friends(kdtree, r, Nmin=2)
+
+    if len(wfriend_lst) > 0:
+        wfriend_table = fof.process_group_list(
+            wfriend_lst,
+            detect_table[detid_col],
+            detect_table["ra"],
+            detect_table["dec"],
+            detect_table["wave"],
+            detect_table[flux_col],
+        )
+
+        memberlist = []
+        friendlist = []
+        for row in wfriend_table:
+            friendid = row["id"]
+            members = np.array(row["members"])
+            friendlist.extend(friendid * np.ones_like(members))
+            memberlist.extend(members)
+
+        wfriend_table.remove_column("members")
+
+        wdetfriend_tab = Table()
+        wdetfriend_tab.add_column(Column(np.array(friendlist), name="id"))
+        wdetfriend_tab.add_column(Column(memberlist, name=detid_col))
+
+        wdetfriend_shot = join(wdetfriend_tab, wfriend_table, keys="id")
+
+        wdetfriend_shot.rename_column(detid_col, "detectid")
+        wdetfriend_shot.rename_column("id", "wave_group_id")
+        wdetfriend_shot.rename_column("size", "wave_group_size")
+        wdetfriend_shot.rename_column("a", "wave_group_a")
+        wdetfriend_shot.rename_column("b", "wave_group_b")
+        wdetfriend_shot.rename_column("pa", "wave_group_pa")
+        wdetfriend_shot.rename_column("icx", "wave_group_ra")
+        wdetfriend_shot.rename_column("icy", "wave_group_dec")
+        wdetfriend_shot.rename_column("icz", "wave_group_wave")
+
+        wdetfriend_shot = wdetfriend_shot[
+            "detectid",
+            "wave_group_id",
+            "wave_group_a",
+            "wave_group_b",
+            "wave_group_pa",
+            "wave_group_ra",
+            "wave_group_dec",
+            "wave_group_wave",
+        ]
+
+        return wdetfriend_shot
+    else:
+        return None
+
+
+
+
+def make_2d_friend_table_for_shot(detect_table,dsky_2D=3.0):
+    """
+    again, mostly lifted from hetdex_api
+    :param detect_table:
+    :return:
+    """
+
+    if "line_detectid" in detect_table.columns:
+        detid_col = "line_detectid"
+        flux_col = "lineflux"
+    elif "cont_detectid" in detect_table.columns:
+        #this is assumed to be a continuum table or will ignore the wavelength
+        if "wave" not in detect_table.columns:
+            detect_table["wave"] = 4505.0 #set in the middle
+        if "contflux" not in detect_table.columns:
+            detect_table["contflux"] = [np.nanmedian(x[200:800]) for x in detect_table['obs_fluxd']]
+
+        flux_col = "contflux"
+        detid_col = "cont_detectid"
+    else:
+        print("ERROR! Unknown input table for make_2d_friend_table_for_shot()")
+        return None
+
+    kdtree, r = fof.mktree(
+        detect_table["ra"],
+        detect_table["dec"],
+        np.zeros_like(detect_table["ra"]),
+        dsky=dsky_2D,
+    )
+    friend_lst = fof.frinds_of_friends(kdtree, r, Nmin=1)
+
+    friend_table = fof.process_group_list(
+        friend_lst,
+        detect_table[detid_col],
+        detect_table["ra"],
+        detect_table["dec"],
+        0.0 * detect_table["wave"],
+        detect_table[flux_col],
+    )
+
+    memberlist = []
+    friendlist = []
+    for row in friend_table:
+        friendid = row["id"]
+        members = np.array(row["members"])
+        friendlist.extend(friendid * np.ones_like(members))
+        memberlist.extend(members)
+
+    friend_table.remove_column("members")
+
+    detfriend_tab = Table()
+    detfriend_tab.add_column(Column(np.array(friendlist), name="id"))
+    detfriend_tab.add_column(Column(memberlist, name="detectid"))
+
+    detfriend_shot = join(detfriend_tab, friend_table, keys="id")
+
+    return detfriend_shot
+
+
+
+def merge_wave_groups(tab, wid):
+
+    try:
+        sel_wid = tab["wave_group_id"] == wid
+        grp = tab[sel_wid]
+        sid, ns = np.unique(grp["source_id"], return_counts=True)
+
+        sid_main = np.min(sid)
+
+        sid_ind = []
+        for sid_i in sid:
+            for ind in np.where(tab["source_id"] == sid_i)[0]:
+                sid_ind.append(ind)
+
+        # now find any other wave groups and their associated source_id info to merge
+        other_wids = np.unique(tab["wave_group_id"][sid_ind])
+
+        for wid_i in other_wids:
+            if wid_i == 0:
+                continue
+            elif wid_i == wid:
+                continue
+
+            sel_wid_i = tab["wave_group_id"] == wid_i
+            grp = tab[sel_wid_i]
+            sid, ns = np.unique(grp["source_id"], return_counts=True)
+
+            for sid_i in sid:
+                if sid_i == sid_main:
+                    continue
+                for ind in np.where(tab["source_id"] == sid_i)[0]:
+                    sid_ind.append(ind)
+
+        if np.size(np.unique(tab["source_id"][sid_ind])) > 1:
+            return sid_ind
+        else:
+            return None
+    except Exception:
+        print("Merge wave group failed for {}".format(wid))
+        return None
+
 
 def initial_setup(cfg):
     """
@@ -398,9 +642,8 @@ def num_exposures_in_shot(shotid):
         ds = np.array([x[:-5] for x in dse])
         ct = np.count_nonzero(ds == str(shotid))
         fn = fn.replace('?', 's')
-
     except:
-        pass
+        ct = 0
 
     #t
     if ct <= 0:
@@ -532,8 +775,8 @@ def vdrp_check_shout_ifu(cfg):
 
     # for path in tqdm(paths):
     for path in paths:
+        basedir = None
         try:
-
             fn = os.path.join(path, "shout.ifu")
 
             basedir = os.path.abspath(fn).split("/")[-2]
@@ -1242,7 +1485,7 @@ def amp_stats(cfg,shot_h5_fqfn=None):
 
     return rc
 
-def build_catalog_tables(cfg):
+def build_detection_tables(cfg):
     """
 
     build a catalog astropy table (fits format) for the line and continuum detections
@@ -1321,7 +1564,7 @@ def build_catalog_tables(cfg):
         print("Building lines catalog ...")
         os.chdir(os.path.join(cfg.cwd))
         mc_files = glob.glob("alldet/detect_out/*.mc")  # should be 1:1 with *.list and *.mc
-
+        datevshot = datevshot = cfg.datevshot
         #todo: convert flux to fluxd (and flux_err to fluxd_err)
         # e.g.    like         rowspectra["spec1d"] = dataspec["spec1d_nc"] / dataspec["apcor"]
         #                      rowspectra["spec1d_err"] = dataspec["spec1d_nc_err"] / dataspec["apcor"]
@@ -1333,7 +1576,7 @@ def build_catalog_tables(cfg):
 
         #Table is LT
         T = LT
-        detectid_ct = np.int64(0)
+        detectid_ct = np.int64(cfg.datevshot.replace('v','',))*np.int64(1e7) + 1000000  #YYYYMMDDSSS1000000
 
         for mc in mc_files:
 
@@ -1410,7 +1653,7 @@ def build_catalog_tables(cfg):
 
         tname = f"{datevshot}_line.fits"
         T.write(tname,format="fits",overwrite=True)
-        print(f"Lines catalog: {os.getcwd()}/{tname}")
+        print(f"Wrote raw lines table: {os.getcwd()}/{tname}")
 
     except Exception as E:
         print(E)
@@ -1422,7 +1665,8 @@ def build_catalog_tables(cfg):
         os.chdir(os.path.join(cfg.cwd))
         spec_files = glob.glob("cs/spec/*.spec") #should be 1:1 with *.list (there are no *.mc)
 
-        detectid_ct = np.int64(0)
+        detectid_ct = np.int64(cfg.datevshot.replace('v', '', )) * np.int64(1e7) + 9000000
+        datevshot = cfg.datevshot
 
         T = CT
 
@@ -1478,13 +1722,13 @@ def build_catalog_tables(cfg):
 
         tname = f"{datevshot}_cont.fits"
         T.write(tname, format="fits", overwrite=True)
-        print(f"Lines catalog: {os.getcwd()}/{tname}")
+        print(f"Wrote raw continuum table: {os.getcwd()}/{tname}")
 
     except Exception as E:
         print(E)
         rc = -1
         print(f"Exception building line detections table:  {cfg.datevshot}")
-#end build_catalog_tables
+#end build_detection_tables
 
 
 ########################################################################
@@ -1686,13 +1930,163 @@ if s05_detection:
         print("skipping rgetmax (continuum detection)")
 
 
-    if s05d_catalogs:
-        rc = build_catalog_tables(cfg)
+    if s05d_detection_tables:
+        rc = build_detection_tables(cfg)
 
 
 else:
     print("Skipping detections")
 
+
+##################################################
+# step6
+# combine detections
+# run diagnose and elixer
+# make source catalogs
+#################################################
+
+if s06_catalogs:
+
+    print("Catalog creation ... ")
+
+    try:
+        if s06b_fof:
+            lines_tab = Table.read(os.path.join(cfg.cwd,f"{cfg.datevshot}_line.fits"),format="fits")
+            if lines_tab is not None:
+                fof_3d_lines_tab = make_3d_friend_table_for_shot(lines_tab, dsky_3D=6.0, dwave=4.0)
+                if fof_3d_lines_tab is not None:
+                    fof_2d_lines_tab = make_2d_friend_table_for_shot(lines_tab, dsky_2D=3.0)
+
+                    if fof_2d_lines_tab is not None:
+                        lines_cat = join(fof_2d_lines_tab, fof_3d_lines_tab, keys="detectid")
+                        lines_cat["wave_group_id"] = MaskedColumn(lines_cat["wave_group_id"]).filled(0)
+                        lines_cat.rename_column("id", "source_id")
+
+                        # add groups back into cont_tab and overwrite
+                        line_tab['source_id'] = -1
+                        line_tab['sel_det'] = True
+
+                        for i in range(len(line_tab)):
+                            try:
+                                # find the match in cont_cat
+                                sel = line_cat['detectid'] == line_tab['line_detectid'][i]
+                                # should be exactly one
+                                if np.count_nonzero(sel) == 1:
+                                    line_tab['source_id'][i] = line_cat['source_id'][sel]
+                                elif np.count_nonzero(sel) == 0:
+                                    continue  # this is okay, this has no group, so stands on its own
+                                else:
+                                    print(
+                                        f"Error! Unexpected matches ({np.count_nonzero(sel)}) for {line_tab['lin_detectid'][i]}")
+                                    continue
+                            except:
+                                print(traceback.format_exc())
+
+                        # now pick the seldet
+                        uniq_src = sorted(np.unique(line_tab['source_id']))
+                        try:
+                            uniq_src.remove(-1)  # exclude/ignore the -1
+                        except:
+                            pass
+
+                        for src_id in uniq_src:
+                            sel = line_tab['source_id'] == src_id
+                            line_tab['sel_det'][sel] = False
+                            idx = np.argmax(line_tab['lineflux'][sel])
+                            line_tab['sel_det'][sel][idx] = True
+
+                        tname = f"{datevshot}_line.fits"
+                        line_tab.write(tname, format="fits", overwrite=True)
+                        print(f"Updated raw lines table: {os.getcwd()}/{tname}")
+
+                        #todo: minimum select "catalog"
+
+
+
+                    else:
+                        print("Error! (1) Could not combine lines detections by FoF.")
+                else:
+                    print("Error! (2) Could not combine lines detections by FoF.")
+            else:
+                print("Error! Could not combine lines detections. Lines table not found.")
+    except:
+        print("Error! Could not combine lines detections by FoF.")
+        print(traceback.format_exc())
+
+    try:
+        cont_tab = Table.read(os.path.join(cfg.cwd,f"{cfg.datevshot}_cont.fits"),format="fits")
+        if cont_tab is not None:
+            fof_3d_cont_tab = make_3d_friend_table_for_shot(cont_tab, dsky_3D=6.0, dwave=4.0)
+            if fof_3d_cont_tab is not None:
+                fof_2d_cont_tab = make_2d_friend_table_for_shot(cont_tab, dsky_2D=3.0)
+
+                if fof_2d_cont_tab is not None:
+                    cont_cat = join(fof_2d_cont_tab, fof_3d_cont_tab, keys="detectid")
+                    cont_cat["wave_group_id"] = MaskedColumn(cont_cat["wave_group_id"]).filled(0)
+                    cont_cat.rename_column("id", "source_id")
+
+                    #add groups back into cont_tab and overwrite
+                    cont_tab['source_id'] = -1
+                    cont_tab['sel_det'] = True
+
+                    if "contflux" not in cont_tab.columns:
+                        cont_tab["contflux"] = [np.nanmedian(x[200:800]) for x in cont_tab['obs_fluxd']]
+
+                    for i in range(len(cont_tab)):
+                        try:
+                            #find the match in cont_cat
+                            sel = cont_cat['detectid'] == cont_tab['cont_detectid'][i]
+                            #should be exactly one
+                            if np.count_nonzero(sel) == 1:
+                                cont_tab['source_id'][i] = cont_cat['source_id'][sel]
+                            elif np.count_nonzero(sel) == 0:
+                                continue #this is okay, this has no group, so stands on its own
+                            else:
+                                print(f"Error! Unexpected matches ({np.count_nonzero(sel)}) for {cont_tab['cont_detectid'][i]}")
+                                continue
+                        except:
+                            print(traceback.format_exc())
+
+                    #now pick the seldet
+                    uniq_src = sorted(np.unique(cont_tab['source_id']))
+                    try:
+                        uniq_src.remove(-1) #exclude/ignore the -1
+                    except:
+                        pass
+
+                    for src_id in uniq_src:
+                        sel = cont_tab['source_id'] == src_id
+                        cont_tab['sel_det'][sel] = False
+                        idx = np.argmax(cont_tab['contflux'][sel])
+                        cont_tab['sel_det'][sel][idx] = True
+
+                    tname = f"{datevshot}_cont.fits"
+                    cont_tab.write(tname, format="fits", overwrite=True)
+                    print(f"Updated raw continuum table: {os.getcwd()}/{tname}")
+                    #lastly sub select based on some minimum contflux ??
+
+
+                else:
+                    print("Error! (1) Could not combine continuum detections by FoF.")
+            else:
+                print("Error! (2) Could not combine continuum detections by FoF.")
+        else:
+            print("Error! Could not combine continuum detections. Continuum table not found.")
+
+    except:
+        print("Error! Could not combine continuum detections by FoF.")
+        print(traceback.format_exc())
+
+
+    #we now have clustered lines and continuum
+    #the additional clustering performed in hetdex_api is overkill or unnecessary here, I think, as this is just
+    # a single shot where hetdex_api is clustering over all the shots
+    #It might even not really be necessary for the 3D and 2D clustering calls ... I think the 3D is sufficient, but
+    #  for now, leave them both in and combine
+
+    #all we REALLY care about at this point is the detectids with matching source_ids
+    #we want to roll those in with the original tables and then, for each source_id just
+    #  use the one with the highest SNR or lineflux? for lines and the highest continuum for cont sources
 
 
 
