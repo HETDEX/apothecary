@@ -93,7 +93,7 @@ s06e_source_cat = True #make a source catalog
 
 s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
 
-if False: #testing
+if True: #testing
     print("#################### TESTING ##########################")
     # execute steps
     s01_run1s = False
@@ -2080,8 +2080,8 @@ if s06_catalogs:
                         esel = esel & np.array(line_tab['continuum'] >= -3)
                         esel = esel & np.array(line_tab['sn'] >= 4.8)
                         esel = esel & np.array(line_tab['chi2'] <= 2.5)
-                        #this is a bit more liberal than standard HETDEX_API
-                        esel = esel & np.array(line_tab['linewidth'] >= 1.2) & np.array(line_tab['linewidth'] <= 16)
+                        #this is a bit more liberal than standard HETDEX_API (1.6 and 14, I think)
+                        esel = esel & np.array(line_tab['linewidth'] >= 1.5) & np.array(line_tab['linewidth'] <= 16)
 
                         np.savetxt('elixer_line.dets',line_tab['detectid'][esel],fmt="%d")
 
