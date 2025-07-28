@@ -28,7 +28,7 @@ import shutil
 from dataclasses import dataclass
 
 import tables
-from astropy.table import Table, unique, vstack, join, Column, hstack
+from astropy.table import Table, unique, vstack, join, Column, hstack, MaskedColumn
 from h5tools import amp_stats as AmpStats
 import hetdex_tools.fof_kdtree as fof
 
@@ -81,7 +81,8 @@ s05_detection = True
 s05b_rdet_rf1 = True
 s05c_rgetmax = True
 s05d_detection_tables = True
-s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_detection_tables #sanity catch
+s05e_detection_hdf5 = True
+s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_detection_tables | s05e_detection_hdf5 #sanity catch
 
 
 s06_catalogs = True
@@ -92,7 +93,7 @@ s06e_source_cat = True #make a source catalog
 
 s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
 
-if False: #testing
+if True: #testing
     print("#################### TESTING ##########################")
     # execute steps
     s01_run1s = False
@@ -113,13 +114,14 @@ if False: #testing
     s05b_rdet_rf1 = False
     s05c_rgetmax = False
     s05d_detection_tables = False
-    s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_detection_tables  # sanity catch
+    s05e_detection_hdf5 = False
+    s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_detection_tables | s05e_detection_hdf5  # sanity catch
 
     s06_catalogs = True
     s06b_fof = True  # cluster the lines and continuum sources (separately)
-    s06c_diagnose = True  # run Diagnose
-    s06d_elixer = True  # run elixer
-    s06e_source_cat = True  # make a source catalog
+    s06c_diagnose = False  # run Diagnose
+    s06d_elixer = False  # run elixer
+    s06e_source_cat = False  # make a source catalog
 
     s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
 
@@ -294,6 +296,12 @@ def make_3d_friend_table_for_shot(detect_table, dsky_3D=6.0, dwave=4.0):
 
         flux_col = "contflux"
         detid_col = "cont_detectid"
+    elif "detectid" in detect_table.columns:
+        detid_col = "detectid"
+        if "contflux" in detect_table.columns:
+            flux_col = "contflux"
+        else:
+            flux_col = "flux"
     else:
         print("ERROR! Unknown input table for make_3d_friend_table_for_shot()")
         return None
@@ -382,6 +390,12 @@ def make_2d_friend_table_for_shot(detect_table,dsky_2D=3.0):
 
         flux_col = "contflux"
         detid_col = "cont_detectid"
+    elif "detectid" in detect_table.columns:
+        detid_col = "detectid"
+        if "contflux" in detect_table.columns:
+            flux_col = "contflux"
+        else:
+            flux_col = "flux"
     else:
         print("ERROR! Unknown input table for make_2d_friend_table_for_shot()")
         return None
@@ -1417,6 +1431,11 @@ def build_shot_h5(cfg):
 
         system_command(cfg, cmd)
 
+        # #for convenience with legacy functions, duplicate the Shot group as a Survey group
+        # shot_h5 = tables.open_file(f"{cfg.datevshot}.h5","a")
+        # shot_h5.root.Shot._f_copy(newparent="root", newname="Survey", recursive=True, createparents=True)
+        # shot_h5.close()
+
         print(f"Done: {cfg.cwd}/{cfg.datevshot}.h5")
 
     except Exception as E:
@@ -1695,7 +1714,7 @@ def build_detection_tables(cfg):
             t2 = t_sp[t_sp['src_index'] == src_index]  # many rows (one for each wavelength for the src_index)
             t3 = t_ld[t_ld['src_index'] == src_index]  #several rows, one for each fiber
 
-            # sort t3 by weight so highest weight is top
+            # sort t3 by weight so the highest weight is top
             # t3.sort('weight').reverse()
 
             detectid_ct += 1
@@ -1730,6 +1749,51 @@ def build_detection_tables(cfg):
         print(f"Exception building line detections table:  {cfg.datevshot}")
 #end build_detection_tables
 
+
+def build_detection_hdf5(cfg):
+    """
+
+    line detects and continuum
+
+    build a catalog astropy table (fits format) for the line and continuum detections
+
+    :param cfg:
+    :return:
+    """
+
+
+    try:
+
+        detectid_base = np.int64(cfg.datevshot.replace('v', '', )) * np.int64(1e7) + 1000000
+        print("Building detections hdf5 ... ")
+        #cmd = f"python3 {hetdex_api_path}/h5tools/create_detect_hdf5.py"
+        cmd = f"python3 {cfg.cwd}/../create_detect_hdf5.py"
+        #cmd += f" --survey NA"
+        cmd += f" --detectid_base {detectid_base}"
+        cmd += f" --date {cfg.datevshot[0:8]}"
+        cmd += f" --observation \"{cfg.datevshot[-3:]}\""
+        cmd += f" -of \"{cfg.datevshot}_line.h5\""
+        cmd += f" --detect_path \"{cfg.cwd}/alldet/detect_out\""
+
+        system_command(cfg, cmd)
+
+        detectid_base = np.int64(cfg.datevshot.replace('v', '', )) * np.int64(1e7) + 9000000
+        #cmd = f"python3 {hetdex_api_path}/h5tools/create_cont_hdf5.py"
+        cmd = f"python3 {cfg.cwd}/../create_cont_hdf5.py"
+        cmd += f" --detectid_base {detectid_base}"
+        cmd += f" --date {cfg.datevshot[0:8]}"
+        cmd += f" --observation \"{cfg.datevshot[-3:]}\""
+        cmd += f" -of \"{cfg.datevshot}_cont.h5\""
+        cmd += f" --detect_path \"{cfg.cwd}/cs/spec\""
+
+        system_command(cfg, cmd)
+
+    except Exception as E:
+        print(E)
+        rc = -1
+        print(f"Exception building line detections table:  {cfg.datevshot}")
+
+#
 
 ########################################################################
 ########################################################################
@@ -1933,6 +1997,9 @@ if s05_detection:
     if s05d_detection_tables:
         rc = build_detection_tables(cfg)
 
+    if s05e_detection_hdf5:
+        rc = build_detection_hdf5(cfg)
+
 
 else:
     print("Skipping detections")
@@ -1951,16 +2018,19 @@ if s06_catalogs:
 
     try:
         if s06b_fof:
-            lines_tab = Table.read(os.path.join(cfg.cwd,f"{cfg.datevshot}_line.fits"),format="fits")
-            if lines_tab is not None:
-                fof_3d_lines_tab = make_3d_friend_table_for_shot(lines_tab, dsky_3D=6.0, dwave=4.0)
+            #line_tab = Table.read(os.path.join(cfg.cwd,f"{cfg.datevshot}_line.fits"),format="fits")
+            line_h5 = tables.open_file(os.path.join(cfg.cwd,f"{cfg.datevshot}_line.h5"))
+            line_tab = Table(line_h5.root.Detections.read())
+            line_h5.close()
+            if line_tab is not None:
+                fof_3d_lines_tab = make_3d_friend_table_for_shot(line_tab, dsky_3D=6.0, dwave=4.0)
                 if fof_3d_lines_tab is not None:
-                    fof_2d_lines_tab = make_2d_friend_table_for_shot(lines_tab, dsky_2D=3.0)
+                    fof_2d_lines_tab = make_2d_friend_table_for_shot(line_tab, dsky_2D=3.0)
 
                     if fof_2d_lines_tab is not None:
-                        lines_cat = join(fof_2d_lines_tab, fof_3d_lines_tab, keys="detectid")
-                        lines_cat["wave_group_id"] = MaskedColumn(lines_cat["wave_group_id"]).filled(0)
-                        lines_cat.rename_column("id", "source_id")
+                        line_cat = join(fof_2d_lines_tab, fof_3d_lines_tab, keys="detectid")
+                        line_cat["wave_group_id"] = MaskedColumn(line_cat["wave_group_id"]).filled(0)
+                        line_cat.rename_column("id", "source_id")
 
                         # add groups back into cont_tab and overwrite
                         line_tab['source_id'] = -1
@@ -1968,8 +2038,9 @@ if s06_catalogs:
 
                         for i in range(len(line_tab)):
                             try:
-                                # find the match in cont_cat
-                                sel = line_cat['detectid'] == line_tab['line_detectid'][i]
+                                # find the match
+                                #sel = line_cat['detectid'] == line_tab['line_detectid'][i]
+                                sel = line_cat['detectid'] == line_tab['detectid'][i]
                                 # should be exactly one
                                 if np.count_nonzero(sel) == 1:
                                     line_tab['source_id'][i] = line_cat['source_id'][sel]
@@ -1977,7 +2048,7 @@ if s06_catalogs:
                                     continue  # this is okay, this has no group, so stands on its own
                                 else:
                                     print(
-                                        f"Error! Unexpected matches ({np.count_nonzero(sel)}) for {line_tab['lin_detectid'][i]}")
+                                        f"Error! Unexpected matches ({np.count_nonzero(sel)}) for {line_tab['detectid'][i]}")
                                     continue
                             except:
                                 print(traceback.format_exc())
@@ -1992,16 +2063,27 @@ if s06_catalogs:
                         for src_id in uniq_src:
                             sel = line_tab['source_id'] == src_id
                             line_tab['sel_det'][sel] = False
-                            idx = np.argmax(line_tab['lineflux'][sel])
-                            line_tab['sel_det'][sel][idx] = True
+                            #idx = np.argmax(line_tab['lineflux'][sel])
+                            idx = np.argmax(line_tab['flux'][sel])
+                            sel_detid = line_tab['detectid'][sel][idx]
+                            line_tab['sel_det'][line_tab['detectid']==sel_detid]=True
+                            #line_tab['sel_det'][sel][idx] = True #this IS isn column:row order, not sure why not working
 
-                        tname = f"{datevshot}_line.fits"
-                        line_tab.write(tname, format="fits", overwrite=True)
+
+                        # tname = f"{cfg.datevshot}_line.fits"
+                        # line_tab.write(tname, format="fits", overwrite=True)
+                        tname = f"{cfg.datevshot}_line_sourcecat.tab"
+                        line_tab.write(tname, format="ascii", overwrite=True)
                         print(f"Updated raw lines table: {os.getcwd()}/{tname}")
 
-                        #todo: minimum select "catalog"
+                        esel = np.array(line_tab['sel_det']==True)
+                        esel = esel & np.array(line_tab['continuum'] >= -3)
+                        esel = esel & np.array(line_tab['sn'] >= 4.8)
+                        esel = esel & np.array(line_tab['chi2'] <= 2.5)
+                        #this is a bit more liberal than standard HETDEX_API
+                        esel = esel & np.array(line_tab['linewidth'] >= 1.2) & np.array(line_tab['linewidth'] <= 16)
 
-
+                        np.savetxt('elixer_line.dets',line_tab['detectid'][esel],fmt="%d")
 
                     else:
                         print("Error! (1) Could not combine lines detections by FoF.")
@@ -2014,7 +2096,14 @@ if s06_catalogs:
         print(traceback.format_exc())
 
     try:
-        cont_tab = Table.read(os.path.join(cfg.cwd,f"{cfg.datevshot}_cont.fits"),format="fits")
+        #cont_tab = Table.read(os.path.join(cfg.cwd,f"{cfg.datevshot}_cont.fits"),format="fits")
+        cont_h5 = tables.open_file(os.path.join(cfg.cwd, f"{cfg.datevshot}_cont.h5"))
+        cont_tab = Table(cont_h5.root.Detections.read())
+        if "contflux" not in cont_tab.columns:
+            cont_tab["contflux"] = [np.nanmedian(cont_h5.root.Spectra.read_where("detectid==x",field="spec1d")[0][200:800])
+                                    for x in cont_tab['detectid']]
+
+        cont_h5.close()
         if cont_tab is not None:
             fof_3d_cont_tab = make_3d_friend_table_for_shot(cont_tab, dsky_3D=6.0, dwave=4.0)
             if fof_3d_cont_tab is not None:
@@ -2029,20 +2118,19 @@ if s06_catalogs:
                     cont_tab['source_id'] = -1
                     cont_tab['sel_det'] = True
 
-                    if "contflux" not in cont_tab.columns:
-                        cont_tab["contflux"] = [np.nanmedian(x[200:800]) for x in cont_tab['obs_fluxd']]
-
                     for i in range(len(cont_tab)):
                         try:
                             #find the match in cont_cat
-                            sel = cont_cat['detectid'] == cont_tab['cont_detectid'][i]
+                            #sel = cont_cat['detectid'] == cont_tab['cont_detectid'][i]
+                            sel = cont_cat['detectid'] == cont_tab['detectid'][i]
                             #should be exactly one
                             if np.count_nonzero(sel) == 1:
                                 cont_tab['source_id'][i] = cont_cat['source_id'][sel]
                             elif np.count_nonzero(sel) == 0:
                                 continue #this is okay, this has no group, so stands on its own
                             else:
-                                print(f"Error! Unexpected matches ({np.count_nonzero(sel)}) for {cont_tab['cont_detectid'][i]}")
+                                #print(f"Error! Unexpected matches ({np.count_nonzero(sel)}) for {cont_tab['cont_detectid'][i]}")
+                                print(f"Error! Unexpected matches ({np.count_nonzero(sel)}) for {cont_tab['detectid'][i]}")
                                 continue
                         except:
                             print(traceback.format_exc())
@@ -2058,12 +2146,20 @@ if s06_catalogs:
                         sel = cont_tab['source_id'] == src_id
                         cont_tab['sel_det'][sel] = False
                         idx = np.argmax(cont_tab['contflux'][sel])
-                        cont_tab['sel_det'][sel][idx] = True
+                        sel_detid = cont_tab['detectid'][sel][idx]
+                        cont_tab['sel_det'][cont_tab['detectid'] == sel_detid] = True
+                        #idx = np.argmax(cont_tab['flux'][sel])
+                        #cont_tab['sel_det'][sel][idx] = True
 
-                    tname = f"{datevshot}_cont.fits"
-                    cont_tab.write(tname, format="fits", overwrite=True)
+                    # tname = f"{cfg.datevshot}_cont.fits"
+                    # cont_tab.write(tname, format="fits", overwrite=True)
+                    tname = f"{cfg.datevshot}_cont_sourcecat.tab"
+                    cont_tab.write(tname, format="ascii", overwrite=True)
                     print(f"Updated raw continuum table: {os.getcwd()}/{tname}")
                     #lastly sub select based on some minimum contflux ??
+
+                    esel = np.array(cont_tab['sel_det'] == True)
+                    np.savetxt('elixer_cont.dets', cont_tab['detectid'][esel],fmt="%d")
 
 
                 else:
