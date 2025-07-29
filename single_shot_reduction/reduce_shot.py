@@ -2082,6 +2082,9 @@ if s06_catalogs:
                         esel = esel & np.array(line_tab['chi2'] <= 2.5)
                         #this is a bit more liberal than standard HETDEX_API (1.6 and 14, I think)
                         esel = esel & np.array(line_tab['linewidth'] >= 1.5) & np.array(line_tab['linewidth'] <= 16)
+                        esel = esel & np.array(line_tab['chi2fib']) <= 4.5 #fairly restrictive
+                                                                           #this is from .mc file column #19
+
 
                         np.savetxt('elixer_line.dets',line_tab['detectid'][esel],fmt="%d")
 
