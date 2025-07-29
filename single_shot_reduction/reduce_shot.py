@@ -2022,6 +2022,17 @@ if s06_catalogs:
             line_h5 = tables.open_file(os.path.join(cfg.cwd,f"{cfg.datevshot}_line.h5"))
             line_tab = Table(line_h5.root.Detections.read())
             line_h5.close()
+
+            #subselect "nominal" good
+            esel = np.array(line_tab['continuum'] >= -3)
+            esel = esel & np.array(line_tab['sn'] >= 4.8)
+            esel = esel & np.array(line_tab['chi2'] <= 2.5)
+            # this is a bit more liberal than standard HETDEX_API (1.6 and 14, I think)
+            esel = esel & np.array(line_tab['linewidth'] >= 1.5) & np.array(line_tab['linewidth'] <= 16)
+            esel = esel & np.array(line_tab['chi2fib'] <= 4.5)  # fairly restrictive, this is from .mc file column #19
+
+            line_tab = line_tab[esel]
+
             if line_tab is not None:
                 fof_3d_lines_tab = make_3d_friend_table_for_shot(line_tab, dsky_3D=6.0, dwave=4.0)
                 if fof_3d_lines_tab is not None:
@@ -2076,16 +2087,7 @@ if s06_catalogs:
                         line_tab.write(tname, format="ascii", overwrite=True)
                         print(f"Updated raw lines table: {os.getcwd()}/{tname}")
 
-                        esel = np.array(line_tab['sel_det']==True)
-                        esel = esel & np.array(line_tab['continuum'] >= -3)
-                        esel = esel & np.array(line_tab['sn'] >= 4.8)
-                        esel = esel & np.array(line_tab['chi2'] <= 2.5)
-                        #this is a bit more liberal than standard HETDEX_API (1.6 and 14, I think)
-                        esel = esel & np.array(line_tab['linewidth'] >= 1.5) & np.array(line_tab['linewidth'] <= 16)
-                        esel = esel & np.array(line_tab['chi2fib']) <= 4.5 #fairly restrictive
-                                                                           #this is from .mc file column #19
-
-
+                        esel = np.array(line_tab['sel_det'] == True)
                         np.savetxt('elixer_line.dets',line_tab['detectid'][esel],fmt="%d")
 
                     else:
