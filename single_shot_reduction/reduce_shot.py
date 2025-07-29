@@ -29,8 +29,12 @@ from dataclasses import dataclass
 
 import tables
 from astropy.table import Table, unique, vstack, join, Column, hstack, MaskedColumn
+from astropy.io import fits
 from h5tools import amp_stats as AmpStats
 import hetdex_tools.fof_kdtree as fof
+
+from elixer import global_config as G
+from elixer import spectrum_utilities as SU
 
 
 #just want the path for hetdex_api (see later)
@@ -119,7 +123,7 @@ if True: #testing
 
     s06_catalogs = True
     s06b_fof = True  # cluster the lines and continuum sources (separately)
-    s06c_diagnose = False  # run Diagnose
+    s06c_diagnose = True  # run Diagnose
     s06d_elixer = False  # run elixer
     s06e_source_cat = False  # make a source catalog
 
@@ -550,6 +554,7 @@ def initial_setup(cfg):
         shutil.copytree(os.path.join(cfg.scriptdir, "getcen"), "getcen", dirs_exist_ok=True)
         shutil.copytree(os.path.join(cfg.scriptdir, "alldet"), "alldet", dirs_exist_ok=True)
         shutil.copytree(os.path.join(cfg.scriptdir, "cs"), "cs", dirs_exist_ok=True)
+        shutil.copytree(os.path.join(cfg.scriptdir, "Diagnose"), "Diagnose", dirs_exist_ok=True)
 
         #update the "home" path tilde
         system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits")
@@ -1763,7 +1768,7 @@ def build_detection_hdf5(cfg):
 
 
     try:
-
+        rc = 0
         detectid_base = np.int64(cfg.datevshot.replace('v', '', )) * np.int64(1e7) + 1000000
         print("Building detections hdf5 ... ")
         #cmd = f"python3 {hetdex_api_path}/h5tools/create_detect_hdf5.py"
@@ -1792,6 +1797,134 @@ def build_detection_hdf5(cfg):
         print(E)
         rc = -1
         print(f"Exception building line detections table:  {cfg.datevshot}")
+
+    return rc
+
+
+def diagnose(cfg):
+    """
+
+    prep and run Diagnose
+
+    all continuum sources
+    all line sources that are brighter than gmag 23 ?
+
+    :param cfg:
+    :return:
+    """
+
+    try:
+        print("Building Diagnose input  ...")
+        os.chdir(os.path.join(cfg.cwd))
+        rc = 0
+        name = f"{cfg.datevshot}_line_sourcecat.tab"
+        line_tab = Table.read(name,format="ascii")
+        line_h5 = tables.open_file(os.path.join(cfg.cwd, f"{cfg.datevshot}_line.h5"))
+
+        if 'gmag' not in line_tab.columns:
+            # subselect ... these do not currently have a gmag, so need to make one (since ELiXer has not run yet)
+            line_tab['gmag'] = 99.0
+
+            for i in range(len(line_tab)):
+                d = line_tab[i]['detectid']
+
+                rows = line_h5.root.Spectra.read_where("detectid==d")
+                if len(rows) != 1:
+                    print(f"Diagnose preselection gmag failure for {d}")
+                    continue
+                row=rows[0]
+                gmag, gmag_unc, *_ = SU.get_best_gmag(row['spec1d']*1e-17,row['spec1d_err']*1e-17,G.CALFIB_WAVEGRID)
+                line_tab['gmag'][i] = gmag
+
+
+            #update
+            line_tab.write(name, format="ascii", overwrite=True)
+            print(f"Updated lines table with gmag: {os.getcwd()}/{name}")
+
+        # now select on gmag < 23
+        sel = np.array(line_tab['gmag'] > 0.0) & np.array(line_tab['gmag'] < 23.0)
+        line_tab = line_tab[sel]
+
+        totN = np.sum(sel)
+        DETECTID = np.array(line_tab['detectid'])
+        RA = np.array(line_tab['ra'])
+        DEC = np.array(line_tab['dec'])
+        GMAG = np.array(line_tab['gmag'])
+        WEIGHT = np.array(line_tab['apcor'])
+
+        RMAG = np.zeros((totN,))
+        IMAG = np.zeros((totN,))
+        ZMAG = np.zeros((totN,))
+        YMAG = np.zeros((totN,))
+        SN = np.zeros((totN,))
+        NAME = np.zeros((totN,))  # np.array(source_spectra['shotid'][sel])
+
+        #re-collect the spec for those selected
+        line_tab['spec'] = np.zeros((len(line_tab),1036))
+        line_tab['spec_err'] = np.zeros((len(line_tab),1036))
+
+        for i in range(len(line_tab)):
+            d = line_tab[i]['detectid']
+
+            rows = line_h5.root.Spectra.read_where("detectid==d")
+            if len(rows) != 1:
+                print(f"Diagnose preselection spectra failure for {d}")
+                continue
+
+
+            line_tab['spec'][i] = rows['spec1d']
+            line_tab['spec_err'][i] = rows['spec1d_err']
+
+        SPEC = np.array(line_tab['spec'])
+        ERROR = np.array(line_tab['spec_err'])
+
+        line_h5.close()
+
+        #now write out the fits file needed for Diagnose
+        outname = 'diagnose_spectra.fits'
+        T = Table([DETECTID, RA, DEC, NAME, GMAG, RMAG, IMAG, ZMAG, YMAG, SN],
+                  names=['detectid', 'RA', 'Dec', 'shotid', 'gmag', 'rmag', 'imag', 'zmag', 'ymag', 'sn'])
+        fits.HDUList([fits.PrimaryHDU(), fits.BinTableHDU(T), fits.ImageHDU(SPEC),
+                      fits.ImageHDU(ERROR), fits.ImageHDU(WEIGHT)]).writeto(outname, overwrite=True)
+
+        #clean up
+        del T
+        del DETECTID
+        del RA
+        del DEC
+        del GMAG
+        del WEIGHT
+        del RMAG
+        del IMAG
+        del ZMAG
+        del YMAG
+        del SN
+        del NAME
+        del SPEC
+        del ERROR
+
+
+
+        #call Diagnose
+        # looks like these count from 0, so -li is inclusive and -hi is not
+        # might have changed to --low_index and --high_index  or --index_filename
+        # --catalog diagnose_spectra.fits
+        # --normalize     this is a switch only, multiplies the flux by some normalization ????#
+        # --quick   #a switch  ... uses saved models?
+        # --suffix    # probably was -s  ... writes out to "classification_XXX.fits" where XXX is the integer --suffix
+        # python3 /work/05350/ecooper/stampede2/Diagnose/diagnose.py diagnose_spectra.fits -li 0 -hi 5 -s 1 -q
+        # ...
+        # python3 /work/05350/ecooper/stampede2/Diagnose/diagnose.py diagnose_spectra.fits -li 385 -hi 389 -s 80 -q
+
+        #Diagnose path is: {cfg.scriptdir}/Diagnose/diagnose.py
+
+    except:
+        print(traceback.format_exc())
+        rc = -1
+        print(f"Exception in Diagnose:  {cfg.datevshot}")
+
+    return rc
+
 
 #
 
@@ -2016,8 +2149,8 @@ if s06_catalogs:
 
     print("Catalog creation ... ")
 
-    try:
-        if s06b_fof:
+    if s06b_fof:
+        try:
             #line_tab = Table.read(os.path.join(cfg.cwd,f"{cfg.datevshot}_line.fits"),format="fits")
             line_h5 = tables.open_file(os.path.join(cfg.cwd,f"{cfg.datevshot}_line.h5"))
             line_tab = Table(line_h5.root.Detections.read())
@@ -2085,7 +2218,7 @@ if s06_catalogs:
                         # line_tab.write(tname, format="fits", overwrite=True)
                         tname = f"{cfg.datevshot}_line_sourcecat.tab"
                         line_tab.write(tname, format="ascii", overwrite=True)
-                        print(f"Updated raw lines table: {os.getcwd()}/{tname}")
+                        print(f"Updated lines source table: {os.getcwd()}/{tname}")
 
                         esel = np.array(line_tab['sel_det'] == True)
                         np.savetxt('elixer_line.dets',line_tab['detectid'][esel],fmt="%d")
@@ -2096,88 +2229,89 @@ if s06_catalogs:
                     print("Error! (2) Could not combine lines detections by FoF.")
             else:
                 print("Error! Could not combine lines detections. Lines table not found.")
-    except:
-        print("Error! Could not combine lines detections by FoF.")
-        print(traceback.format_exc())
+        except:
+            print("Error! Could not combine lines detections by FoF.")
+            print(traceback.format_exc())
 
-    try:
-        #cont_tab = Table.read(os.path.join(cfg.cwd,f"{cfg.datevshot}_cont.fits"),format="fits")
-        cont_h5 = tables.open_file(os.path.join(cfg.cwd, f"{cfg.datevshot}_cont.h5"))
-        cont_tab = Table(cont_h5.root.Detections.read())
-        if "contflux" not in cont_tab.columns:
-            cont_tab["contflux"] = [np.nanmedian(cont_h5.root.Spectra.read_where("detectid==x",field="spec1d")[0][200:800])
-                                    for x in cont_tab['detectid']]
+        try:
+            #cont_tab = Table.read(os.path.join(cfg.cwd,f"{cfg.datevshot}_cont.fits"),format="fits")
+            cont_h5 = tables.open_file(os.path.join(cfg.cwd, f"{cfg.datevshot}_cont.h5"))
+            cont_tab = Table(cont_h5.root.Detections.read())
+            if "contflux" not in cont_tab.columns:
+                cont_tab["contflux"] = [np.nanmedian(cont_h5.root.Spectra.read_where("detectid==x",field="spec1d")[0][200:800])
+                                        for x in cont_tab['detectid']]
 
-        cont_h5.close()
-        if cont_tab is not None:
-            fof_3d_cont_tab = make_3d_friend_table_for_shot(cont_tab, dsky_3D=6.0, dwave=4.0)
-            if fof_3d_cont_tab is not None:
-                fof_2d_cont_tab = make_2d_friend_table_for_shot(cont_tab, dsky_2D=3.0)
+            cont_h5.close()
+            if cont_tab is not None:
+                fof_3d_cont_tab = make_3d_friend_table_for_shot(cont_tab, dsky_3D=6.0, dwave=4.0)
+                if fof_3d_cont_tab is not None:
+                    fof_2d_cont_tab = make_2d_friend_table_for_shot(cont_tab, dsky_2D=3.0)
 
-                if fof_2d_cont_tab is not None:
-                    cont_cat = join(fof_2d_cont_tab, fof_3d_cont_tab, keys="detectid")
-                    cont_cat["wave_group_id"] = MaskedColumn(cont_cat["wave_group_id"]).filled(0)
-                    cont_cat.rename_column("id", "source_id")
+                    if fof_2d_cont_tab is not None:
+                        cont_cat = join(fof_2d_cont_tab, fof_3d_cont_tab, keys="detectid")
+                        cont_cat["wave_group_id"] = MaskedColumn(cont_cat["wave_group_id"]).filled(0)
+                        cont_cat.rename_column("id", "source_id")
 
-                    #add groups back into cont_tab and overwrite
-                    cont_tab['source_id'] = -1
-                    cont_tab['sel_det'] = True
+                        #add groups back into cont_tab and overwrite
+                        cont_tab['source_id'] = -1
+                        cont_tab['sel_det'] = True
 
-                    for i in range(len(cont_tab)):
+                        for i in range(len(cont_tab)):
+                            try:
+                                #find the match in cont_cat
+                                #sel = cont_cat['detectid'] == cont_tab['cont_detectid'][i]
+                                sel = cont_cat['detectid'] == cont_tab['detectid'][i]
+                                #should be exactly one
+                                if np.count_nonzero(sel) == 1:
+                                    cont_tab['source_id'][i] = cont_cat['source_id'][sel]
+                                elif np.count_nonzero(sel) == 0:
+                                    continue #this is okay, this has no group, so stands on its own
+                                else:
+                                    #print(f"Error! Unexpected matches ({np.count_nonzero(sel)}) for {cont_tab['cont_detectid'][i]}")
+                                    print(f"Error! Unexpected matches ({np.count_nonzero(sel)}) for {cont_tab['detectid'][i]}")
+                                    continue
+                            except:
+                                print(traceback.format_exc())
+
+                        #now pick the seldet
+                        uniq_src = sorted(np.unique(cont_tab['source_id']))
                         try:
-                            #find the match in cont_cat
-                            #sel = cont_cat['detectid'] == cont_tab['cont_detectid'][i]
-                            sel = cont_cat['detectid'] == cont_tab['detectid'][i]
-                            #should be exactly one
-                            if np.count_nonzero(sel) == 1:
-                                cont_tab['source_id'][i] = cont_cat['source_id'][sel]
-                            elif np.count_nonzero(sel) == 0:
-                                continue #this is okay, this has no group, so stands on its own
-                            else:
-                                #print(f"Error! Unexpected matches ({np.count_nonzero(sel)}) for {cont_tab['cont_detectid'][i]}")
-                                print(f"Error! Unexpected matches ({np.count_nonzero(sel)}) for {cont_tab['detectid'][i]}")
-                                continue
+                            uniq_src.remove(-1) #exclude/ignore the -1
                         except:
-                            print(traceback.format_exc())
+                            pass
 
-                    #now pick the seldet
-                    uniq_src = sorted(np.unique(cont_tab['source_id']))
-                    try:
-                        uniq_src.remove(-1) #exclude/ignore the -1
-                    except:
-                        pass
+                        for src_id in uniq_src:
+                            sel = cont_tab['source_id'] == src_id
+                            cont_tab['sel_det'][sel] = False
+                            idx = np.argmax(cont_tab['contflux'][sel])
+                            sel_detid = cont_tab['detectid'][sel][idx]
+                            cont_tab['sel_det'][cont_tab['detectid'] == sel_detid] = True
+                            #idx = np.argmax(cont_tab['flux'][sel])
+                            #cont_tab['sel_det'][sel][idx] = True
 
-                    for src_id in uniq_src:
-                        sel = cont_tab['source_id'] == src_id
-                        cont_tab['sel_det'][sel] = False
-                        idx = np.argmax(cont_tab['contflux'][sel])
-                        sel_detid = cont_tab['detectid'][sel][idx]
-                        cont_tab['sel_det'][cont_tab['detectid'] == sel_detid] = True
-                        #idx = np.argmax(cont_tab['flux'][sel])
-                        #cont_tab['sel_det'][sel][idx] = True
+                        # tname = f"{cfg.datevshot}_cont.fits"
+                        # cont_tab.write(tname, format="fits", overwrite=True)
+                        tname = f"{cfg.datevshot}_cont_sourcecat.tab"
+                        cont_tab.write(tname, format="ascii", overwrite=True)
+                        print(f"Updated continuum source table: {os.getcwd()}/{tname}")
+                        #lastly sub select based on some minimum contflux ??
 
-                    # tname = f"{cfg.datevshot}_cont.fits"
-                    # cont_tab.write(tname, format="fits", overwrite=True)
-                    tname = f"{cfg.datevshot}_cont_sourcecat.tab"
-                    cont_tab.write(tname, format="ascii", overwrite=True)
-                    print(f"Updated raw continuum table: {os.getcwd()}/{tname}")
-                    #lastly sub select based on some minimum contflux ??
-
-                    esel = np.array(cont_tab['sel_det'] == True)
-                    np.savetxt('elixer_cont.dets', cont_tab['detectid'][esel],fmt="%d")
+                        esel = np.array(cont_tab['sel_det'] == True)
+                        np.savetxt('elixer_cont.dets', cont_tab['detectid'][esel],fmt="%d")
 
 
+                    else:
+                        print("Error! (1) Could not combine continuum detections by FoF.")
                 else:
-                    print("Error! (1) Could not combine continuum detections by FoF.")
+                    print("Error! (2) Could not combine continuum detections by FoF.")
             else:
-                print("Error! (2) Could not combine continuum detections by FoF.")
-        else:
-            print("Error! Could not combine continuum detections. Continuum table not found.")
+                print("Error! Could not combine continuum detections. Continuum table not found.")
 
-    except:
-        print("Error! Could not combine continuum detections by FoF.")
-        print(traceback.format_exc())
+        except:
+            print("Error! Could not combine continuum detections by FoF.")
+            print(traceback.format_exc())
 
+    #end if s06b_fof
 
     #we now have clustered lines and continuum
     #the additional clustering performed in hetdex_api is overkill or unnecessary here, I think, as this is just
@@ -2188,7 +2322,9 @@ if s06_catalogs:
     #all we REALLY care about at this point is the detectids with matching source_ids
     #we want to roll those in with the original tables and then, for each source_id just
     #  use the one with the highest SNR or lineflux? for lines and the highest continuum for cont sources
+    if s06c_diagnose:
 
+        diagnose(cfg)
 
 
 ##########
