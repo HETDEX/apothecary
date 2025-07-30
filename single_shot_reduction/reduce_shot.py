@@ -45,7 +45,7 @@ import traceback
 ########################################################################
 # CONFIGURATION
 ########################################################################
-EchoCmds = False #if True echo system commands to the log
+EchoCmds = True #if True echo system commands to the log
 FutureShotDateLimit = 20490101000  # do not allow shots after this dave+shot
 ElixerSnrThresh = 4.5 #do not run elixer on line sources where the S/N < 4.5
 
@@ -122,9 +122,9 @@ if True: #testing
     s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_detection_tables | s05e_detection_hdf5  # sanity catch
 
     s06_catalogs = True
-    s06b_fof = True  # cluster the lines and continuum sources (separately)
+    s06b_fof = False  # cluster the lines and continuum sources (separately)
     s06c_diagnose = True  # run Diagnose
-    s06d_elixer = False  # run elixer
+    s06d_elixer = True  # run elixer
     s06e_source_cat = False  # make a source catalog
 
     s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
@@ -542,7 +542,7 @@ def initial_setup(cfg):
 
 
     if not resume:
-        print("Copying source code ...")
+        print(f"Copying source code to working directory {cfg.cwd}...")
         ## if ANY of this fails it is fatal
 
         #shutil.copy2(os.path.join(cfg.scriptdir, "science_reductions", "rsetups"),".") #no, this function is its equivalent
@@ -579,7 +579,14 @@ def initial_setup(cfg):
         #extra files needed
         #vdrp : /work/00115/gebhardt/maverick/fplane ... need the fplane for the date
         os.makedirs(os.path.join(cfg.cwd,"vdrp/fplane"), exist_ok=True)
-        shutil.copy2(os.path.join(karlfplane, f"fp{cfg.datevshot[0:8]}"), os.path.join(cfg.cwd,"vdrp/fplane"))
+
+
+        if os.path.exists(os.path.join(karlfplane, f"fp{cfg.datevshot[0:8]}")):
+            shutil.copy2(os.path.join(karlfplane, f"fp{cfg.datevshot[0:8]}"), os.path.join(cfg.cwd,"vdrp/fplane"))
+        else:
+            lastknown = "fp20240731"
+            print(f"!!! WARNING !!! fplane file (fp{cfg.datevshot[0:8]}) not found. Using last known ({lastknown}) instead !!!")
+            shutil.copy2(os.path.join(karlfplane, f"{lastknown}"), os.path.join(cfg.cwd, f"vdrp/fplane/fp{cfg.datevshot[0:8]}"))
 
         #fix paths in the . cfg files
         system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# vdrp/vdrp.config")
@@ -607,8 +614,22 @@ def initial_setup(cfg):
         #vdrp: need the runshifts for the shot (from karlgettar)
         #e.g. run_shifts.sh 20240730 009 16.317927 33.689304 1
         # (formerly, this was the "clean_rta" script
-        rta_date, rta_shot, rta_ra, rta_dec, rta_v = np.loadtxt(os.path.join(karlgettar,f"rta.{cfg.datevshot[0:6]}"),
+
+        if os.path.exists(os.path.join(karlgettar,f"rta.{cfg.datevshot[0:6]}")):
+           rta_date, rta_shot, rta_ra, rta_dec, rta_v = np.loadtxt(os.path.join(karlgettar,f"rta.{cfg.datevshot[0:6]}"),
                                                                 usecols=[1,2,3,4,5],unpack=True,dtype=str)
+        else:
+            if 202407 < int(cfg.datevshot[0:6]) <= 202412:
+                rtafn = os.path.join(karlgettar,f"rta.202488")
+            elif int(cfg.datevshot[0:6]) >= 202500:
+                rtafn = os.path.join(karlgettar, f"rta.202500")
+            else:
+                #should not happen
+                Quit(cfg,-1,"Fatal. Cannot locate suitable rta file")
+
+            rta_date, rta_shot, rta_ra, rta_dec, rta_v = np.loadtxt(rtafn,
+                                                                usecols=[1, 2, 3, 4, 5], unpack=True, dtype=str)
+
         sel = (rta_date == cfg.datevshot[0:8]) * (rta_shot == cfg.datevshot[-3:])
         with open(os.path.join(cfg.cwd,f"vdrp/shifts/rta.{cfg.datevshot[0:6]}"),"w") as f:
             for d,s,ra,dec,v in zip(rta_date[sel], rta_shot[sel], rta_ra[sel], rta_dec[sel], rta_v[sel]):
@@ -1814,14 +1835,18 @@ def diagnose(cfg):
     """
 
     try:
-        print("Building Diagnose input  ...")
+
         os.chdir(os.path.join(cfg.cwd))
         rc = 0
+
+        print("Building Diagnose input (emission lines)  ...")
         name = f"{cfg.datevshot}_line_sourcecat.tab"
         line_tab = Table.read(name,format="ascii")
         line_h5 = tables.open_file(os.path.join(cfg.cwd, f"{cfg.datevshot}_line.h5"))
 
+        #reminder: if fof clustering re-runs (the step before this one), the gmag will be wiped out
         if 'gmag' not in line_tab.columns:
+            print("Computing gmags ...")
             # subselect ... these do not currently have a gmag, so need to make one (since ELiXer has not run yet)
             line_tab['gmag'] = 99.0
 
@@ -1845,12 +1870,13 @@ def diagnose(cfg):
         sel = np.array(line_tab['gmag'] > 0.0) & np.array(line_tab['gmag'] < 23.0)
         line_tab = line_tab[sel]
 
+
         totN = np.sum(sel)
         DETECTID = np.array(line_tab['detectid'])
         RA = np.array(line_tab['ra'])
         DEC = np.array(line_tab['dec'])
         GMAG = np.array(line_tab['gmag'])
-        WEIGHT = np.array(line_tab['apcor'])
+        #WEIGHT = np.array(line_tab['apcor'])
 
         RMAG = np.zeros((totN,))
         IMAG = np.zeros((totN,))
@@ -1860,8 +1886,11 @@ def diagnose(cfg):
         NAME = np.zeros((totN,))  # np.array(source_spectra['shotid'][sel])
 
         #re-collect the spec for those selected
-        line_tab['spec'] = np.zeros((len(line_tab),1036))
-        line_tab['spec_err'] = np.zeros((len(line_tab),1036))
+        #line_tab['spec'] = np.zeros((len(line_tab),1036))
+        #line_tab['spec_err'] = np.zeros((len(line_tab),1036))
+        spec_2D = []
+        error_2D = []
+        apcor = []
 
         for i in range(len(line_tab)):
             d = line_tab[i]['detectid']
@@ -1869,19 +1898,30 @@ def diagnose(cfg):
             rows = line_h5.root.Spectra.read_where("detectid==d")
             if len(rows) != 1:
                 print(f"Diagnose preselection spectra failure for {d}")
+                spec_2D.append(np.zeros(1036))
+                error_2D.append(np.zeros(1036))
+                apcor.append(np.zeros(1036))
                 continue
 
+            row = rows[0]
+            #line_tab['spec'][i] = rows['spec1d']
+            #line_tab['spec_err'][i] = rows['spec1d_err']
+            spec_2D.append(row['spec1d'])
+            error_2D.append(row['spec1d_err'])
+            apcor.append(row['apcor'])
 
-            line_tab['spec'][i] = rows['spec1d']
-            line_tab['spec_err'][i] = rows['spec1d_err']
-
-        SPEC = np.array(line_tab['spec'])
-        ERROR = np.array(line_tab['spec_err'])
+        #SPEC = np.array(line_tab['spec'])
+        #ERROR = np.array(line_tab['spec_err'])
+        SPEC = np.array(spec_2D)
+        ERROR = np.array(error_2D)
+        WEIGHT = np.array(apcor)
 
         line_h5.close()
 
+        num_spectra = len(SPEC)
+
         #now write out the fits file needed for Diagnose
-        outname = 'diagnose_spectra.fits'
+        outname = 'diagnose_spectra_line.fits'
         T = Table([DETECTID, RA, DEC, NAME, GMAG, RMAG, IMAG, ZMAG, YMAG, SN],
                   names=['detectid', 'RA', 'Dec', 'shotid', 'gmag', 'rmag', 'imag', 'zmag', 'ymag', 'sn'])
         fits.HDUList([fits.PrimaryHDU(), fits.BinTableHDU(T), fits.ImageHDU(SPEC),
@@ -1903,9 +1943,7 @@ def diagnose(cfg):
         del SPEC
         del ERROR
 
-
-
-        #call Diagnose
+        #call Diagnose' needs sklearn
         # looks like these count from 0, so -li is inclusive and -hi is not
         # might have changed to --low_index and --high_index  or --index_filename
         # --catalog diagnose_spectra.fits
@@ -1913,15 +1951,227 @@ def diagnose(cfg):
         # --quick   #a switch  ... uses saved models?
         # --suffix    # probably was -s  ... writes out to "classification_XXX.fits" where XXX is the integer --suffix
         # python3 /work/05350/ecooper/stampede2/Diagnose/diagnose.py diagnose_spectra.fits -li 0 -hi 5 -s 1 -q
-        # ...
-        # python3 /work/05350/ecooper/stampede2/Diagnose/diagnose.py diagnose_spectra.fits -li 385 -hi 389 -s 80 -q
 
         #Diagnose path is: {cfg.scriptdir}/Diagnose/diagnose.py
+        print(f"Running Diagnose on {num_spectra} gmag bright emission line sources ...")
+        cmd = f"python3 {cfg.scriptdir}/Diagnose/diagnose.py"
+        cmd += f" {outname} -li 0 -hi {num_spectra} -s 0 -q"
+
+        system_command(cfg, cmd)
+
+        print("Building Diagnose input (continuum)  ...")
+        name = f"{cfg.datevshot}_cont_sourcecat.tab"
+        cont_tab = Table.read(name, format="ascii")
+        cont_h5 = tables.open_file(os.path.join(cfg.cwd, f"{cfg.datevshot}_cont.h5"))
+
+        if 'gmag' not in cont_tab.columns:
+            print("Computing gmags ...")
+            # subselect ... these do not currently have a gmag, so need to make one (since ELiXer has not run yet)
+            cont_tab['gmag'] = 99.0
+
+            for i in range(len(cont_tab)):
+                d = cont_tab[i]['detectid']
+
+                rows = cont_h5.root.Spectra.read_where("detectid==d")
+                if len(rows) != 1:
+                    print(f"Diagnose preselection gmag failure for {d}")
+                    continue
+                row=rows[0]
+                gmag, gmag_unc, *_ = SU.get_best_gmag(row['spec1d']*1e-17,row['spec1d_err']*1e-17,G.CALFIB_WAVEGRID)
+                cont_tab['gmag'][i] = gmag
+
+
+            #update
+            cont_tab.write(name, format="ascii", overwrite=True)
+            print(f"Updated lines table with gmag: {os.getcwd()}/{name}")
+
+        totN = len(cont_tab)
+        DETECTID = np.array(cont_tab['detectid'])
+        RA = np.array(cont_tab['ra'])
+        DEC = np.array(cont_tab['dec'])
+        GMAG = np.array(cont_tab['gmag'])
+
+
+        RMAG = np.zeros((totN,))
+        IMAG = np.zeros((totN,))
+        ZMAG = np.zeros((totN,))
+        YMAG = np.zeros((totN,))
+        SN = np.zeros((totN,))
+        NAME = np.zeros((totN,))  # np.array(source_spectra['shotid'][sel])
+
+        # re-collect the spec for those selected
+        spec_2D = []
+        error_2D = []
+        apcor = []
+
+        for i in range(len(cont_tab)):
+            d = cont_tab[i]['detectid']
+
+            rows = cont_h5.root.Spectra.read_where("detectid==d")
+            if len(rows) != 1:
+                print(f"Diagnose preselection spectra failure for {d}")
+                spec_2D.append(np.zeros(1036))
+                error_2D.append(np.zeros(1036))
+                apcor.append(np.zeros(1036))
+                continue
+
+            row = rows[0]
+
+            spec_2D.append(row['spec1d'])
+            error_2D.append(row['spec1d_err'])
+            apcor.append(row['apcor'])
+
+        SPEC = np.array(spec_2D)
+        ERROR = np.array(error_2D)
+        WEIGHT = np.array(apcor)
+
+        cont_h5.close()
+
+        num_spectra = len(SPEC)
+
+        # now write out the fits file needed for Diagnose
+        outname = 'diagnose_spectra_cont.fits'
+        T = Table([DETECTID, RA, DEC, NAME, GMAG, RMAG, IMAG, ZMAG, YMAG, SN],
+                  names=['detectid', 'RA', 'Dec', 'shotid', 'gmag', 'rmag', 'imag', 'zmag', 'ymag', 'sn'])
+        fits.HDUList([fits.PrimaryHDU(), fits.BinTableHDU(T), fits.ImageHDU(SPEC),
+                      fits.ImageHDU(ERROR), fits.ImageHDU(WEIGHT)]).writeto(outname, overwrite=True)
+
+        # clean up
+        del T
+        del DETECTID
+        del RA
+        del DEC
+        del GMAG
+        del WEIGHT
+        del RMAG
+        del IMAG
+        del ZMAG
+        del YMAG
+        del SN
+        del NAME
+        del SPEC
+        del ERROR
+
+        # call Diagnose' needs sklearn
+
+        # Diagnose path is: {cfg.scriptdir}/Diagnose/diagnose.py
+        print(f"Running Diagnose on {num_spectra} continuum sources ...")
+        cmd = f"python3 {cfg.scriptdir}/Diagnose/diagnose.py"
+        cmd += f" {outname} -li 0 -hi {num_spectra} -s 1 -q"
+
+        system_command(cfg, cmd)
+
 
     except:
         print(traceback.format_exc())
         rc = -1
         print(f"Exception in Diagnose:  {cfg.datevshot}")
+
+    return rc
+
+
+def diagnose_output_to_table(cfg):
+    """
+
+    mostly lifted from Erin's notebook ("add_z_diagnose")
+
+    :param cfg:
+    :return:
+    """
+
+
+    try:
+
+        print(f"Converting Diagnose output to table...")
+        os.chdir(os.path.join(cfg.cwd))
+
+        rc = 0
+        i = 0
+
+        colnames = ['detectid', 'RA', 'Dec', 'shotid', 'gmag', 'chi2_star',
+                    'chi2_galaxy', 'chi2_qso', 'z_star', 'z_galaxy', 'z_qso', 'z_best',
+                    'classification', 'stellartype']
+        format_dict = {'RA': '%0.6f', 'Dec': '%0.6f', 'gmag': '%0.3f', 'z_star': '%0.8f', 'z_galaxy': '%0.5f',
+                       'z_qso': '%0.5f', 'chi2_star': '%0.3f', 'chi2_galaxy': '%0.3f',
+                       'chi2_qso': '%0.3f', 'z_best': '%0.8f'}
+
+        #_000.fits are the emission line dets, _001.fits are the continuum sources
+        filenames = [
+            "classification_000.fits",
+            "classification_001.fits"
+            ]
+
+        N = fits.open(filenames[0])[2].shape[0] + fits.open(filenames[1])[2].shape[0]
+        t = fits.open(filenames[0])[6].data
+
+        detectid, RA, Dec, shotid, gmag, rmag = [[t[name][0]] * N for name in
+                                                 ['detectid', 'RA', 'Dec', 'shotid', 'gmag', 'rmag']]
+
+        chi2_star, chi2_galaxy, chi2_qso = ([1.] * N, [1.] * N, [1.] * N)
+        z_star, z_galaxy, z_qso, z_best = ([0.] * N, [0.] * N, [0.] * N, [0.] * N)
+        classification, stellartype = (['GALAXY'] * N, [''] * N)
+
+        del t
+
+        for fn in filenames:
+            print('Working on %s' % fn)
+            f = fits.open(fn)
+            l = f[1].shape[0]
+
+            #print(i, i + l)
+            detectid[i:i + l] = f[6].data['detectid']
+            RA[i:i + l] = f[6].data['RA']
+            Dec[i:i + l] = f[6].data['Dec']
+            shotid[i:i + l] = f[6].data['shotid']
+            gmag[i:i + l] = f[6].data['gmag']
+
+            chi2_star[i:i + l] = f['chi2'].data[:, 0]
+            chi2_galaxy[i:i + l] = f['chi2'].data[:, 1]
+            chi2_qso[i:i + l] = f['chi2'].data[:, 2]
+            f['zs'].data[:, 0] = f['zs'].data[:, 0] / 2.99798e8
+            z_star[i:i + l] = f['zs'].data[:, 0]
+            z_galaxy[i:i + l] = f['zs'].data[:, 1]
+            z_qso[i:i + l] = f['zs'].data[:, 2]
+            best_ind = np.array(f['class'].data, dtype=int) - 1
+            zbest = np.ones((l,)) * -999.
+            for j in np.arange(3):
+                sel = np.where(best_ind == j)[0]
+                zbest[sel] = f['zs'].data[sel, j]
+            z_best[i:i + l] = zbest
+            class_label = np.array(['UNKNOWN'] * l)
+            for j, label in zip(np.arange(4), ['STAR', 'GALAXY', 'QSO', 'UNKNOWN']):
+                sel = np.where(best_ind == j)[0]
+                class_label[sel] = label
+            classification[i:i + l] = class_label
+
+            try:
+                stellartype[i:i + l] = np.array(f[5].data).astype(str)
+            except:
+                stellartypes = []
+                for item in np.array(f[5].data):
+                    try:
+                        stellartypes.append(item[0].astype(str))
+                    except:
+                        #print(item[0])
+                        stellartypes.append(' ')
+                stellartype[i:i + l] = stellartypes
+            # print(np.unique( f[5].data))
+            i += l
+            # print(i, detectid[-1])
+
+        Td = Table([detectid, RA, Dec, shotid, gmag, chi2_star,
+                    chi2_galaxy, chi2_qso, z_star, z_galaxy, z_qso, z_best,
+                    classification, stellartype], names=colnames)
+
+        Td.write("diagnose_classifications.tab",format="ascii",overwrite=True)
+
+        print(f"Wrote: diagnose_classifications.tab")
+
+    except:
+        print(traceback.format_exc())
+        rc = -1
+        print(f"Exception in Diagnose_output_to_table:  {cfg.datevshot}")
+
 
     return rc
 
@@ -2324,7 +2574,19 @@ if s06_catalogs:
     #  use the one with the highest SNR or lineflux? for lines and the highest continuum for cont sources
     if s06c_diagnose:
 
-        diagnose(cfg)
+        rc = diagnose(cfg)
+
+        if rc != 0:
+            print("Diagnose: Limited success. Non-fatal. Will continue")
+
+        rc = diagnose_output_to_table(cfg)
+        if rc != 0:
+            print("Diagnose conversion: Limited success. Non-fatal. Will continue")
+
+
+    if s06d_elixer:
+
+        print(f"*** todo: build up elixer call ")
 
 
 ##########
