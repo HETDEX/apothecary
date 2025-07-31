@@ -28,7 +28,7 @@ import shutil
 from dataclasses import dataclass
 
 import tables
-from astropy.table import Table, unique, vstack, join, Column, hstack, MaskedColumn
+from astropy.table import Table, join, Column, MaskedColumn # unique, vstack, hstack
 from astropy.io import fits
 from h5tools import amp_stats as AmpStats
 import hetdex_tools.fof_kdtree as fof
@@ -97,12 +97,12 @@ s06e_source_cat = True #make a source catalog
 
 s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
 
-if True: #testing
+if False: #testing
     print("#################### TESTING ##########################")
     # execute steps
-    s01_run1s = False
+    s01_run1s = True
 
-    s02_vdrp = False
+    s02_vdrp = True
     do_panstarrs = False  # only run PanSTARRS if true, otherwise just run the usual GAIA and SDSS
 
     s03_fluxcal = False
@@ -121,10 +121,10 @@ if True: #testing
     s05e_detection_hdf5 = False
     s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_detection_tables | s05e_detection_hdf5  # sanity catch
 
-    s06_catalogs = True
+    s06_catalogs = False
     s06b_fof = False  # cluster the lines and continuum sources (separately)
-    s06c_diagnose = True  # run Diagnose
-    s06d_elixer = True  # run elixer
+    s06c_diagnose = False  # run Diagnose
+    s06d_elixer = False  # run elixer
     s06e_source_cat = False  # make a source catalog
 
     s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
