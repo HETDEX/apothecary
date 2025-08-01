@@ -40,12 +40,29 @@ py_workdir = os.path.join(os.environ['LAUNCHER_WORKDIR'],f"pylauncher_tmp{str(pi
 if os.path.isdir(py_workdir): #already exists (this holds control info for pylauncher)
   # this could be a second call from the same slurm OR an unfortunate coincidence from an earlier run
   # either way, pylauncher.ClassicLauncher will abend, so, delete the directory before continuuing
-  print(f"{py_workdir} already exits. Removing ...")
-  files = glob.glob(f"{py_workdir}/*")
-  for f in files:
-    os.remove(f)
-  shutil.rmtree(py_workdir)
-  print(f"{py_workdir} Removed.")
+
+
+
+  #find a name to save
+  i = 1
+  while os.path.isdir(py_workdir+"."+str(i).zfill(4)):
+      i += 1
+
+  #ostensibly, we have the new one
+  if os.path.isdir(py_workdir + "." + str(i).zfill(4)):
+    #reset to the top
+    i = 1
+    py_workdir_saved = py_workdir + "." + str(i).zfill(4)
+    print(f"{py_workdir_saved} already exits. Replacing ...")
+    files = glob.glob(f"{py_workdir_saved}/*")
+    for f in files:
+        os.remove(f)
+    shutil.rmtree(py_workdir_saved)
+    print(f"{py_workdir_saved} Removed.")
+
+  os.rename(py_workdir, py_workdir_saved)
+
+
 
 #slurm_node = os.environ['']
 
@@ -129,8 +146,28 @@ else: #cores per node from the environment
 #clean up after
 if os.path.isdir(py_workdir):
   print(f"{py_workdir} Cleaning up ...")
-  files = glob.glob(f"{py_workdir}/*")
-  for f in files:
-    os.remove(f)
-  shutil.rmtree(py_workdir)
-  print(f"{py_workdir} Removed.")
+
+  # find a name to save
+  i = 1
+  while os.path.isdir(py_workdir + "." + str(i).zfill(4)):
+      i += 1
+
+  # ostensibly, we have the new one
+  if os.path.isdir(py_workdir + "." + str(i).zfill(4)):
+      # reset to the top
+      i = 1
+      py_workdir_saved = py_workdir + "." + str(i).zfill(4)
+      print(f"{py_workdir_saved} already exits. Replacing ...")
+      files = glob.glob(f"{py_workdir_saved}/*")
+      for f in files:
+          os.remove(f)
+      shutil.rmtree(py_workdir_saved)
+      print(f"{py_workdir_saved} Removed.")
+
+  os.rename(py_workdir, py_workdir_saved)
+
+  # files = glob.glob(f"{py_workdir}/*")
+  # for f in files:
+  #   os.remove(f)
+  # shutil.rmtree(py_workdir)
+  # print(f"{py_workdir} Removed.")
