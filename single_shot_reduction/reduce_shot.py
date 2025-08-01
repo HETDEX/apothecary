@@ -84,10 +84,10 @@ s04_sky_subtraction = s04_sky_subtraction | s04b_rfft | s04c_rcal_all | s04d_sho
 s05_detection = True
 s05b_rdet_rf1 = True
 s05c_rgetmax = True
-s05d_detection_tables = True
+# s05d_detection_tables = False  #builds as fits files... this is replaced by the hdf5 version
 s05e_detection_hdf5 = True
-s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_detection_tables | s05e_detection_hdf5 #sanity catch
-
+s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05e_detection_hdf5 #sanity catch
+#s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_detection_tables | s05e_detection_hdf5 #sanity catch
 
 s06_catalogs = True
 s06b_fof = True      #cluster the lines and continuum sources (separately)
@@ -97,15 +97,15 @@ s06e_source_cat = True #make a source catalog
 
 s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
 
-if False: #testing
+if True: #testing
     print("#################### TESTING ##########################")
     # execute steps
-    s01_run1s = True
+    s01_run1s = False
 
-    s02_vdrp = True
+    s02_vdrp = False
     do_panstarrs = False  # only run PanSTARRS if true, otherwise just run the usual GAIA and SDSS
 
-    s03_fluxcal = False
+    s03_fluxcal = True
 
     s04_sky_subtraction = False
     s04b_rfft = False
@@ -117,9 +117,10 @@ if False: #testing
     s05_detection = False
     s05b_rdet_rf1 = False
     s05c_rgetmax = False
-    s05d_detection_tables = False
+    #s05d_detection_tables = False  #builds as fits files... this is replaced by the hdf5 version
     s05e_detection_hdf5 = False
-    s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_detection_tables | s05e_detection_hdf5  # sanity catch
+   # s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_detection_tables | s05e_detection_hdf5  # sanity catch
+    s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05e_detection_hdf5  # sanity catch
 
     s06_catalogs = False
     s06b_fof = False  # cluster the lines and continuum sources (separately)
@@ -830,7 +831,8 @@ def vdrp_check_shout_ifu(cfg):
                 print(f"{basedir} : small shout.ifu ({stats.st_size})")
                 rc = -1
 
-        except Exception as E:
+        except:
+            print(traceback.format_exc())
             print(f"{basedir} : unknown or missing shout.ifu")
 
     if rc != 0:
@@ -872,8 +874,8 @@ def vdrp_cp2dithall(cfg,catalog=None):
                 with open(outfn, "w+") as f2:
                     for line in f1:
                         f2.write(line)
-        except Exception as E:
-            print(E)
+        except:
+            print(traceback.format_exc())
             rc = -1
 
     if rc != 0:
@@ -998,6 +1000,9 @@ def run_fluxcalibration(cfg,star_catalog='sdss'):
     :param cfg:
     :return:
     """
+
+    # NOTICE: this operates under two directories ... there is a second directory change partway down
+
     print("flux calibration (rallcal) ... ")
 
     #setup the softlink for the star_catalog
@@ -1012,14 +1017,20 @@ def run_fluxcalibration(cfg,star_catalog='sdss'):
 
     os.chdir(os.path.join(cfg.cwd,"detect"))
 
+    #copy dithal to detect dir so can be softlinked in rsp3fc
+    #this is for use under Karl's rsetstar ... in rsp3fc a softlink is created for this .dithall file
+    #under the /tmp/rsXXXX working dir for rsetstar (really ~gebhardt/bin/fitradecsp)
+    #s|t if the usual .dithall for the datevshot under /scratch/projects/hetdex/detect is NOT found (e.g. we are post-HETDEX)
+    #then it will default to the local.dithall
+    if len(glob.glob("*.dithall") > 0):
+        system_command(cfg, f"unlink *.dithall")
+    system_command(cfg, f"ln -s {os.path.join(cfg.cwd, 'vdrp/shifts/dithall/*.dithall')} .")
 
     #call rsetstar independently
     system_command(cfg, f"rsetstar {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} {star_catalog}")
 
-
     #no longer includes rsetstar
     system_command(cfg,f"rallcal {cfg.datevshot[0:8]} {cfg.datevshot[-3:]}")
-
 
     return 0
 
@@ -1032,6 +1043,8 @@ def check_fluxcalibration(cfg):
     """
     print("todo: check flux calibration ... ")
     rc = 0
+    os.chdir(os.path.join(cfg.cwd, "detect"))
+
     #todo: if tp/*setp_.dat is "bad" (last columns all zero)
     #      the try with a different star catalog ... e.g.
     #      by default, SDSS is used for calibration, but if that fails
@@ -1048,8 +1061,8 @@ def check_fluxcalibration(cfg):
             rc = -1
             print(f"bad throughput {cfg.datevshot}")
 
-    except Exception as E:
-        print(E)
+    except:
+        print(traceback.format_exc())
         rc = -1
         print(f"bad throughput {cfg.datevshot}")
 
@@ -1080,8 +1093,8 @@ def run_make_ifucen(cfg):
         else:
             rc = -1
 
-    except Exception as E:
-        print(E)
+    except:
+        print(traceback.format_exc())
         rc = -1
         print(f"failed to get IFU centers:  {cfg.datevshot}")
 
@@ -1125,8 +1138,8 @@ def run_rfft(cfg):
                     rc = -1 #even though this is fatal, go ahead and loop over all files and expXX so can get into the log
                             #could be a useful diagnoistic
 
-    except Exception as E:
-        print(E)
+    except:
+        print(traceback.format_exc())
         rc = -1
         print(f"failed to get IFU centers:  {cfg.datevshot}")
 
@@ -1184,8 +1197,8 @@ def run_rcal(cfg):
             print(f"Mixed results of {len(ras)}: {len(passed_rcal_list)} pass, {len(failed_rcal_list)} FAIL")
 
 
-    except Exception as E:
-        print(E)
+    except:
+        print(traceback.format_exc())
         rc = -1
         print(f"Fatal exception in run_rcal:  {cfg.datevshot}")
 
@@ -1275,8 +1288,8 @@ def rdet_rf1(cfg):
                 print(f"All failed. Will not attempt full re-run.")
 
 
-    except Exception as E:
-        print(E)
+    except:
+        print(traceback.format_exc())
         rc = -1
         print(f"Fatal exception in rdet_rf1:  {cfg.datevshot}")
 
@@ -1322,8 +1335,8 @@ def rgetmax(cfg):
             print(f"Continuum detections fail. Not fatal. cs/spec/{cfg.datevshot}cs.tar not created.")
 
 
-    except Exception as E:
-        print(E)
+    except:
+        print(traceback.format_exc())
         rc = -1
         print(f"Fatal exception in rdet_rf1:  {cfg.datevshot}")
 
@@ -1464,8 +1477,8 @@ def build_shot_h5(cfg):
 
         print(f"Done: {cfg.cwd}/{cfg.datevshot}.h5")
 
-    except Exception as E:
-        print(E)
+    except:
+        print(traceback.format_exc())
         rc = -1
         print(f"Could not build hdf5 shot file for  {cfg.datevshot}")
 
@@ -1523,8 +1536,8 @@ def amp_stats(cfg,shot_h5_fqfn=None):
             rc = -1
 
 
-    except Exception as E:
-        print(E)
+    except:
+        print(traceback.format_exc())
         rc = -1
         print(f"Could produce amp statistics for:  {cfg.datevshot}")
 
@@ -1700,8 +1713,8 @@ def build_detection_tables(cfg):
         T.write(tname,format="fits",overwrite=True)
         print(f"Wrote raw lines table: {os.getcwd()}/{tname}")
 
-    except Exception as E:
-        print(E)
+    except:
+        print(traceback.format_exc())
         rc = -1
         print(f"Exception building line detections table:  {cfg.datevshot}")
 
@@ -1769,8 +1782,8 @@ def build_detection_tables(cfg):
         T.write(tname, format="fits", overwrite=True)
         print(f"Wrote raw continuum table: {os.getcwd()}/{tname}")
 
-    except Exception as E:
-        print(E)
+    except:
+        print(traceback.format_exc())
         rc = -1
         print(f"Exception building line detections table:  {cfg.datevshot}")
 #end build_detection_tables
@@ -1814,8 +1827,8 @@ def build_detection_hdf5(cfg):
 
         system_command(cfg, cmd)
 
-    except Exception as E:
-        print(E)
+    except:
+        print(traceback.format_exc())
         rc = -1
         print(f"Exception building line detections table:  {cfg.datevshot}")
 
@@ -2377,8 +2390,8 @@ if s05_detection:
         print("skipping rgetmax (continuum detection)")
 
 
-    if s05d_detection_tables:
-        rc = build_detection_tables(cfg)
+    # if s05d_detection_tables:
+    #     rc = build_detection_tables(cfg)
 
     if s05e_detection_hdf5:
         rc = build_detection_hdf5(cfg)
