@@ -25,6 +25,7 @@ import sys
 import os
 import glob
 import shutil
+from pathlib import Path
 from dataclasses import dataclass
 
 import tables
@@ -61,6 +62,7 @@ HETRaw = "/corral-repl/utexas/Hobby-Eberly-Telesco/het_raw/"
 karlgettar = "/work/00115/gebhardt/maverick/gettar/"
 karlfplane = "/work/00115/gebhardt/maverick/fplane/"
 karlhome = "/home1/00115/gebhardt"
+red1path = "/scratch/03261/polonius/red1/reductions/"
 hetdex_api_path = os.path.dirname(importlib.util.find_spec("hetdex_api").origin)
 #there is an extra "hetdex_api" at the end that points into the lower level directory for that. h5tools is actually a sibling
 hetdex_api_path = "/".join(hetdex_api_path.split("/")[0:-1])
@@ -991,6 +993,47 @@ def check_vdrp(cfg):
     """
     print("todo: check vdrp ... ")
     return 0
+
+
+
+def prepare_reduction_dir(cfg):
+    """
+    basically create the expected paths and copy the reduction (multi*fits) files
+    where they are expected
+
+    :param cfg:
+    :return:
+    """
+
+    try:
+        rc = 0
+
+        os.chdir(cfg.cwd)
+        expdirs = glob.glob("d20*exp??")
+
+        #/scratch/03261/polonius/red1/reductions/20241021/virus/virus0000007/exp01/virus/multi_501_080_012_RL.fits
+
+        for expdir in expdirs:
+            exp = os.path.basename(expdir)[-5:]
+            virus_shot = "virus0000" + os.path.basename(expdir)[-8:-5]
+            date = cfg.datevshot[0:8]
+            datadir = os.path.join(red1path,f"{date}/virus/{virus_shot}/{exp}/virus")
+            tarfile = f"d{cfg.datevshot[0:8]}s{cfg.datevshot[-3:]}{exp}_mu.tar"
+
+            print(f"Creating directory and untarring ({expdir}/{tarfile}) multi*fits to: {datadir}")
+
+            Path(datadir).mkdir(parents=True, exist_ok=True)
+
+            cmd = f"tar -xvf {expdir}/{tarfile} -C {datadir}"
+            system_command(cfg,cmd)
+
+
+    except:
+        print(traceback.format_exc())
+        rc = -1
+        print(f"Fatal. Could not prepare reductions directory.")
+
+    return rc
 
 
 
@@ -2229,7 +2272,6 @@ if rc < 0:
 # after the initial setup, move stdout and stderr to a log file
 #########
 
-print(f"Starting reduction {cfg.datevshot} ... ")
 
 #cfg.orig_stdout = sys.stdout
 #cfg.orig_stderr = sys.stderr
@@ -2279,6 +2321,10 @@ else:
 ###########
 
 if s03_fluxcal:
+
+    #first need to prepare the reduction directory where the downstream code looks for the multi*fits
+    if prepare_reduction_dir(cfg) < 0:
+        Quit(cfg, -1, "FATAL. Could not untar multi*fits to reduction directory.")
 
     star_cat_list = [] #keep the order
 
