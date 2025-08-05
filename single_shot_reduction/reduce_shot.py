@@ -27,6 +27,7 @@ import glob
 import shutil
 from pathlib import Path
 from dataclasses import dataclass
+import tarfile as tar
 
 import tables
 from astropy.table import Table, join, Column, MaskedColumn # unique, vstack, hstack
@@ -36,6 +37,7 @@ import hetdex_tools.fof_kdtree as fof
 
 from elixer import global_config as G
 from elixer import spectrum_utilities as SU
+from elixer import utilities as Utils
 
 
 #just want the path for hetdex_api (see later)
@@ -58,11 +60,13 @@ LocalScriptRepo = "./local_script_repo" #useful if running multiple single shots
 
 WorkDirRoot = "./"
 
-HETRaw = "/corral-repl/utexas/Hobby-Eberly-Telesco/het_raw/"
+HETRaw_archive = "/corral-repl/utexas/Hobby-Eberly-Telesco/het_raw/"
+HET_by_date = "/work/03946/hetdex/maverick/"
 karlgettar = "/work/00115/gebhardt/maverick/gettar/"
 karlfplane = "/work/00115/gebhardt/maverick/fplane/"
 karlhome = "/home1/00115/gebhardt"
 red1path = "/scratch/03261/polonius/red1/reductions/"
+hetdex_projects_path = "/scratch/projects/hetdex/"
 hetdex_api_path = os.path.dirname(importlib.util.find_spec("hetdex_api").origin)
 #there is an extra "hetdex_api" at the end that points into the lower level directory for that. h5tools is actually a sibling
 hetdex_api_path = "/".join(hetdex_api_path.split("/")[0:-1])
@@ -107,13 +111,13 @@ if True: #testing
     s02_vdrp = False
     do_panstarrs = False  # only run PanSTARRS if true, otherwise just run the usual GAIA and SDSS
 
-    s03_fluxcal = True
+    s03_fluxcal = False
 
-    s04_sky_subtraction = False
-    s04b_rfft = False
-    s04c_rcal_all = False
-    s04d_shot_h5 = False
-    s04e_amp_stats = False
+    s04_sky_subtraction = True
+    s04b_rfft = True
+    s04c_rcal_all = True
+    s04d_shot_h5 = True
+    s04e_amp_stats = True
     s04_sky_subtraction = s04_sky_subtraction | s04b_rfft | s04c_rcal_all | s04d_shot_h5 | s04e_amp_stats  # sanity catch
 
     s05_detection = False
@@ -162,6 +166,8 @@ class Config:
     orig_stdout = None
     orig_stderr = None
     file_stdout = None
+
+    guider_fwhm = None
 
 
 
@@ -270,13 +276,167 @@ def system_command(cfg,cmd):
 
     #echo the command
     if EchoCmds:
-        print("CMD: ", cmd)
+        print(f"CMD: ({os.getcwd()}) > {cmd}")
 
     if cfg.file_stdout:
         os.system(f"{cmd} &>> {cfg.file_stdout.name}")
     else:
         os.system(f"{cmd}")
 
+
+def get_guider_fwhm(cfg):
+    """
+    try to get the seeing fwhm (IQ -- image quality) from the guider (gc1 or gc2) for the shot
+    :param cfg:
+    :return:
+    """
+
+    try:
+
+        exposure_times = []
+        gc1_names = None
+        gc2_names = None
+        #gc1_times = None
+        #gc2_times = None
+
+        gc1_near = None
+        gc2_near = None
+
+        date = cfg.datevshot[0:8]
+        path = os.path.join(HET_by_date,date)
+
+        #first what is the virus shot(s) we need
+        #the guider filenames will not be the same, but will be close
+        virus_shot = "virus0000" + cfg.datevshot[-3:]
+        base_tarfn = os.path.join(path, f"virus/{virus_shot}.tar")
+        if os.path.exists(base_tarfn):
+            with tar.open(base_tarfn, "r") as tarfh:
+                fns = np.array(tarfh.getnames())
+                #should look like a list of:  virus0000007/exp01/virus/20241017T024257.2_106RU_sci.fits
+                #should all be the same base within each exposure
+                all_exps = np.array([x.split("/")[1] for x in fns])
+                exps = np.unique(all_exps)
+                #just need one from each exp
+                for exp in exps:
+                    sel = all_exps == exp
+                    if np.count_nonzero(sel) > 0:
+                        fn0 = fns[sel][0]
+                        name = fn0.split("/")[-1].split("_")[0]
+                        exposure_times.append(name)
+
+
+        if len(exposure_times) == 0:
+            #could not find any
+            return None
+
+        #try gc1
+        base_tarfn = os.path.join(path,"gc1/gc1.tar")
+        if os.path.exists(base_tarfn):
+            with tar.open(base_tarfn, "r") as tarfh:
+                gc1_names = tarfh.getnames()
+                #should look like a list of:  20241017T024256.0_gc1_sci.fits
+                #only want the dateTtime prefix
+                #gc1_times = [x.split("/")[1].split("_")[0] for x in gc1_names]
+
+        #try gc2
+        base_tarfn = os.path.join(path,"gc2/gc2.tar")
+        if os.path.exists(base_tarfn):
+            with tar.open(base_tarfn, "r") as tarfh:
+                gc2_names = tarfh.getnames()
+                #should look like a list of:  20241017T024256.0_gc1_sci.fits
+                #only want the dateTtime prefix ... actually, can just use as is
+                #gc2_times = [x.split("/")[1].split("_")[0] for x in gc2_names]
+
+
+        #get nearest (sort with exposusre name, find the index of the exposure name and take the index before and after?)
+        if gc1_names is not None:
+            gc1_near = [] #list of lists ... ie. if 3 exposures, will be a 3 long list each with 2 elements
+            for expname in exposure_times:
+                fake_name = f"./{expname}_gc1_sci.fits"
+                gc_x = sorted(gc1_names + [fake_name])
+                idx = gc_x.index(fake_name)
+                lidx = max(0,idx-1)
+                ridx = min(len(gc_x),idx+1)
+                #could be an exact match, but if so, either left or right will then also be the same
+                gc1_near.append([gc_x[lidx]] + [gc_x[ridx]])
+
+        if gc2_names is not None:
+            gc2_near = [] #list of lists ... ie. if 3 exposures, will be a 3 long list each with 2 elements
+            for expname in exposure_times:
+                fake_name = f"./{expname}_gc2_sci.fits"
+                gc_x = sorted(gc2_names + [fake_name])
+                idx = gc_x.index(fake_name)
+                lidx = max(0,idx-1)
+                ridx = min(len(gc_x),idx+1)
+                #could be an exact match, but if so, either left or right will then also be the same
+                gc2_near.append([gc_x[lidx]] + [gc_x[ridx]])
+
+
+
+        #now which to use? gc1 or gc2
+
+        base_tarfn = os.path.join(path, "gc1/gc1.tar")
+        gc1_active=False
+        if os.path.exists(base_tarfn):
+            try:
+                #just checking for which is active
+                t1,p1 = Utils.open_file_from_tar(base_tarfn,gc1_near[0][0])
+                fh = fits.open(t1)
+                gc1_active = fh[0].header['GUIDLOOP'] == 'ACTIVE'
+                fh.close()
+                t1.close()
+            except:
+                print(f"Exception in get_guider_fwhm: {traceback.format_exc()}")
+
+
+        base_tarfn = os.path.join(path, "gc2/gc2.tar")
+        gc2_active=False
+        if os.path.exists(base_tarfn):
+            try:
+                #just checking for which is active
+                t1,p1 = Utils.open_file_from_tar(base_tarfn,gc2_near[0][0])
+                fh = fits.open(t1)
+                gc2_active = fh[0].header['GUIDLOOP'] == 'ACTIVE'
+                fh.close()
+                t1.close()
+            except:
+                print(f"Exception in get_guider_fwhm: {traceback.format_exc()}")
+
+
+
+        if gc1_active:
+            base_tarfn = os.path.join(path, "gc1/gc1.tar")
+            gc_near = gc1_near
+
+        elif gc2_active:
+            base_tarfn = os.path.join(path, "gc2/gc2.tar")
+            gc_near = gc2_near
+        else:
+            print(f"No active guider. Cannot get seeing fwhm.")
+            return None
+
+        iq = []
+        for near_list in gc_near:
+            for near_file in near_list:
+                try:
+                    t1, p1 = Utils.open_file_from_tar(base_tarfn, near_file)
+                    fh = fits.open(t1)
+                    iq.append(float(fh[0].header['IQ']))
+                    fh.close()
+                    t1.close()
+                except:
+                    print(f"Invalid IQ card")
+
+        if len(iq) == 1:
+            return iq[0]
+        elif len(iq) > 1:
+            return np.nanmean(iq)
+        else:
+            return None
+
+    except:
+        print(f"Exception in get_guider_fwhm: {traceback.format_exc()}")
+        return None
 
 def make_3d_friend_table_for_shot(detect_table, dsky_3D=6.0, dwave=4.0):
     """
@@ -485,6 +645,28 @@ def merge_wave_groups(tab, wid):
         print("Merge wave group failed for {}".format(wid))
         return None
 
+
+def precheck(cfg):
+    """
+    sanity check files, directories to see if this reduction can run
+    (e.g. if the lib_calib path is not available for the date, then this cannot run)
+
+    :param cfg:
+    :return:
+    """
+
+    try:
+        month = cfg.datevshot[0:6]
+        path_check = os.path.join(hetdex_projects_path,f"lib_calib/{month}")
+        if not os.path.exists(path_check):
+            print(f"Precheck fail. Dir does not exist: {path_check}")
+            return -1
+
+
+    except:
+        print(f"Exception in precheck: {traceback.format_exc()}")
+
+    return 0
 
 def initial_setup(cfg):
     """
@@ -1024,9 +1206,15 @@ def prepare_reduction_dir(cfg):
 
             Path(datadir).mkdir(parents=True, exist_ok=True)
 
+            #mutlti*.fits
             cmd = f"tar -xvf {expdir}/{tarfile} -C {datadir}"
             system_command(cfg,cmd)
 
+            #CoFe*.fits
+            tarfile = f"d{cfg.datevshot[0:8]}s{cfg.datevshot[-3:]}{exp}_co.tar"
+            print(f"Untarring ({expdir}/{tarfile}) CoFe*fits to: {datadir}")
+            cmd = f"tar -xvf {expdir}/{tarfile} -C {datadir}"
+            system_command(cfg,cmd)
 
     except:
         print(traceback.format_exc())
@@ -1046,7 +1234,7 @@ def run_fluxcalibration(cfg,star_catalog='sdss'):
 
     # NOTICE: this operates under two directories ... there is a second directory change partway down
 
-    print("flux calibration (rallcal) ... ")
+    print("flux calibration ... ")
 
     #setup the softlink for the star_catalog
     os.chdir(os.path.join(cfg.cwd, "vdrp/shifts"))
@@ -1065,13 +1253,15 @@ def run_fluxcalibration(cfg,star_catalog='sdss'):
     #under the /tmp/rsXXXX working dir for rsetstar (really ~gebhardt/bin/fitradecsp)
     #s|t if the usual .dithall for the datevshot under /scratch/projects/hetdex/detect is NOT found (e.g. we are post-HETDEX)
     #then it will default to the local.dithall
-    if len(glob.glob("*.dithall") > 0):
+    if len(glob.glob("*.dithall")) > 0:
         system_command(cfg, f"unlink *.dithall")
     system_command(cfg, f"ln -s {os.path.join(cfg.cwd, 'vdrp/shifts/dithall/*.dithall')} .")
 
+    print("flux calibration (rsetstar) ... ")
     #call rsetstar independently
     system_command(cfg, f"rsetstar {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} {star_catalog}")
 
+    print("flux calibration (rallcal) ... ")
     #no longer includes rsetstar
     system_command(cfg,f"rallcal {cfg.datevshot[0:8]} {cfg.datevshot[-3:]}")
 
@@ -1084,7 +1274,7 @@ def check_fluxcalibration(cfg):
     :param cfg:
     :return:
     """
-    print("todo: check flux calibration ... ")
+    #print("todo: check flux calibration ... ")
     rc = 0
     os.chdir(os.path.join(cfg.cwd, "detect"))
 
@@ -1099,15 +1289,23 @@ def check_fluxcalibration(cfg):
 
     try:
         #20240730v006sedtp_f.dat
-        out = np.loadtxt(f"tp/{cfg.datevshot}sedtp_f.dat")
-        if not np.any(out[:, 5]):  # 5 is the actual throughput, I think and 4 is tied to it? cols 2, 3 don't seem to matter
+        if os.path.exists(f"tp/{cfg.datevshot}sedtp_f.dat"):
+            out = np.loadtxt(f"tp/{cfg.datevshot}sedtp_f.dat")
+            if np.shape(out)[0] > 0:
+                if not np.any(out[:, 5]):  # 5 is the actual throughput, I think and 4 is tied to it? cols 2, 3 don't seem to matter
+                    rc = -1
+                    print(f"bad throughput {cfg.datevshot}. All zero values.")
+            else:
+                rc = -1
+                print(f"bad throughput {cfg.datevshot}. *sedtp_f.dat is empty.")
+        else:
             rc = -1
-            print(f"bad throughput {cfg.datevshot}")
-
+            print(f"bad throughput {cfg.datevshot}. *sedtp_f.dat file does not exist.")
     except:
         print(traceback.format_exc())
         rc = -1
         print(f"bad throughput {cfg.datevshot}")
+        print(f"bad throughput. output shape = {np.shape(out)}")
 
     return rc
 
@@ -2248,6 +2446,17 @@ def diagnose_output_to_table(cfg):
 ###########
 
 
+
+print("GUIDER TEST")
+get_guider_fwhm(cfg)
+exit(0)
+
+
+rc = precheck(cfg)
+if rc < 0:
+    Quit(cfg,rc,"Precheck failed. Reduction cannot run.")
+
+
 cfg.numexp, cfg.gettar_fn = num_exposures_in_shot(cfg.shotid)
 
 if cfg.numexp <= 0:
@@ -2261,11 +2470,18 @@ else:
     else:
         Quit(cfg, -1, f"Invalid exposure. Requesting exp #{cfg.exp} but {cfg.datevshot} has only {cfg.numexp}")
 
+if cfg.numexp < 3:
+    print(f"Fewer than 3 exposures (assume dithers). Checking guider for seeing FWHM...")
+    cfg.guider_fwhm = get_guider_fwhm(cfg)
+    if cfg.guider_fwhm is not None:
+        print(f"Using guider FWHM = {cfg.guider_fwhm}")
+    else:
+        print(f"Unable to obtain guider seeing FWHM. Will measure as best can be from available data.")
+
 rc = initial_setup(cfg)
 
 if rc < 0:
     Quit(cfg,rc,"Could not complete initial setup.")
-
 
 
 #########
