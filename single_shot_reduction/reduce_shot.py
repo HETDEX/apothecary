@@ -104,7 +104,7 @@ s06e_source_cat = True #make a source catalog
 
 s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
 
-if True: #testing
+if False: #testing
     print("#################### TESTING ##########################")
     # execute steps
     s01_run1s = False
@@ -123,7 +123,7 @@ if True: #testing
     s04_sky_subtraction = s04_sky_subtraction | s04a_get_ifucens | s04b_rfft | s04c_rcal_all | s04d_shot_h5 | s04e_amp_stats  # sanity catch
 
     s05_detection = True
-    s05b_rdet_rf1 = True
+    s05b_rdet_rf1 = False
     s05c_rgetmax = True
     #s05d_detection_tables = False  #builds as fits files... this is replaced by the hdf5 version
     s05e_detection_hdf5 = False

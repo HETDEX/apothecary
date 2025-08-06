@@ -13,11 +13,13 @@ step=${11}
 nstep=${12}
 ifit1=${13}
 
-if [ -e ${datadir}detect/norm.all ]
-then
-grep ${f2} ${datadir}detect/norm.all | awk '{print $2,$3,$4}' > norm.dat
-grep ${f2} ${datadir}detect/fwhm.all | awk '{print $2,$3,$4}' > fwhm.use
-fi
+#the correct version of these files are now already in the directory
+#if [ -e ${datadir}detect/norm.all ]
+#then
+#grep ${f2} ${datadir}detect/norm.all | awk '{print $2,$3,$4}' > norm.dat
+#grep ${f2} ${datadir}detect/fwhm.all | awk '{print $2,$3,$4}' > fwhm.use
+#fi
+
 
 ~gebhardt/bin/fitradecsp << eof
 ${ra} ${dec} ${step} ${nstep} ${wv} 3 ${ifit1}
