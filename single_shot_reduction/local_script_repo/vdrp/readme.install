@@ -1,2 +1,0 @@
-pip install -U vdrp --user
-PATH=~/.local/bin:$PATH pip install -e . --user
