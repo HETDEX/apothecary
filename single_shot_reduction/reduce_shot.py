@@ -103,7 +103,7 @@ s06e_source_cat = True #make a source catalog
 
 s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
 
-if True: #testing
+if False: #testing
     print("#################### TESTING ##########################")
     # execute steps
     s01_run1s = False
