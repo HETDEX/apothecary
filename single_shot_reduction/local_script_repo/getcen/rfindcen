@@ -1,0 +1,18 @@
+date=$1
+shot=$2
+mult=$3
+#datadir="/scratch/00115/gebhardt/detect/${date}v${shot}"
+#datadir="/scratch/projects/hetdex/detect/dithall"
+#grep ${mult} ${datadir}/${date}v${shot}.dithall | awk '{if(sqrt($4*$4+$5*$5)<5) print $0}' > j1
+grep ${mult} local.dithall | awk '{if(sqrt($4*$4+$5*$5)<5) print $0}' > j1
+~gebhardt/bin/biwt << eof
+j1
+1
+eof
+mv biwt.out j2
+~gebhardt/bin/biwt << eof
+j1
+2
+eof
+paste j2 biwt.out | awk '{print mult0,$2,$5,date0,shot0}' date0=${date} shot0=${shot} mult0=${mult}
+

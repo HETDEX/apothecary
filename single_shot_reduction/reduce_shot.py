@@ -81,11 +81,12 @@ do_panstarrs = False #only run PanSTARRS if true, otherwise just run the usual G
 s03_fluxcal = True
 
 s04_sky_subtraction = True
+s04a_get_ifucens = True
 s04b_rfft = True
 s04c_rcal_all = True
 s04d_shot_h5 = True
 s04e_amp_stats = True
-s04_sky_subtraction = s04_sky_subtraction | s04b_rfft | s04c_rcal_all | s04d_shot_h5 | s04e_amp_stats #sanity catch
+s04_sky_subtraction = s04_sky_subtraction | s04a_get_ifucens | s04b_rfft | s04c_rcal_all | s04d_shot_h5 | s04e_amp_stats #sanity catch
 
 s05_detection = True
 s05b_rdet_rf1 = True
@@ -103,7 +104,7 @@ s06e_source_cat = True #make a source catalog
 
 s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
 
-if False: #testing
+if True: #testing
     print("#################### TESTING ##########################")
     # execute steps
     s01_run1s = False
@@ -113,15 +114,16 @@ if False: #testing
 
     s03_fluxcal = False
 
-    s04_sky_subtraction = True
-    s04b_rfft = True
-    s04c_rcal_all = True
-    s04d_shot_h5 = True
-    s04e_amp_stats = True
-    s04_sky_subtraction = s04_sky_subtraction | s04b_rfft | s04c_rcal_all | s04d_shot_h5 | s04e_amp_stats  # sanity catch
+    s04_sky_subtraction = False
+    s04a_get_ifucens = False
+    s04b_rfft = False
+    s04c_rcal_all = False
+    s04d_shot_h5 = False
+    s04e_amp_stats = False
+    s04_sky_subtraction = s04_sky_subtraction | s04a_get_ifucens | s04b_rfft | s04c_rcal_all | s04d_shot_h5 | s04e_amp_stats  # sanity catch
 
-    s05_detection = False
-    s05b_rdet_rf1 = False
+    s05_detection = True
+    s05b_rdet_rf1 = True
     s05c_rgetmax = False
     #s05d_detection_tables = False  #builds as fits files... this is replaced by the hdf5 version
     s05e_detection_hdf5 = False
@@ -292,6 +294,15 @@ def get_guider_fwhm(cfg):
     """
 
     try:
+        saved_fn = "guider.fwhm"
+        if os.path.exists(saved_fn):
+            fwhm = np.loadtxt(saved_fn) #just one value
+            if fwhm is None or np.isnan(fwhm) or fwhm <= 0:
+                 #we will continue below and rebuild
+                print(f"Found {saved_fn}, but guider seeing FWHM is inavlid ({fwhm}). Will recompute ...")
+            else:
+                print(f"Found {saved_fn}. Using guider seeing FWHM = {fwhm}")
+                return fwhm
 
         exposure_times = []
         gc1_names = None
@@ -428,8 +439,10 @@ def get_guider_fwhm(cfg):
                     print(f"Invalid IQ card")
 
         if len(iq) == 1:
+            np.savetxt(saved_fn,iq[0],fmt="%0.4f")
             return iq[0]
         elif len(iq) > 1:
+            np.savetxt(saved_fn, np.nanmean(iq), fmt="%0.4f")
             return np.nanmean(iq)
         else:
             return None
@@ -1329,8 +1342,17 @@ def run_make_ifucen(cfg):
 
         #not much to check here
         if os.path.exists(f"ifucen_{cfg.datevshot}.dat"):
-            #all is good, assume anyway
-            rc = 0
+
+            #check the RA, decs
+            ras, decs = np.loadtxt(f"ifucen_{cfg.datevshot}.dat", dtype=float,
+                                   usecols=(1, 2), unpack=True)
+            badct = np.count_nonzero(ras == -666)
+            if badct> 0:
+                rc = -1
+                print(f"failed to get IFU centers:  {cfg.datevshot}. Invalid RA, Decs.")
+            else:
+                #all is good, assume anyway
+                rc = 0
         else:
             rc = -1
 
@@ -1408,6 +1430,11 @@ def run_rcal(cfg):
         rc = 0
         os.chdir(os.path.join(cfg.cwd, "alldet")) #make sure we are in the right directory
         os.makedirs("cal_out",exist_ok=True)
+
+
+        #prep, needed for rcal_all copy to /tmp
+        system_command(cfg, f"cp ../detect/{cfg.datevshot}/norm.dat .")
+        system_command(cfg, f"cp ../detect/{cfg.datevshot}/fwhm.out fwhm.use")
 
         multis = np.loadtxt(os.path.join("../getcen/",f"ifucen_{cfg.datevshot}.dat"),dtype=str,usecols=(0),unpack=True)
         ras,decs = np.loadtxt(os.path.join("../getcen/", f"ifucen_{cfg.datevshot}.dat"), dtype=float,usecols=(1,2),unpack=True)
@@ -2446,12 +2473,6 @@ def diagnose_output_to_table(cfg):
 ###########
 
 
-
-print("GUIDER TEST")
-get_guider_fwhm(cfg)
-exit(0)
-
-
 rc = precheck(cfg)
 if rc < 0:
     Quit(cfg,rc,"Precheck failed. Reduction cannot run.")
@@ -2587,8 +2608,9 @@ else:
 if s04_sky_subtraction:
 
     print("Getting IFU centers ...")
-    if run_make_ifucen(cfg) != 0:
-        Quit(cfg,-1,"FATAL. Failed to get IFU centers.")
+    if s04a_get_ifucens:
+        if run_make_ifucen(cfg) != 0:
+            Quit(cfg,-1,"FATAL. Failed to get IFU centers.")
 
     if s04b_rfft:
         print("Running rfft (this may take a while) ...")

@@ -19,11 +19,14 @@ mkdir -p /tmp/ras$7_$6
 cd /tmp/ras$7_$6
 #mkdir -p ras$7_$6
 #cd ras$7_$6
-if [ -e ${datadir}detect/norm.all ]
-then
-grep ${f2} ${datadir}detect/norm.all | awk '{print $2,$3,$4}' > norm.dat
-grep ${f2} ${datadir}detect/fwhm.all | awk '{print $2,$3,$4}' > fwhm.use
-fi
+#if [ -e ${datadir}detect/norm.all ]
+#then
+#grep ${f2} ${datadir}detect/norm.all | awk '{print $2,$3,$4}' > norm.dat
+#grep ${f2} ${datadir}detect/fwhm.all | awk '{print $2,$3,$4}' > fwhm.use
+#fi
+cp ${dir1}/../detect/20*v*/norm.dat norm.dat
+cp ${dir1}/../detect/20*v*/fwhm.out fwhm.use
+ln -s ${dir1}/../detect/20*v???.dithall local.dithall
 
 ~gebhardt/bin/fitradecsp << eof
 ${ra} ${dec} ${step} ${nstep} ${wv} 3 ${ifit1}

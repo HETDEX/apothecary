@@ -13,6 +13,10 @@ cp ${resdir}/rfindmax .
 cp ${resdir}/rspcs .
 cp ${resdir}/rf1 .
 
+cp ${resdir}/../detect/20*v???/norm.dat norm.dat
+cp ${resdir}/../detect/20*v???/fwhm.out fwhm.use
+ln -s ${resdir}/../detect/20*v???.dithall local.dithall
+
 exp=exp01
 ln -s ${datadir}/red1/reductions/$date/virus/virus0000$2/${exp}/virus/m*fits .
 ls m*fits | awk '{print "rfindmax",$1,exp0}' exp0=${exp} | sed s/.fits// > run1

@@ -1,11 +1,16 @@
 date=$1
 shot=$2
 resdir=$(pwd)
+red1dir="/scratch/03261/polonius/red1/reductions/"
 mkdir -p /tmp/${date}v${shot}
 cd /tmp/${date}v${shot}
+ln -s ${resdir}/../detect/20*v???.dithall local.dithall
 #ls /scratch/00115/gebhardt/red1/reductions/${date}/virus/virus0000${shot}/exp01/virus/multi*.fits | sed s/"\/"/" "/g | awk '{print $11}' | sed s/_/" "/g | awk '{print "/work/00115/gebhardt/maverick/scripts/setup/rfindcen",date0,shot0,$1"_"$2"_"$3"_"$4}' date0=${date} shot0=${shot} | uniq > rj1
-ls /scratch/03261/polonius/red1/reductions/${date}/virus/virus0000${shot}/exp01/virus/multi*.fits | sed s/"\/"/" "/g | awk '{print $11}' | sed s/_/" "/g | awk '{print "/work/00115/gebhardt/maverick/scripts/setup/rfindcen",date0,shot0,$1"_"$2"_"$3"_"$4}' date0=${date} shot0=${shot} | uniq > rj1
+#ls /scratch/03261/polonius/red1/reductions/${date}/virus/virus0000${shot}/exp01/virus/multi*.fits | sed s/"\/"/" "/g | awk '{print $11}' | sed s/_/" "/g | awk '{print "/work/00115/gebhardt/maverick/scripts/setup/rfindcen",date0,shot0,$1"_"$2"_"$3"_"$4}' date0=${date} shot0=${shot} | uniq > rj1
+ls ${red1dir}${date}/virus/virus0000${shot}/exp01/virus/multi*.fits | sed s/"\/"/" "/g | awk '{print $11}' | sed s/_/" "/g | awk -v awk_resdir="$resdir" '{print awk_resdir"/rfindcen",date0,shot0,$1"_"$2"_"$3"_"$4}' date0=${date} shot0=${shot} | uniq > rj1
 chmod +x rj1
+
+
 rm -f ifucen_${date}v${shot}.dat
 rj1 > ifucen_${date}v${shot}.dat
 cp ifucen_${date}v${shot}.dat ${resdir}/.
