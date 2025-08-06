@@ -1,0 +1,4 @@
+head -1 sfit/*_$1_4550.fw > j1
+sort -g +6 -7 tmp/fitres/*_$1.list | head -1 > j2
+paste fwhm.out j1 j2
+

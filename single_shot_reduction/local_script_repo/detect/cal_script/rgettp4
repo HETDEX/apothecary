@@ -1,0 +1,9 @@
+awk '{s+=1; if(s>1) print $1,$2/(6.626e-27)/(3e18/$1)*360*5e5*100}' $1 > j4
+
+if [ -e $2*_???.dat ]
+then
+	paste j4 $2*_???.dat | awk '{print $3,$4/$2}' > $2sed.dat
+#	paste j4 $2*_???.dat | awk '{if($5>0&&$2>0) print $3,$4/$2/$5; else print $3,0}' > $2sed.dat
+else
+	echo "Not here:" $2*_???.dat
+fi

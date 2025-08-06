@@ -1,0 +1,4 @@
+date=$1
+shot=$2
+exp=$3
+grep -v Spc output/d${date}s${shot}${exp}amp.dat | awk '{print "d"date0"s"shot0 exp0,$0}' date0=$date shot0=$shot exp0=$exp

@@ -1,0 +1,2 @@
+awk '{print "ls",$1"v"$2"/match_exp01.pdf"}' /work/00115/gebhardt/maverick/gettar/hdr1.scilist
+

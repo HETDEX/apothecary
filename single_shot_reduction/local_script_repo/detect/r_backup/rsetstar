@@ -1,0 +1,101 @@
+mkdir -p $1v$2
+name=$1v$2
+cd $1v$2
+mkdir -p sfit
+mkdir -p res
+mkdir -p coords
+
+echo "*** (start) ***"
+
+#dirbase="/scratch/00115/gebhardt/"
+dirbase="/scratch/03261/polonius/science_reductions/"
+dirshifts="vdrp/shifts"
+
+cp $dirbase$dirshifts/$1v$2/all.mch coords/.
+cp $dirbase$dirshifts/$1v$2/fplane.txt coords/.
+cp $dirbase$dirshifts/$1v$2/radec2_final.dat coords/radec2.dat
+if [ -e $dirbase/$dirshifts/$1v$2/norm.dat ]
+then
+cp $dirbase/$dirshifts/$1v$2/norm.dat .
+else
+echo "1 1 1" > norm.dat
+fi
+
+#if [ -e dithall.use ]
+#then
+#echo "dithall already here; using this one"
+#else
+
+#grep -v dec $dirbase$dirshifts/$1v$2/dithall.use > dithall.use
+#cp /scratch/projects/hetdex/detect/dithall/$1v$2.dithall dithall.use
+cp $dirbase/$dirshifts/dithall.gaia/$1v$2.dithall dithall.use
+
+#fi
+
+echo "*** (1) ***"
+
+# get the stars in the IFU and the scripts
+grep -v "#" $dirbase$dirshifts/$1v$2/shout.ifustars | awk '{if($6<21.0) print $0}' | sort -g +1 -2 | uniq > $1v$2.ifu
+#grep -v "#" $dirbase$dirshifts/$1v$2/shout.ifustars | awk '{if($6<22.0) print $0}' | sort -g +1 -2 | uniq > $1v$2.ifu
+cp /work/00115/gebhardt/maverick/detect/cal_script/* .
+cp ../rsp3fc .
+cp ../rfitfw0 .
+rm -f res/sp*.dat
+rm -f res/*.list
+
+echo "*** (2) ***"
+
+grep -v "#" 2*.ifu | awk '{s+=1; print "rspstar3",s+20000,$3,$4,$5,$6,$7,$8,$9,name0,1.6,100.,4550}' name0=$name > runstar; chmod +x runstar
+echo "*** (2.1) ***"
+chmod +x runstar
+echo "*** (2.2) ***"
+runstar
+echo "*** (2.3) ***"
+~gebhardt/bin/mkrsprun
+
+echo "*** (3) ***"
+
+
+dir0=$(pwd)
+
+mkdir -p tmp
+cd tmp
+
+rm -f exp.all
+mv ../out rt
+cp ../norm.dat .
+
+awk '{print "/work/00115/gebhardt/maverick/scripts/rsp/rsumspec",$7,$8}' rt > rt2
+chmod +x rt
+chmod +x rt2
+mkdir -p fitres
+rt
+rt2
+# mv sp*.dat $dir0/res/.
+mv 2*.list $dir0/res/.
+
+if [ -e exp.all ]
+then
+~gebhardt/bin/biwt << eof
+exp.all
+1
+eof
+mv biwt.out b1
+~gebhardt/bin/biwt << eof
+exp.all
+2
+eof
+mv biwt.out b2
+~gebhardt/bin/biwt << eof
+exp.all
+3
+eof
+mv biwt.out b3
+paste b1 b2 b3 | awk '{print "Scale over Exposures:",$3,$6,$9,$1}' > exp.scale
+cat exp.scale
+fi
+cd ..
+awk '{print "rgetfw",$2,$3,$4,$6}' runstar > rgetfw0
+chmod +x rgetfw0
+rgetfw0 > fwhm.all
+# cat apsum* | grep -v NaN > $dir0/apsum.out

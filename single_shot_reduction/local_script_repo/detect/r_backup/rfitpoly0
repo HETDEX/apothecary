@@ -1,0 +1,19 @@
+date=$1
+shot=$2
+cd $1v$2/res
+rm -f in rtrm out
+cp $1v$2sedtp.dat in
+cp tp.biwt in2
+wc in | awk '{if($1>100) print "rm in"}' > rtrm; chmod +x rtrm; rtrm
+echo $1v$2 > title
+# fix extinction that is in qfits
+~gebhardt/bin/fixextcor
+mv out $1v$2sedtpf.dat
+cp $1v$2sedtpf.dat in
+~gebhardt/bin/fitpoly << eof
+/n
+eof
+cp out in
+~gebhardt/bin/fixextcor2
+cp out ../../tp/$1v$2sedtp_f.dat
+#mv out $1v$2sedtpf.dat

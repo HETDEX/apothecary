@@ -1,0 +1,10 @@
+radc 3600; mv out2 3600.out
+radc 3800; mv out2 3800.out
+radc 4000; mv out2 4000.out
+radc 4200; mv out2 4200.out
+radc 4400; mv out2 4400.out
+radc 4600; mv out2 4600.out
+radc 4800; mv out2 4800.out
+radc 5000; mv out2 5000.out
+radc 5200; mv out2 5200.out
+radc 5400; mv out2 5400.out

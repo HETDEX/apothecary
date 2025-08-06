@@ -1,0 +1,258 @@
+#!/usr/bin/env python
+
+
+# *amp.dat files are in /scratch/03261/polonius/science_reduction/alldet/output
+# look like this (head)
+# organized by datevshot+exposure ... all amps for one exposure are in one file
+# SO ... should operate on datevshot and read in all 3 exposures
+
+#polonius@ls6:/output/$ head d20231009s016exp01amp.dat
+# Spc_slt_iid_am Factor N_c Avg Scale W0 W1 Nlo Avg_orig chi Frac_c2 Frac0
+# 025_067_032_LL  0.996   2    0.89   19.84    0.00    0.00    0   245.58     0.94  0.0686  0.0149
+# 025_067_032_LU  1.014   2    0.81   19.19   -0.33    0.40    0   250.08     0.81  0.0356  0.0006
+
+#output would be single large file 
+# dateshot   multi+amp    status (-1, 0, 1: bad, unknown, good)
+
+#need to update entries if already exist
+
+
+
+import glob
+import os
+import sys
+import numpy as np
+from astropy.table import Table, vstack
+from tqdm import tqdm
+
+
+
+def rename_cols(_t):
+    #acts "globally"
+    #Karl        Erin
+    _t["Spc_slt_iid_am"].name = "multi_amp"
+    _t["Factor"].name = "norm"
+    _t["N_c"].name = "N_cont"
+    _t["Avg"].name = "background"
+    _t["Scale"].name = "sky_sub_rms"
+    _t["W0"].name = "wave0"
+    _t["W1"].name = "wave1"
+    _t["Nlo"].name  =  "nfib_bad"
+    
+    _t["Avg_orig"].name = "im_median"#_karl"
+    _t["chi"].name = "chi2fib_avg"#_karl"
+    _t["Frac_c2"].name = "frac_c2"#_karl"
+    _t["Frac0"].name = "MaskFraction"#_karl"
+    
+    return _t
+
+
+
+def keep_sel_simple(amp_stats):
+    #per email ... this is a reduced selection to only remove the worst and looking only at amps in a 
+    # single shot ... not tracking over time or multiple shots
+    
+    #see also https://iopscience.iop.org/article/10.3847/1538-4357/aca962#apjaca962t2
+    
+    #not NaN and is between -10 and 100, exclusive
+    sel = ~np.isnan(amp_stats['background']) & \
+          ((amp_stats['background'] > -10) & (amp_stats['background'] < 100))
+    
+    sel = sel & (amp_stats['frac_c2'] < 0.2)
+    
+    #keep if less than 20% of fibers are masked
+    sel = sel & (amp_stats['MaskFraction'] < 0.2)
+
+    
+    return sel
+    
+
+def keep_sel(amp_stats, _date):
+    #amp_stats is the * amp.dat table
+    #lifted from Erin's bad amp check and modified to fit limited data here
+    
+    sel1 = ((amp_stats['background'].astype(float) > -10) * (amp_stats['background'].astype(float) < 100) ) \
+            | (np.isnan(amp_stats['background']))
+    
+    #sky_sub_rms_rel seems to be defined as the sky_sub_rms (e.g. for one shot+exp+amp) divided by
+    #the median_sky_rms which is the mediuan of ALL the exp+amps for a shot?
+    
+    sel2 = (amp_stats['sky_sub_rms_rel'] < 1.5) | (np.isnan(amp_stats['sky_sub_rms_rel']))
+    sel3 = (amp_stats['sky_sub_rms'] > 0.2)  | (np.isnan(amp_stats['sky_sub_rms_rel']))
+    
+    sel4 = (amp_stats['im_median'] > 0.05 ) | (np.isnan(amp_stats['im_median']))
+    sel5 = (amp_stats['MaskFraction'] < 0.25) | (np.isnan(amp_stats['MaskFraction']))
+    sel6 = (amp_stats['N_cont'] < 35) | (np.isnan(amp_stats['N_cont']))
+    sel7 = (amp_stats['nfib_bad'] <= 1) | (np.isnan(amp_stats['nfib_bad']))
+    sel8 = (amp_stats['norm'] > 0.5) | (np.isnan(amp_stats['norm']))
+    
+    
+    if _date < 20210901:
+        sel9 = ((amp_stats['frac_c2'] < 0.5) | (np.isnan(amp_stats['frac_c2'])) )
+        #* (amp_stats['date'] < 20210901)
+    else:
+        sel9 = ((amp_stats['frac_c2'] < 0.1) | (np.isnan(amp_stats['frac_c2'])) ) 
+        #* (amp_stats['date'] >= 20210901)
+    
+    #sel9 = sel9_hdr3 | sel9_hdr4
+    
+    
+    
+    sel = sel1 & sel2 & sel3 & sel4 & sel5 & sel6 & sel7 & sel8 & sel9
+    #sel = sel1 & sel2 & sel3 & sel6 & sel7 & sel8
+    #sel_wiggles = amp_stats['ft_flag'] == 1
+    #sel_manual = amp_stats['flag_manual'] == 1
+    #amp_stats['flag'] = (sel * sel_manual ).astype(int)
+    #amp_stats['flag'] = (sel * sel_manual ).astype(int)
+    
+    return sel
+    
+
+    
+    
+
+amp_dat_path = "./output/" #!!! trailing "/" is important  #"/scratch/03261/polonius/science_reductions/alldet/output/"
+amp_status_file = "./rf1_amp_status.tsv"
+bad_amp_file = "./rf1_bad_amp.tsv"
+
+cl_args = list(map(str.lower,sys.argv)) 
+try:
+    _ = int(cl_args[1]) #using caste to integer as very basic check
+    date = cl_args[1]
+    
+    if len(date) == 8: #allgood, full date
+        pass
+    elif len(date) == 6 or len(date) == 4: #YYYYMM or YYYY
+        date += "*" #append a splat for glob
+    else:
+        print(f"Bad date specified: {cl_args[1]}. Must be <YYYY>, <YYYYMM>, or <YYYYMMDD>.")
+        exit(-1)
+except:
+    print(f"Bad date specified: Must be <YYYY>, <YYYYMM>, or <YYYYMMDD>.")
+    exit(-1)
+    
+if len(cl_args) > 2: #next is a shot
+    try:
+        shot = int(cl_args[2])
+        shot = str(shot).zfill(3)
+
+    except:
+        print(f"Bad (optional) shot number specified.")
+        exit(-1)    
+else:
+    shot = "???"
+    
+fns = sorted(glob.glob(f"{amp_dat_path}d{date}s{shot}exp??amp.dat"))
+
+if len(fns) == 0:
+    print("Unable to find any matching *amp.dat files. Exiting.")
+    exit(0)
+    
+#Load current rf1_bad_amp.list, treat as TSV file
+try:
+    T = Table.read(amp_status_file,format="ascii")
+    print(f"Loaded existing table {amp_status_file}.")
+except:
+    print(f"Warning! Unable to load {amp_status_file}. Will create new file.")
+    T = Table(dtype=[('dateshot', int), ('multi_amp',str), ('status',int)])
+    
+
+current_shot = -1 
+
+#notice, we are assuming here, due to the sort on the glob, that these are in datevshot+exp order
+#and all exp for a shot are continguous
+
+bad_ct = 0
+all_ct = 0
+
+for fn in tqdm(fns):
+    #need to track which datevshot we are on
+    #example: d20231009s016exp01amp.dat
+    working_shot = int(os.path.basename(fn)[1:13].replace("s",""))
+    t = rename_cols(Table.read(fn,format="ascii"))
+        
+    if current_shot != working_shot:
+        #todo: if there are accumulated statisics 
+        #        evalute accumulated statistics  ??
+        #        update table T ??
+        #  !!! may be nothing to do here
+        
+        #todo: reset statistics 
+        #todo:    that is, create a row with the working_shot and each multi*amp set to status = 0
+        
+        current_shot = working_shot
+        multiamp = np.unique(t['multi_amp'])
+        dateshot = np.full(len(multiamp),working_shot)
+        status = np.zeros(len(multiamp)).astype(int)
+        
+        T2 = Table()
+        T2['dateshot'] = dateshot
+        T2['multi_amp'] = multiamp
+        T2['status'] = status
+        
+        all_ct += len(T2)
+
+        #only stack at the end?
+        #only add in new rows
+        if working_shot in np.unique(T['dateshot']):
+            #this dateshot already exists, so, we want to replace it with what we are loading now
+            #we might only have a sub-set of the multi_amps so do NOT just remove the entire dateshot and append
+            date_sel = T['dateshot'] == working_shot
+            
+            #set the duplicated multi-amps back to 0 status 
+            # and append any new ones (will be sorted at the end)
+            
+            dup_sel = np.array([x in T2['multi_amp'] for x in T['multi_amp'][date_sel]])
+            T['status'][date_sel][dup_sel] = 0
+            
+            if np.count_nonzero(dup_sel) != len(T2):
+                new_sel = [x not in T['multi_amp'][date_sel] for x in T2['multi_amp']]
+                T = vstack([T,T2[new_sel]])
+            #else: #there are no new multi_amp in T2
+            #    pass
+                
+        else: #this is a new dateshot, just append
+            T = vstack([T,T2])
+    
+
+    #now iterate over t and mark bad?
+    #order in T and T2 is same as order in t
+    
+    #sel = keep_sel(t,int(str(working_shot)[0:8]))
+    sel = keep_sel_simple(t) 
+    
+    #this gets increaingly slow with longer table
+    if np.any(~sel):
+        #there are amps to be rejected, some might already have a -1
+        
+        #!!!! for some reason, astropy table cannot handle a double selection assignment ???!!!
+        #but I need this double selection to speed it up
+        #date_sel = np.array(T['dateshot'] == current_shot)
+        #bad_sel = np.array([x in t['multi_amp'][~sel] for x in T['multi_amp'][date_sel]]) 
+        
+        combo_sel = np.array([x['dateshot']==current_shot and x['multi_amp'] in t['multi_amp'][~sel] for x in T]) 
+        T['status'][combo_sel] = -999 # using -999 instead of -1 so can count at the end and then make -1
+        #break
+        #print(f"Bad amps present {working_shot}: {np.count_nonzero(~sel)} set {len(T['status'][date_sel][bad_sel])}")
+        #print(t['multi_amp'][~sel])
+        #print(T['status'][date_sel][bad_sel])
+
+            
+#todo: sort on dateshot then multi_amp
+T.sort(keys=['dateshot','multi_amp'])
+
+bad_ct = np.count_nonzero(T[T['status']==-999])
+T[T['status']==-999] = -1
+print(f"{all_ct} shot+amps reviewed (total={len(T)}). {bad_ct} marked bad (total={np.count_nonzero(T['status']<0)}).")
+# for row in T[T['status'] < 0]:
+#     print(row['dateshot'],row['multi_amp'])
+
+T.write(amp_status_file,overwrite=True,format="ascii")
+print(f"wrote: {amp_status_file}")
+
+#do we want to write out JUST the bad amps?
+T[T['status']<0].write(bad_amp_file,overwrite=True,format="ascii")
+print(f"wrote: {bad_amp_file}")
+    
+print("Done.")
+

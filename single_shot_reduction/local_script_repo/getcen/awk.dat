@@ -1,0 +1,7 @@
+rt2 > rcal2
+grep -v "\-666" rcal2 > rcal3
+grep "\-666" rcal2 > 666.dat
+awk '{print "rf1",$2,$3,$4,$5,$6,$7,$8,1.70,3.0,3.5,0.5,3,104}' rcal3 > rdet0
+awk '{print $1}' ../detect/hdr4.bad | sed s/v/" "/ | awk '{print "grep -v \""$1,$2"\" j1 > j2; mv j2 j1"}'
+
+awk '{print "rfft",$2,$3,"exp01"}' rt2 > j1; awk '{print "rfft",$2,$3,"exp02"}' rt2 >> j1;  awk '{print "rfft",$2,$3,"exp03"}' rt2 >> j1 ; sort -g j1 > rff0

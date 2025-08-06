@@ -1,0 +1,34 @@
+#!/usr/bin/env python
+
+# takes a single parameter, YYYYMM
+# removes empty directories under vdrp/shifts
+#  these were probably created if VDRP astrometry was execute on non-HETDEX shots for which there was no existing reduction
+
+
+import glob
+import os
+from tqdm import tqdm
+import sys
+
+
+cl_args = list(map(str.lower,sys.argv))
+
+path = "./"
+
+yyyymm = int(cl_args[1])
+
+dirs = glob.glob(f"{path}{yyyymm}*")
+
+print(f"Checking {len(dirs)} dirs for  {yyyymm} ...")
+
+
+rdct=0
+
+for d in tqdm(dirs):
+    x = os.listdir(d)
+    if len(x) == 0:
+        os.rmdir(d)
+        rdct +=1
+
+
+print(f"Removed {rdct} empty dirs.")

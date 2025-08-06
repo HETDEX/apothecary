@@ -1,0 +1,9 @@
+flam = 5.04839e-9*(10.0**(-0.4*gmag)) # ergs/cm^2/s/A
+h = 1.054572e-34*2.*3.14157*1e7 = 6.626e-27  # erg
+c = 2.997925e+18  # A/s
+nu = c/lam
+Area= 50 sq-m  = 5e5
+
+fcount = tint * flam/h/nu * Area
+
+for gmag=17.21, flam=6.6e-16

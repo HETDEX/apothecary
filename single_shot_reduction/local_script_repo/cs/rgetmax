@@ -1,0 +1,90 @@
+resdir=$(pwd)
+#datadir="/scratch/00115/gebhardt"
+mkdir -p $resdir/spec/
+datadir="/scratch/03261/polonius/"
+cut=20.
+date=$1
+shot=$2
+cd /tmp
+#cd tmp
+mkdir -p maxflux$1v$2
+cd maxflux$1v$2
+cp ${resdir}/rfindmax .
+cp ${resdir}/rspcs .
+cp ${resdir}/rf1 .
+
+exp=exp01
+ln -s ${datadir}/red1/reductions/$date/virus/virus0000$2/${exp}/virus/m*fits .
+ls m*fits | awk '{print "rfindmax",$1,exp0}' exp0=${exp} | sed s/.fits// > run1
+chmod +x run1
+run1
+rm m*fits
+grep . m*dat | sed s/.dat:/_/ | awk '{print $0,exp0}' exp0=${exp} > d1
+rm m*dat
+awk '{if($2>cut0||$3>cut0) print $0}' cut0=$cut d1 > d2
+awk '{print "grep",$1,"/scratch/projects/hetdex/detect/dithall/"date0"v"shot0".dithall | grep",$4}' date0=$date shot0=$shot d2 > rj1
+chmod +x rj1
+rj1 > d3
+awk '{print $8}' d3 | sed s/.ixy// | awk '{print "grep",$1,"d2"}' > rj2
+chmod +x rj2
+rj2 > d5
+paste d5 d3 | awk '{print $5,$6,$2,$3,$1}' > d4
+
+exp=exp02
+ln -s ${datadir}/red1/reductions/$date/virus/virus0000$2/${exp}/virus/m*fits .
+ls m*fits | awk '{print "rfindmax",$1,exp0}' exp0=${exp} | sed s/.fits// > run1
+chmod +x run1
+run1
+rm m*fits
+grep . m*dat | sed s/.dat:/_/ | awk '{print $0,exp0}' exp0=${exp} > d1
+rm m*dat
+awk '{if($2>cut0||$3>cut0) print $0}' cut0=$cut d1 > d2
+awk '{print "grep",$1,"/scratch/projects/hetdex/detect/dithall/"date0"v"shot0".dithall | grep",$4}' date0=$date shot0=$shot d2 > rj1
+chmod +x rj1
+rj1 > d3
+awk '{print $8}' d3 | sed s/.ixy// | awk '{print "grep",$1,"d2"}' > rj2
+chmod +x rj2
+rj2 > d5
+paste d5 d3 | awk '{print $5,$6,$2,$3,$1}' >> d4
+
+exp=exp03
+ln -s ${datadir}/red1/reductions/$date/virus/virus0000$2/${exp}/virus/m*fits .
+ls m*fits | awk '{print "rfindmax",$1,exp0}' exp0=${exp} | sed s/.fits// > run1
+chmod +x run1
+run1
+rm m*fits
+grep . m*dat | sed s/.dat:/_/ | awk '{print $0,exp0}' exp0=${exp} > d1
+rm m*dat
+awk '{if($2>cut0||$3>cut0) print $0}' cut0=$cut d1 > d2
+awk '{print "grep",$1,"/scratch/projects/hetdex/detect/dithall/"date0"v"shot0".dithall | grep",$4}' date0=$date shot0=$shot d2 > rj1
+chmod +x rj1
+rj1 > d3
+awk '{print $8}' d3 | sed s/.ixy// | awk '{print "grep",$1,"d2"}' > rj2
+chmod +x rj2
+rj2 > d5
+paste d5 d3 | awk '{print $5,$6,$2,$3,$1}' >> d4
+
+~gebhardt/bin/matchradec2
+awk '{print $0,date0"v"shot0}' date0=$date shot0=$shot radec.out > $1v$2.cs
+
+awk '{s+=1; print "rspcs",$1,$2,5,4505,50,s,$5,1.70,3.0,3.5,0.15,19,107,$3,$4}' $1v$2.cs > rcs0
+chmod +x rcs0
+rcs0
+awk '{print "rf1",$1,$2,5,4505,50,$5,$6,1.7,3,3.5,0.,1,100,$3,$4}' 2*.res > j1
+awk '{print $2,$3,$15,$16}' j1 > d4
+~gebhardt/bin/matchradec2b
+paste j1 radec.out | sort -g +1 -2 > j2
+awk '{if($21=="1") print $0}' j2 > good
+awk '{if($21=="0") print $0}' j2 > bad
+rm -f 2*.res
+sort -g -r +15 -16 good | awk '{s+=1; print $1,$2,$3,$4,$5,$6,s,$8,$9,$10,$11,$12,$13,$14,$15,$16}' > rgood
+chmod +x rgood
+rgood
+
+mv rgood $1v$2.rcs
+tar cf $1v$2cs.tar 2*
+cp $1v$2cs.tar $resdir/spec/.
+
+cd ..
+rm -r /tmp/maxflux$1v$2
+

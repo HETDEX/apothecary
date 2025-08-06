@@ -1,0 +1,3 @@
+ls 2*/match_exp01.pdf > j1
+sed s/"\/"/_/ j1 > j2
+paste j1 j2 | awk '{print "cp",$0}' > rj

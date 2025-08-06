@@ -1,0 +1,12 @@
+date=$1
+mkdir -p ${date}
+cd ${date}
+grep ${date} ../rt > rts
+~/jobsplitter2s rts 48 4 "00:20:00"
+mkdir -p tmp
+cp ../rback .
+cp ../rstep2 .
+cp ../rgetcmb .
+cp ../rgetcmb1 .
+sed -i s/skx-dev/skx-normal/ rts_1.slurm
+sbatch rts_1.slurm

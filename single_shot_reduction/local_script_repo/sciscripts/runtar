@@ -1,0 +1,12 @@
+# runtar 20191101 010 exp01
+date=$1
+shot=$2
+exp=$3
+#mkdir -p /scratch/00115/gebhardt/red1/reductions/${date}/virus/virus0000${shot}/${exp}/virus
+mkdir -p /scratch/03261/polonius/red1/reductions/${date}/virus/virus0000${shot}/${exp}/virus
+dir=$(pwd)
+#cd /scratch/00115/gebhardt/red1/reductions/${date}/virus/virus0000${shot}/${exp}/virus
+cd /scratch/03261/polonius/red1/reductions/${date}/virus/virus0000${shot}/${exp}/virus
+tar xvf $dir/d${date}s${shot}${exp}/d${date}s${shot}${exp}_co.tar
+#tar xvf $dir/d${date}s${shot}${exp}/d${date}s${shot}${exp}_mu.tar multi_314_027_011_LL.fits
+tar xf $dir/d${date}s${shot}${exp}/d${date}s${shot}${exp}_mu.tar

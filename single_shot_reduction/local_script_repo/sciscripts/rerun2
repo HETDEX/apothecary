@@ -1,0 +1,11 @@
+#awk '{print "ls /scratch/00115/gebhardt/red1/reductions/"$2"/virus/virus0000"$3"/"$4"/virus/multi*.fits | wc -l"}' rt1s > rj2
+awk '{print "ls /scratch/03261/polonius/red1/reductions/"$2"/virus/virus0000"$3"/"$4"/virus/multi*.fits | wc -l"}' rt1s > rj2
+chmod +x rj2
+rj2 > j1
+paste rj2 j1
+paste rj2 j1 | awk '{if($6<290) print $2}' > j2
+sed s/"\/"/" "/g j2 | sed s/virus0000// | awk '{print "grep \""$6,$8,$9"\" rt1s"}' > rtmp1
+chmod +x rtmp1
+rtmp1 > rtmp2
+rm -f rtmp2_*
+/home1/00115/gebhardt/jobsplitter rtmp2 80 1 "02:00:00"
