@@ -1,0 +1,38 @@
+date=$1
+shot=$2
+slurm=0 #turn on (1) or off (0) slurm creation (but not queuing)
+
+rt=rt.${date}v${shot}  #basically the core of .run for slurm, calls rback for every ifu+exposures
+rt0=rt0.${date}v${shot}  #copies the tar to raw subdirectory (the run0s call)
+
+mkdir -p field
+cd field
+mkdir -p raw
+awk '{if($2==date0&&$3==shot0) print $1,$2,$3,$4,$5,$6,$7,2}' date0=$date shot0=$shot /work/00115/gebhardt/maverick/gettar/runs20???? > ${rt}
+echo "run0s" $date $shot > ${rt0}
+
+if [ ! -f field/rback ] ; then
+    cp /work/03261/polonius/hetdex/science_reductions/sciscripts/rback_field rback
+    cp /work/03261/polonius/hetdex/science_reductions/sciscripts/run0s .
+fi
+
+
+chmod +x ${rt} ${rt0}
+
+
+#+1 needed for odd issue with jobsplitter; should rewrite with Python
+# this will always generate at least one filler line
+
+if [ $slurm gt 0 ]; then
+  lines=$(wc ${rt} | awk '{print $1 + 1}')
+  
+  if [ $lines -gt 127 ]; then
+    tpn=128
+  else
+    tpn=$lines
+  fi
+
+  /work/03261/polonius/hetdex/science_reductions/myscripts/jobsplitter ${rt}  $lines 1 "00:15:00" 1 $tpn
+fi
+
+${rt0}

@@ -1,0 +1,4 @@
+date=$1
+shot=$2
+rm -rf $1v$2
+rm -f tp/$1v$2*

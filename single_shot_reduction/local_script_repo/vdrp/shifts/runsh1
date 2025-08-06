@@ -1,0 +1,23 @@
+#!/bin/bash
+
+#. ../setup.sh
+
+NIGHT=$1
+SHOT=$2
+RA=$3
+DEC=$4
+TRACK=$5
+FP=$6
+CFG=../${NIGHT}v${SHOT}.config
+#LOG=${NIGHT}v${SHOT}.log
+LOG=/dev/null
+
+# Fall back to vdrp.config if no night/shot specific 
+# configuration file exists.
+if [ ! -f $CFG ]; then
+    CFG=../vdrp.config
+fi
+
+echo Configuration file $CFG
+vdrp_astrom --logfile $LOG -c $CFG $NIGHT $SHOT $RA $DEC $TRACK -t all --fplane_txt /scratch/00115/gebhardt/vdrp/fplane/fp$FP
+rclean $NIGHT $SHOT

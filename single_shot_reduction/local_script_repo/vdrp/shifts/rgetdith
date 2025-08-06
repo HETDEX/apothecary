@@ -1,0 +1,1 @@
+grep -v ra $1v$2/dithall.use > dithall/$1v$2.dithall

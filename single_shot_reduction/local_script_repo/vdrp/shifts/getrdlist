@@ -1,0 +1,1 @@
+grep . 2*/radec2_final.dat | sed s/v/" "/ | sed s/"\/radec2_final.dat:"/" "/ > j1

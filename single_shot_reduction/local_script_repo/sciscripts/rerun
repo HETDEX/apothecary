@@ -1,0 +1,10 @@
+awk '{print "ls d"$2"s"$3$4"/d"$2"s"$3$4"_mu.tar"}' rt1s > rj1
+chmod +x rj1
+rj1 > j1 2>j2
+sed s/"\/"/" "/ j2 | sed s/_/" "/ | awk '{print $5}' | sed s/d// | sed s/s/" "/ | sed s/e/" e"/ | awk '{print "grep \""$1,$2,$3"\" rt1s"}' > rtmp1
+chmod +x rtmp1
+rtmp1 > rtmp2
+rm -f rtmp2_*
+/home1/00115/gebhardt/jobsplitter rtmp2 80 1 "02:00:00"
+sed -i s/normal/development/ rtmp2_1.slurm
+sbatch rtmp2_1.slurm

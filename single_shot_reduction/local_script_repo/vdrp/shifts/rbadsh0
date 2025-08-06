@@ -1,0 +1,4 @@
+grep . 20180418*/radec2_exp01.dat | sed s/v/" "/ | sed s/"\/radec2_exp01.dat:"/" "/ > j1
+grep . 20180419*/radec2_exp01.dat | sed s/v/" "/ | sed s/"\/radec2_exp01.dat:"/" "/ >> j1
+grep . 20180420*/radec2_exp01.dat | sed s/v/" "/ | sed s/"\/radec2_exp01.dat:"/" "/ >> j1
+grep . 20180423*/radec2_exp01.dat | sed s/v/" "/ | sed s/"\/radec2_exp01.dat:"/" "/ >> j1

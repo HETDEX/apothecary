@@ -1,0 +1,10 @@
+cd $1v$2/res
+echo "*********************************"
+echo $(pwd)
+echo "*********************************"
+cp ../../cal_script/rgettp* .
+cp ../../cal_script/rsdss .
+cp ../../cal_script/sdssg.dat .
+cp ../../cal_script/getsdssg .
+rgettp
+echo "Done with "$1"v"$2
