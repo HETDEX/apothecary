@@ -124,7 +124,7 @@ if True: #testing
 
     s05_detection = True
     s05b_rdet_rf1 = True
-    s05c_rgetmax = False
+    s05c_rgetmax = True
     #s05d_detection_tables = False  #builds as fits files... this is replaced by the hdf5 version
     s05e_detection_hdf5 = False
    # s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_detection_tables | s05e_detection_hdf5  # sanity catch
@@ -296,13 +296,28 @@ def get_guider_fwhm(cfg):
     try:
         saved_fn = "guider.fwhm"
         if os.path.exists(saved_fn):
-            fwhm = np.loadtxt(saved_fn) #just one value
-            if fwhm is None or np.isnan(fwhm) or fwhm <= 0:
+            fwhm = np.loadtxt(saved_fn,dtype=float) #just one value
+            if fwhm is None or np.isnan(fwhm):
                  #we will continue below and rebuild
                 print(f"Found {saved_fn}, but guider seeing FWHM is inavlid ({fwhm}). Will recompute ...")
             else:
-                print(f"Found {saved_fn}. Using guider seeing FWHM = {fwhm}")
-                return fwhm
+                fail = False
+                try:
+                    if len(fwhm) == 0 or fwhm[0] <= 0:
+                        print(f"Found {saved_fn}, but guider seeing FWHM is inavlid ({fwhm}). Will recompute ...")
+                        fail = True
+                except:
+                    pass
+
+                try:
+                    fwhm = float(fwhm)
+                except:
+                    print(f"Found {saved_fn}, but guider seeing FWHM is inavlid ({fwhm}). Will recompute ...")
+                    fail = True
+
+                if not fail:
+                    print(f"Found {saved_fn}. Using guider seeing FWHM = {fwhm}")
+                    return fwhm
 
         exposure_times = []
         gc1_names = None
@@ -439,10 +454,10 @@ def get_guider_fwhm(cfg):
                     print(f"Invalid IQ card")
 
         if len(iq) == 1:
-            np.savetxt(saved_fn,iq[0],fmt="%0.4f")
+            np.savetxt(saved_fn,[iq[0]],fmt="%0.4f")
             return iq[0]
         elif len(iq) > 1:
-            np.savetxt(saved_fn, np.nanmean(iq), fmt="%0.4f")
+            np.savetxt(saved_fn, [np.nanmean(iq)], fmt="%0.4f")
             return np.nanmean(iq)
         else:
             return None
@@ -2491,6 +2506,8 @@ else:
     else:
         Quit(cfg, -1, f"Invalid exposure. Requesting exp #{cfg.exp} but {cfg.datevshot} has only {cfg.numexp}")
 
+rc = initial_setup(cfg)
+
 if cfg.numexp < 3:
     print(f"Fewer than 3 exposures (assume dithers). Checking guider for seeing FWHM...")
     cfg.guider_fwhm = get_guider_fwhm(cfg)
@@ -2498,8 +2515,6 @@ if cfg.numexp < 3:
         print(f"Using guider FWHM = {cfg.guider_fwhm}")
     else:
         print(f"Unable to obtain guider seeing FWHM. Will measure as best can be from available data.")
-
-rc = initial_setup(cfg)
 
 if rc < 0:
     Quit(cfg,rc,"Could not complete initial setup.")
