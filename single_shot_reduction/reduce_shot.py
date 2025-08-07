@@ -114,17 +114,17 @@ if False: #testing
 
     s03_fluxcal = False
 
-    s04_sky_subtraction = False
-    s04a_get_ifucens = False
-    s04b_rfft = False
-    s04c_rcal_all = False
-    s04d_shot_h5 = False
-    s04e_amp_stats = False
+    s04_sky_subtraction = True
+    s04a_get_ifucens = True
+    s04b_rfft = True
+    s04c_rcal_all = True
+    s04d_shot_h5 = True
+    s04e_amp_stats = True
     s04_sky_subtraction = s04_sky_subtraction | s04a_get_ifucens | s04b_rfft | s04c_rcal_all | s04d_shot_h5 | s04e_amp_stats  # sanity catch
 
-    s05_detection = True
+    s05_detection = False
     s05b_rdet_rf1 = False
-    s05c_rgetmax = True
+    s05c_rgetmax = False
     #s05d_detection_tables = False  #builds as fits files... this is replaced by the hdf5 version
     s05e_detection_hdf5 = False
    # s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_detection_tables | s05e_detection_hdf5  # sanity catch
@@ -1601,6 +1601,27 @@ def rgetmax(cfg):
         os.makedirs("spec", exist_ok=True)
 
         print(f"continuum detections (rgetmax) ...")
+
+        if cfg.exp == 0 and cfg.numexp == 3:
+            pass #do nothing, the default of 3 exposures stands
+        else:
+            #note: technically, this could fail if this is on a --resume and the original
+            # string was already replaced, but in that case, the sed just won't do anything
+            # and we would already have the correct exposures to (re)run
+            print(f"updating for selected and available exposures")
+            #exp_array = ("exp01" "exp02" "exp03")
+            #sed -i s#exp_array=\(\"exp01\"\ \"exp02\"\ \"exp03\"\)#exp_array=\(\"exp01\"\)# rgetmax
+            cmd = f"sed -i s#exp_array=\(\\\"exp01\\\"\ \\\"exp02\\\"\ \\\"exp03\\\"\)#"
+            if cfg.exp > 0:
+                cmd += f"exp_array=\(\\\"exp{str(cfg.exp).zfill(2)}\\\")# rgetmax"
+            else:
+                cmd += f"exp_array=\("
+                for exp in range(cfg.numexp):
+                    cmd += f"\\\"exp{str(exp+1).zfill(2)}\\\"\ "
+                cmd += f"\)# rgetmax"
+
+            system_command(cfg,cmd)
+
         system_command(cfg,f"rgetmax {cfg.datevshot.split('v')[0]} {cfg.datevshot.split('v')[1]}")
 
         #output is a cs.tar file ... not broken up by IFU #20240730v009cs.tar
@@ -2088,8 +2109,11 @@ def build_detection_hdf5(cfg):
         rc = 0
         detectid_base = np.int64(cfg.datevshot.replace('v', '', )) * np.int64(1e7) + 1000000
         print("Building detections hdf5 ... ")
-        #cmd = f"python3 {hetdex_api_path}/h5tools/create_detect_hdf5.py"
-        cmd = f"python3 {cfg.cwd}/../create_detect_hdf5.py"
+
+        os.chdir(os.path.join(cfg.cwd))
+
+        cmd = f"python3 {hetdex_api_path}/h5tools/create_detect_hdf5.py"
+        #cmd = f"python3 {cfg.cwd}/../create_detect_hdf5.py"
         #cmd += f" --survey NA"
         cmd += f" --detectid_base {detectid_base}"
         cmd += f" --date {cfg.datevshot[0:8]}"
@@ -2100,8 +2124,8 @@ def build_detection_hdf5(cfg):
         system_command(cfg, cmd)
 
         detectid_base = np.int64(cfg.datevshot.replace('v', '', )) * np.int64(1e7) + 9000000
-        #cmd = f"python3 {hetdex_api_path}/h5tools/create_cont_hdf5.py"
-        cmd = f"python3 {cfg.cwd}/../create_cont_hdf5.py"
+        cmd = f"python3 {hetdex_api_path}/h5tools/create_cont_hdf5.py"
+        #cmd = f"python3 {cfg.cwd}/../create_cont_hdf5.py"
         cmd += f" --detectid_base {detectid_base}"
         cmd += f" --date {cfg.datevshot[0:8]}"
         cmd += f" --observation \"{cfg.datevshot[-3:]}\""
@@ -2609,6 +2633,28 @@ if s03_fluxcal:
     #todo: optional: update  /scratch/projects/hetdex/detect/fwhm.all and norm.all
     #                see update_fwhm_norm script
     #
+
+    #update the fwhm.out with the cfg.guider_fwhm, if it is set
+    if cfg.guider_fwhm is not None and cfg.guider_fwhm > 0:
+        try:
+
+            fwhm_fn = os.path.join(cfg.cwd,f"detect/{cfg.datevshot}/fwhm.out")
+            fwhm_cp = os.path.join(cfg.cwd,f"detect/{cfg.datevshot}/fwhm.out.original")
+
+            #make a copy
+            system_command(cfg,f"cp {fwhm_fn} {fwhm_cp}")
+
+            out = np.loadtxt(fwhm_fn) #should just be a single line
+
+            #have to write out as file since not all floats
+            print(f"Updating measured seeing FWHM {out[0]} with guider reported FWHM {cfg.guider_fwhm}")
+            with open(fwhm_fn,"w") as f:
+                f.write(f"{cfg.guider_fwhm}\t{out[1]}\t{int(out[2])}\n")
+
+        except:
+            print(f"Could not update fwhm.out with guider.fwhm")
+            print(traceback.format_exc())
+
 
 else:
     print("Skipping flux calibration")
