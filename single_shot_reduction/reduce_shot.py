@@ -48,7 +48,7 @@ import traceback
 ########################################################################
 # CONFIGURATION
 ########################################################################
-EchoCmds = True #if True echo system commands to the log
+EchoCmds = False #if True echo system commands to the log
 FutureShotDateLimit = 20490101000  # do not allow shots after this dave+shot
 ElixerSnrThresh = 4.5 #do not run elixer on line sources where the S/N < 4.5
 
@@ -114,12 +114,12 @@ if False: #testing
 
     s03_fluxcal = False
 
-    s04_sky_subtraction = True
-    s04a_get_ifucens = True
-    s04b_rfft = True
-    s04c_rcal_all = True
-    s04d_shot_h5 = True
-    s04e_amp_stats = True
+    s04_sky_subtraction = False
+    s04a_get_ifucens = False
+    s04b_rfft = False
+    s04c_rcal_all = False
+    s04d_shot_h5 = False
+    s04e_amp_stats = False
     s04_sky_subtraction = s04_sky_subtraction | s04a_get_ifucens | s04b_rfft | s04c_rcal_all | s04d_shot_h5 | s04e_amp_stats  # sanity catch
 
     s05_detection = False
@@ -133,7 +133,7 @@ if False: #testing
     s06_catalogs = False
     s06b_fof = False  # cluster the lines and continuum sources (separately)
     s06c_diagnose = False  # run Diagnose
-    s06d_elixer = False  # run elixer
+    s06d_elixer = True  # run elixer
     s06e_source_cat = False  # make a source catalog
 
     s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
@@ -2496,6 +2496,61 @@ def diagnose_output_to_table(cfg):
     return rc
 
 
+def prep_elixer(cfg):
+    """
+
+    prepare, but do not run, elixer for line and continuum sources
+
+    :param cfg:
+    :return:
+    """
+
+
+    try:
+        rc = 0
+        os.chdir(os.path.join(cfg.cwd))
+
+        #make subdirs elixer/line, elixer/cont
+        elixdir = os.path.join(cfg.cwd,"elixer/")
+        Path(elixdir).mkdir(parents=True, exist_ok=True)
+
+        tab = Table.read(f"{cfg.datevshot}_line_sourcecat.tab",format="ascii")
+        line_dets = list(tab['detectid'])
+        np.savetxt(os.path.join(elixdir, "line.dets"), line_dets, fmt="%d")
+        del tab
+
+        tab = Table.read(f"{cfg.datevshot}_cont_sourcecat.tab",format="ascii")
+        cont_dets = list(tab['detectid'])
+        np.savetxt(os.path.join(elixdir, "cont.dets"), cont_dets, fmt="%d")
+        del tab
+
+        shot_h5 = os.path.join(cfg.cwd,f"{cfg.datevshot}.h5")
+        line_h5 = os.path.join(cfg.cwd,f"{cfg.datevshot}_line.h5")
+        cont_h5 = os.path.join(cfg.cwd, f"{cfg.datevshot}_cont.h5")
+        diagnose_tab = os.path.join(cfg.cwd,f"diagnose_classifications.tab")
+
+        which_elixer = "selixer.test "
+        elixer_base_cmd = f" -f --slurm 0 --nodes 1 --log info --shot_h5 {shot_h5} --diagnose {diagnose_tab} " \
+                          f" --png --error 3.0 --neighborhood 10.0 "
+        elixer_line_cmd = f" --name line --dets line.dets  --hdf5 {line_h5} "
+        elixer_cont_cmd = f" --name cont --continuum --dets cont.dets  --hdf5 {cont_h5} "
+
+        with open(os.path.join(elixdir,"elixer_cmd.txt"),"w") as f:
+            f.write(f"{which_elixer} {elixer_base_cmd} {elixer_line_cmd} \n")
+            f.write(f"{which_elixer} {elixer_base_cmd} {elixer_cont_cmd} \n")
+
+
+        print("ELiXer commands prepared. You may edit 'elixer_cmd.txt' under elixer/line and elixer/cont as needed.")
+        print("To run, 'source' each 'elixer_cmd.txt' file. Each will set up, but not queue, a SLURM job.")
+        print("You may then edit each .slurm as needed and sbatch when ready.")
+
+
+
+    except:
+        print(traceback.format_exc())
+        rc = -1
+        print(f"Exception in prep_elixer():  {cfg.datevshot}")
+
 #
 
 ########################################################################
@@ -2944,7 +2999,8 @@ if s06_catalogs:
 
     if s06d_elixer:
 
-        print(f"*** todo: build up elixer call ")
+       # print(f"*** todo: build up elixer call ")
+        rc = prep_elixer(cfg)
 
 
 ##########
