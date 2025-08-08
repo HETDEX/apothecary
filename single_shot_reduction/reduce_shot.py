@@ -28,6 +28,7 @@ import shutil
 from pathlib import Path
 from dataclasses import dataclass
 import tarfile as tar
+from datetime import datetime, timedelta
 
 import tables
 from astropy.table import Table, join, Column, MaskedColumn # unique, vstack, hstack
@@ -51,6 +52,8 @@ import traceback
 EchoCmds = False #if True echo system commands to the log
 FutureShotDateLimit = 20490101000  # do not allow shots after this dave+shot
 ElixerSnrThresh = 4.5 #do not run elixer on line sources where the S/N < 4.5
+GuiderFWHM_ALL = True #if True and using the GUIDER FWHM, use all within the observation timeframe
+                      #if False, just use the two nearest in time to the end of the observation
 
 ScriptRepo = "/work/03261/polonius/hetdex/single_shot"
 LocalScriptRepo = "./local_script_repo" #useful if running multiple single shots ... can copy remotely once
@@ -319,7 +322,13 @@ def get_guider_fwhm(cfg):
                     print(f"Found {saved_fn}. Using guider seeing FWHM = {fwhm}")
                     return fwhm
 
-        exposure_times = []
+        exposure_times = [] #exposure times (seconds) from HDU
+        exposure_fn_times =[] #date T time string from the fileanames
+
+        gc_start_times = []
+        gc_stop_times = []
+
+
         gc1_names = None
         gc2_names = None
         #gc1_times = None
@@ -348,10 +357,16 @@ def get_guider_fwhm(cfg):
                     if np.count_nonzero(sel) > 0:
                         fn0 = fns[sel][0]
                         name = fn0.split("/")[-1].split("_")[0]
-                        exposure_times.append(name)
+                        exposure_fn_times.append(name)
+
+                        t1, p1 = Utils.open_file_from_tar(base_tarfn, fn0)
+                        fh = fits.open(t1)
+                        exposure_times.append(fh[0].header['EXPTIME'])
+                        #or would DARKTIME be better ??
+                        fh.close()
 
 
-        if len(exposure_times) == 0:
+        if len(exposure_fn_times) == 0:
             #could not find any
             return None
 
@@ -374,91 +389,154 @@ def get_guider_fwhm(cfg):
                 #gc2_times = [x.split("/")[1].split("_")[0] for x in gc2_names]
 
 
-        #get nearest (sort with exposusre name, find the index of the exposure name and take the index before and after?)
-        if gc1_names is not None:
-            gc1_near = [] #list of lists ... ie. if 3 exposures, will be a 3 long list each with 2 elements
-            for expname in exposure_times:
-                fake_name = f"./{expname}_gc1_sci.fits"
-                gc_x = sorted(gc1_names + [fake_name])
-                idx = gc_x.index(fake_name)
-                lidx = max(0,idx-1)
-                ridx = min(len(gc_x),idx+1)
-                #could be an exact match, but if so, either left or right will then also be the same
-                gc1_near.append([gc_x[lidx]] + [gc_x[ridx]])
+        # maybe get the exposure time for the science image and then get all the
+        # guider images that overlap with that time?
+        # get the time from the filename, subtract the exposure time and accept all
+        # guider images that have a filename time AFTER and within some small XX beyond the original sciece filetime
 
-        if gc2_names is not None:
-            gc2_near = [] #list of lists ... ie. if 3 exposures, will be a 3 long list each with 2 elements
-            for expname in exposure_times:
-                fake_name = f"./{expname}_gc2_sci.fits"
-                gc_x = sorted(gc2_names + [fake_name])
-                idx = gc_x.index(fake_name)
-                lidx = max(0,idx-1)
-                ridx = min(len(gc_x),idx+1)
-                #could be an exact match, but if so, either left or right will then also be the same
-                gc2_near.append([gc_x[lidx]] + [gc_x[ridx]])
+        if GuiderFWHM_ALL: #use all within specified time range
 
+            for fntime, exptime in zip(exposure_fn_times, exposure_times):
+                fntime = datetime(int(fntime[0:4]), int(fntime[4:6]), int(fntime[6:8]),
+                                  int(fntime[9:11]), int(fntime[11:13]), int(fntime[13:15]))
+                delta_time = fntime - timedelta(seconds=exptime)
+                time_str = f"{str(delta_time.year)}{str(delta_time.month).zfill(2)}{str(delta_time.day).zfill(2)}T" \
+                           f"{str(delta_time.hour).zfill(2)}{str(delta_time.minute).zfill(2)}{str(delta_time.second).zfill(2)}.0"
 
+                gc_start_times.append(time_str)
+                #Guider typically records every few seconds, so no need to go after
+                delta_time = fntime #+ timedelta(seconds=120.0)  # go up to 2 minutes after
+                time_str = f"{str(delta_time.year)}{str(delta_time.month).zfill(2)}{str(delta_time.day).zfill(2)}T" \
+                           f"{str(delta_time.hour).zfill(2)}{str(delta_time.minute).zfill(2)}{str(delta_time.second).zfill(2)}.0"
+                gc_stop_times.append(time_str)
 
-        #now which to use? gc1 or gc2
+            if gc1_names is not None:
+                gc1_near = [] #list of lists ... ie. if 3 exposures, will be a 3 long list each with 2 elements
+                for start_time, stop_time in zip(gc_start_times,gc_stop_times):
+                    for name in gc1_names:
+                        #just want the time part
+                        if start_time <= name[2:19] <= stop_time: #yes, technically string compares, but works for the time format here
+                            gc1_near.append(name)
 
-        base_tarfn = os.path.join(path, "gc1/gc1.tar")
-        gc1_active=False
-        if os.path.exists(base_tarfn):
-            try:
-                #just checking for which is active
-                t1,p1 = Utils.open_file_from_tar(base_tarfn,gc1_near[0][0])
-                fh = fits.open(t1)
-                gc1_active = fh[0].header['GUIDLOOP'] == 'ACTIVE'
-                fh.close()
-                t1.close()
-            except:
-                print(f"Exception in get_guider_fwhm: {traceback.format_exc()}")
+            if gc2_names is not None:
+                gc2_near = [] #list of lists ... ie. if 3 exposures, will be a 3 long list each with 2 elements
+                for start_time, stop_time in zip(gc_start_times,gc_stop_times):
+                    for name in gc2_names:
+                        #just want the time part
+                        if start_time <= name[2:19] <= stop_time: #yes, technically string compares, but works for the time format here
+                            gc2_near.append(name)
+        else: #just use the two nearest
+            # get nearest (sort with exposusre name, find the index of the exposure name and take the index before and after?)
 
+            if gc1_names is not None:
+                gc1_near = [] #list of lists ... ie. if 3 exposures, will be a 3 long list each with 2 elements
+                for expname in exposure_fn_times:
+                    fake_name = f"./{expname}_gc1_sci.fits"
+                    gc_x = sorted(gc1_names + [fake_name])
+                    idx = gc_x.index(fake_name)
+                    lidx = max(0,idx-1)
+                    ridx = min(len(gc_x),idx+1)
+                    #could be an exact match, but if so, either left or right will then also be the same
+                    gc1_near.append([gc_x[lidx]] + [gc_x[ridx]])
 
-        base_tarfn = os.path.join(path, "gc2/gc2.tar")
-        gc2_active=False
-        if os.path.exists(base_tarfn):
-            try:
-                #just checking for which is active
-                t1,p1 = Utils.open_file_from_tar(base_tarfn,gc2_near[0][0])
-                fh = fits.open(t1)
-                gc2_active = fh[0].header['GUIDLOOP'] == 'ACTIVE'
-                fh.close()
-                t1.close()
-            except:
-                print(f"Exception in get_guider_fwhm: {traceback.format_exc()}")
+            if gc2_names is not None:
+                gc2_near = [] #list of lists ... ie. if 3 exposures, will be a 3 long list each with 2 elements
+                for expname in exposure_fn_times:
+                    fake_name = f"./{expname}_gc2_sci.fits"
+                    gc_x = sorted(gc2_names + [fake_name])
+                    idx = gc_x.index(fake_name)
+                    lidx = max(0,idx-1)
+                    ridx = min(len(gc_x),idx+1)
+                    #could be an exact match, but if so, either left or right will then also be the same
+                    gc2_near.append([gc_x[lidx]] + [gc_x[ridx]])
 
-
-
-        if gc1_active:
+        iq = [] #image quality (seeing fwhm) list
+        if GuiderFWHM_ALL:
+            #note: which guider is active could change? so check both?
             base_tarfn = os.path.join(path, "gc1/gc1.tar")
-            gc_near = gc1_near
+            if os.path.exists(base_tarfn):
+                for name in gc1_near:
+                    try:
+                        t1, p1 = Utils.open_file_from_tar(base_tarfn, name)
+                        fh = fits.open(t1)
+                        if fh[0].header['GUIDLOOP'] == 'ACTIVE':
+                            iq.append(float(fh[0].header['IQ'])) #this is clipped later to exlcude 0s and other bad values
+                        fh.close()
+                        t1.close()
+                    except:
+                        pass #don't let one bad read bomb out
 
-        elif gc2_active:
             base_tarfn = os.path.join(path, "gc2/gc2.tar")
-            gc_near = gc2_near
-        else:
-            print(f"No active guider. Cannot get seeing fwhm.")
-            return None
+            if os.path.exists(base_tarfn):
+                for name in gc2_near:
+                    try:
+                        t1, p1 = Utils.open_file_from_tar(base_tarfn, name)
+                        fh = fits.open(t1)
+                        if fh[0].header['GUIDLOOP'] == 'ACTIVE':
+                            iq.append(float(fh[0].header['IQ'])) #this is clipped later to exlcude 0s and other bad values
+                        fh.close()
+                        t1.close()
+                    except:
+                        pass #don't let one bad read bomb out
 
-        iq = []
-        for near_list in gc_near:
-            for near_file in near_list:
+        else: #just the two nearest
+            #now which to use? gc1 or gc2
+            base_tarfn = os.path.join(path, "gc1/gc1.tar")
+            gc1_active=False
+            if os.path.exists(base_tarfn):
                 try:
-                    t1, p1 = Utils.open_file_from_tar(base_tarfn, near_file)
+                    #just checking for which is active
+                    t1,p1 = Utils.open_file_from_tar(base_tarfn,gc1_near[0][0])
                     fh = fits.open(t1)
-                    iq.append(float(fh[0].header['IQ']))
+                    gc1_active = fh[0].header['GUIDLOOP'] == 'ACTIVE'
                     fh.close()
                     t1.close()
                 except:
-                    print(f"Invalid IQ card")
+                    print(f"Exception in get_guider_fwhm: {traceback.format_exc()}")
+
+
+            base_tarfn = os.path.join(path, "gc2/gc2.tar")
+            gc2_active=False
+            if os.path.exists(base_tarfn):
+                try:
+                    #just checking for which is active
+                    t1,p1 = Utils.open_file_from_tar(base_tarfn,gc2_near[0][0])
+                    fh = fits.open(t1)
+                    gc2_active = fh[0].header['GUIDLOOP'] == 'ACTIVE'
+                    fh.close()
+                    t1.close()
+                except:
+                    print(f"Exception in get_guider_fwhm: {traceback.format_exc()}")
+
+            if gc1_active:
+                base_tarfn = os.path.join(path, "gc1/gc1.tar")
+                gc_near = gc1_near
+
+            elif gc2_active:
+                base_tarfn = os.path.join(path, "gc2/gc2.tar")
+                gc_near = gc2_near
+            else:
+                print(f"No active guider. Cannot get seeing fwhm.")
+                return None
+
+            for near_list in gc_near:
+                for near_file in near_list:
+                    try:
+                        t1, p1 = Utils.open_file_from_tar(base_tarfn, near_file)
+                        fh = fits.open(t1)
+                        iq.append(float(fh[0].header['IQ']))
+                        fh.close()
+                        t1.close()
+                    except:
+                        print(f"Invalid IQ card")
 
         if len(iq) == 1:
             np.savetxt(saved_fn,[iq[0]],fmt="%0.4f")
             return iq[0]
         elif len(iq) > 1:
-            np.savetxt(saved_fn, [np.nanmean(iq)], fmt="%0.4f")
-            return np.nanmean(iq)
+            md_iq = np.nanmedian(np.clip(iq,0.1,9.0))
+            np.savetxt(saved_fn, [md_iq], fmt="%0.4f")
+            return md_iq
         else:
             return None
 
@@ -2573,6 +2651,7 @@ if rc < 0:
 
 
 cfg.numexp, cfg.gettar_fn = num_exposures_in_shot(cfg.shotid)
+
 
 if cfg.numexp <= 0:
     Quit(cfg, -1, f"Could not find shot {cfg.datevshot}")
