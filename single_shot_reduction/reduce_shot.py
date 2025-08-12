@@ -49,7 +49,7 @@ import traceback
 ########################################################################
 # CONFIGURATION
 ########################################################################
-EchoCmds = False #if True echo system commands to the log
+EchoCmds = True  #if True echo system commands to the log
 FutureShotDateLimit = 20490101000  # do not allow shots after this dave+shot
 ElixerSnrThresh = 4.5 #do not run elixer on line sources where the S/N < 4.5
 GuiderFWHM_ALL = True #if True and using the GUIDER FWHM, use all within the observation timeframe
@@ -125,17 +125,17 @@ if False: #testing
     s04e_amp_stats = False
     s04_sky_subtraction = s04_sky_subtraction | s04a_get_ifucens | s04b_rfft | s04c_rcal_all | s04d_shot_h5 | s04e_amp_stats  # sanity catch
 
-    s05_detection = False
+    s05_detection = True
     s05b_rdet_rf1 = False
-    s05c_rgetmax = False
+    s05c_rgetmax = True
     #s05d_detection_tables = False  #builds as fits files... this is replaced by the hdf5 version
-    s05e_detection_hdf5 = False
+    s05e_detection_hdf5 = True
    # s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_detection_tables | s05e_detection_hdf5  # sanity catch
     s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05e_detection_hdf5  # sanity catch
 
-    s06_catalogs = False
-    s06b_fof = False  # cluster the lines and continuum sources (separately)
-    s06c_diagnose = False  # run Diagnose
+    s06_catalogs = True
+    s06b_fof = True  # cluster the lines and continuum sources (separately)
+    s06c_diagnose = True  # run Diagnose
     s06d_elixer = True  # run elixer
     s06e_source_cat = False  # make a source catalog
 
@@ -1691,7 +1691,7 @@ def rgetmax(cfg):
             #sed -i s#exp_array=\(\"exp01\"\ \"exp02\"\ \"exp03\"\)#exp_array=\(\"exp01\"\)# rgetmax
             cmd = f"sed -i s#exp_array=\(\\\"exp01\\\"\ \\\"exp02\\\"\ \\\"exp03\\\"\)#"
             if cfg.exp > 0:
-                cmd += f"exp_array=\(\\\"exp{str(cfg.exp).zfill(2)}\\\")# rgetmax"
+                cmd += f"exp_array=\(\\\"exp{str(cfg.exp).zfill(2)}\\\"\)# rgetmax"
             else:
                 cmd += f"exp_array=\("
                 for exp in range(cfg.numexp):
@@ -1699,6 +1699,8 @@ def rgetmax(cfg):
                 cmd += f"\)# rgetmax"
 
             system_command(cfg,cmd)
+
+        print(f"running rgetmax (continuum detection) ...")
 
         system_command(cfg,f"rgetmax {cfg.datevshot.split('v')[0]} {cfg.datevshot.split('v')[1]}")
 
@@ -1720,7 +1722,7 @@ def rgetmax(cfg):
     except:
         print(traceback.format_exc())
         rc = -1
-        print(f"Fatal exception in rdet_rf1:  {cfg.datevshot}")
+        print(f"Fatal exception in rgetmax:  {cfg.datevshot}")
 
     return rc
 
@@ -2618,8 +2620,8 @@ def prep_elixer(cfg):
             f.write(f"{which_elixer} {elixer_base_cmd} {elixer_cont_cmd} \n")
 
 
-        print("ELiXer commands prepared. You may edit 'elixer_cmd.txt' under elixer/line and elixer/cont as needed.")
-        print("To run, 'source' each 'elixer_cmd.txt' file. Each will set up, but not queue, a SLURM job.")
+        print("ELiXer commands prepared. You may edit 'elixer_cmd.txt' under ./elixer as needed.")
+        print("To run, 'source' the 'elixer_cmd.txt' file. It will set up, but not queue, two SLURM jobs (line and cont).")
         print("You may then edit each .slurm as needed and sbatch when ready.")
 
 
