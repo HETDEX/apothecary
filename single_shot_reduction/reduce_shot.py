@@ -28,6 +28,7 @@ import shutil
 from pathlib import Path
 from dataclasses import dataclass
 import tarfile as tar
+import json
 from datetime import datetime, timedelta
 
 import tables
@@ -106,6 +107,7 @@ s06d_elixer = True   #run elixer
 s06e_source_cat = True #make a source catalog
 
 s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
+
 
 if False: #testing
     print("#################### TESTING ##########################")
@@ -235,6 +237,73 @@ else:
 ########################################################################
 # worker functions
 ########################################################################
+
+
+def progress_update(cfg,progress_dict,key=None,status=True):
+    """
+    update the progress record
+    :param progress_dict:
+    :return:
+    """
+
+    try:
+        if key is not None:
+            progress_dict[key] = status
+
+        fn = os.path.join(cfg.cwd,"progress.dat")
+        with open(fn, 'w') as f:
+            json.dump(progress_dict, f, indent=4)  # indent=4 for pretty-printing
+
+    except:
+        print(f"Exception in progress_update(). {traceback.format_exc()}")
+
+def progress_init(cfg):
+    """
+    read/initialize progress dict
+    :param cfg:
+    :return:
+    """
+    dtprog = None
+    try:
+        fn = os.path.join(cfg.cwd,"progress.dat")
+        if os.path.exists(fn):
+            with open(fn, 'r') as f:
+                dtprog = json.load(f)
+
+            #assume this was successful, but also check --resume
+            if cfg.resume is False:
+                print("********** NOTICE **********")
+                print("Call did NOT specfiy --resume, but this reduction appears to be at least partially complete.")
+                print("Will attempt to resume (implied) at the last incomplete step ...")
+                print("****************************")
+                cfg.resume = True
+
+    except:
+        print(f"Exception in progress_init(). {traceback.format_exc()}")
+
+    if dtprog is None:
+        dtprog = {"s01_run1s": False,
+                  "s02_vdrp": False,
+                  "s03_fluxcal": False,
+                  "s04_sky_subtraction": False,
+                  "s04a_get_ifucens": False,
+                  "s04b_rfft": False,
+                  "s04c_rcal_all": False,
+                  "s04d_shot_h5": False,
+                  "s04e_amp_stats": False,
+                  "s05_detection": False,
+                  "s05b_rdet_rf1": False,
+                  "s05c_rgetmax": False,
+                  "s05e_detection_hdf5": False,
+                  "s06_catalogs": False,
+                  "s06b_fof": False,
+                  "s06c_diagnose": False,
+                  "s06d_elixer": False,
+                  "s06e_source_cat": False, }
+
+        progress_update(cfg,dtprog) #write out the file, no updates yet
+
+    return dtprog
 
 def Quit(cfg,rc,msg=None):
     """
@@ -797,6 +866,7 @@ def initial_setup(cfg):
             shutil.rmtree(workdir)
         else:
             print(f"Shot directory already exists here! {workdir}")
+            print(f"Please include --resume or --overwrite to make intention clear.")
             return -1
 
     if not resume:
@@ -1681,7 +1751,8 @@ def rgetmax(cfg):
         print(f"continuum detections (rgetmax) ...")
 
         if cfg.exp == 0 and cfg.numexp == 3:
-            pass #do nothing, the default of 3 exposures stands
+            print("using standard 3-dither rgetmax")
+            #pass #do nothing, the default of 3 exposures stands
         else:
             #note: technically, this could fail if this is on a --resume and the original
             # string was already replaced, but in that case, the sed just won't do anything
@@ -2646,14 +2717,11 @@ def prep_elixer(cfg):
 # setup
 ###########
 
-
 rc = precheck(cfg)
 if rc < 0:
     Quit(cfg,rc,"Precheck failed. Reduction cannot run.")
 
-
 cfg.numexp, cfg.gettar_fn = num_exposures_in_shot(cfg.shotid)
-
 
 if cfg.numexp <= 0:
     Quit(cfg, -1, f"Could not find shot {cfg.datevshot}")
@@ -2668,6 +2736,9 @@ else:
 
 rc = initial_setup(cfg)
 
+if rc < 0:
+    Quit(cfg,rc,"Could not complete initial setup.")
+
 if cfg.numexp < 3:
     print(f"Fewer than 3 exposures (assume dithers). Checking guider for seeing FWHM...")
     cfg.guider_fwhm = get_guider_fwhm(cfg)
@@ -2676,8 +2747,7 @@ if cfg.numexp < 3:
     else:
         print(f"Unable to obtain guider seeing FWHM. Will measure as best can be from available data.")
 
-if rc < 0:
-    Quit(cfg,rc,"Could not complete initial setup.")
+
 
 
 #########
@@ -2693,10 +2763,13 @@ print(f"Logging redirected to: {cfg.cwd}/{cfg.file_stdout.name}")
 #sys.stdout = cfg.file_stdout
 
 
+# get the progress state. Useful if resuming (implied)
+dtprog = progress_init(cfg)
+
 ###########
 # step1
 ###########
-if s01_run1s:
+if s01_run1s and not dtprog["s01_run1s"]:
     run_run1s(cfg)
 
     # todo: run any checks
@@ -2705,6 +2778,8 @@ if s01_run1s:
     #todo: this would be manual here, I think, but CAN copy /red1/xxx to /scratch/local/projects
     #  all the various CoFe*.fits and multi*.fits ... these are also in the
     #  local d<shot><exp> folder in the two tar files (_co.tar and _mu.tar for the CoFe*.fits and multi*.fits respectively)
+
+    progress_update(cfg,dtprog,"s01_run1s")
 else:
     print("Skipping run1s")
 
@@ -2713,13 +2788,15 @@ else:
 # VDRP
 ###########
 
-if s02_vdrp:
+if s02_vdrp and not dtprog["s02_vdrp"]:
     run_vdrp(cfg)
 
     check_vdrp(cfg)
 
     #todo: optional manual step here (need to be hetdex user), copy the *.dithall to
     #  /scratch/projects/hetdex/detect/dithall   (and /coral-repl/...)
+
+    progress_update(cfg,dtprog, "s02_vdrp")
 
 else:
     print("Skipping vdrp")
@@ -2732,7 +2809,7 @@ else:
 # rallcal stuff
 ###########
 
-if s03_fluxcal:
+if s03_fluxcal and not dtprog["s03_fluxcal"]:
 
     #first need to prepare the reduction directory where the downstream code looks for the multi*fits
     if prepare_reduction_dir(cfg) < 0:
@@ -2791,7 +2868,7 @@ if s03_fluxcal:
             print(f"Could not update fwhm.out with guider.fwhm")
             print(traceback.format_exc())
 
-
+    progress_update(cfg,dtprog,"s03_fluxcal")
 else:
     print("Skipping flux calibration")
 
@@ -2802,42 +2879,53 @@ else:
 # getcen and more stuff
 ###########
 
-if s04_sky_subtraction:
+if s04_sky_subtraction and not dtprog["s04_sky_subtraction"]:
 
     print("Getting IFU centers ...")
-    if s04a_get_ifucens:
+    if s04a_get_ifucens and not dtprog["s04a_get_ifucens"]:
         if run_make_ifucen(cfg) != 0:
             Quit(cfg,-1,"FATAL. Failed to get IFU centers.")
+        else:
+            progress_update(cfg,dtprog, "s04a_get_ifucens")
 
-    if s04b_rfft:
+    if s04b_rfft and not dtprog["s04b_rfft"]:
         print("Running rfft (this may take a while) ...")
         if run_rfft(cfg) != 0:
             Quit(cfg, -1, "FATAL. rfft fail. One or more expected outputs failed.")
+        else:
+            progress_update(cfg,dtprog, "s04b_rfft")
     else:
         print("Skipping rfft")
 
-    if s04c_rcal_all:
+    if s04c_rcal_all and not dtprog["s04c_rcal_all"]:
         print("Running rcal_all ...")
         rc = run_rcal(cfg)
         if rc < 0:
             Quit(cfg, -1, "FATAL. rcal_all fail.")
         elif rc > 0:
             print("rcal_all: Limited success. Non-fatal. Will continue")
+
+        progress_update(cfg,dtprog, "s04c_rcal_all")
         #else keep going
 
     else:
         print("Skipping rcal_all")
 
-    if s04d_shot_h5:
+    if s04d_shot_h5 and not dtprog["s04d_shot_h5"]:
         rc = build_shot_h5(cfg)
         if rc < 0:
             Quit(cfg, -1, "FATAL. Could not build shot h5 file. Cannot continue with catalog creation.")
+        progress_update(cfg,dtprog, "s04d_shot_h5")
 
     # check stats
-    if s04e_amp_stats:
+    if s04e_amp_stats and not dtprog["s04e_amp_stats"]:
         rc = amp_stats(cfg)
         if rc < 0:
             print("Non-fatal. Could not compute amp stats from shot h5 file. Will continue anyway with catalog creation.")
+        progress_update(cfg,dtprog, "s04e_amp_stats")
+
+    if dtprog["s04a_get_ifucens"] and dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] and dtprog["s04e_amp_stats"]:
+        progress_update(cfg,dtprog, "s04_sky_subtraction")
 else:
     print("Skipping sky subtraction")
 
@@ -2848,25 +2936,29 @@ else:
 # continuum detections
 ###########
 
-if s05_detection:
+if s05_detection and not dtprog["s05_detection"]:
 
-    if s05b_rdet_rf1:
+    if s05b_rdet_rf1 and not dtprog["s05b_rdet_rf1"]:
         print("Running rdet_rf1 (line detection) ...")
         rc = rdet_rf1(cfg)
         if rc < 0:
             Quit(cfg, -1, "FATAL. rdet_rf1 fail.")
         elif rc > 0:
             print("rdet_rf1: Limited success. Non-fatal. Will continue")
+
+        progress_update(cfg,dtprog, "s05b_rdet_rf1")
     else:
         print("skipping rdet_rf1 (line detection)")
 
-    if s05c_rgetmax:
+    if s05c_rgetmax  and not dtprog["s05c_rgetmax"]:
         print("Running rgetmax (continuum detection) ...")
         rc = rgetmax(cfg)
         if rc < 0:
             Quit(cfg, -1, "FATAL. rgetmax fail.")
         elif rc > 0:
             print("rgetmax: Limited success. Non-fatal. Will continue")
+
+        progress_update(cfg,dtprog, "s05c_rgetmax")
     else:
         print("skipping rgetmax (continuum detection)")
 
@@ -2874,9 +2966,13 @@ if s05_detection:
     # if s05d_detection_tables:
     #     rc = build_detection_tables(cfg)
 
-    if s05e_detection_hdf5:
+    if s05e_detection_hdf5 and not dtprog["s05e_detection_hdf5"]:
         rc = build_detection_hdf5(cfg)
 
+    progress_update(cfg,dtprog, "s05e_detection_hdf5")
+
+    if dtprog["s05b_rdet_rf1"] and dtprog["s05c_rgetmax"] and dtprog["s05e_detection_hdf5"]:
+        progress_update(cfg,dtprog, "s05_detection")
 
 else:
     print("Skipping detections")
@@ -2889,11 +2985,11 @@ else:
 # make source catalogs
 #################################################
 
-if s06_catalogs:
+if s06_catalogs and not dtprog["s06_catalogs"]:
 
     print("Catalog creation ... ")
 
-    if s06b_fof:
+    if s06b_fof and not dtprog["s06b_fof"]:
         try:
             #line_tab = Table.read(os.path.join(cfg.cwd,f"{cfg.datevshot}_line.fits"),format="fits")
             line_h5 = tables.open_file(os.path.join(cfg.cwd,f"{cfg.datevshot}_line.h5"))
@@ -2964,8 +3060,8 @@ if s06_catalogs:
                         line_tab.write(tname, format="ascii", overwrite=True)
                         print(f"Updated lines source table: {os.getcwd()}/{tname}")
 
-                        esel = np.array(line_tab['sel_det'] == True)
-                        np.savetxt('elixer_line.dets',line_tab['detectid'][esel],fmt="%d")
+                        #esel = np.array(line_tab['sel_det'] == True)
+                        #np.savetxt('elixer_line.dets',line_tab['detectid'][esel],fmt="%d")
 
                     else:
                         print("Error! (1) Could not combine lines detections by FoF.")
@@ -3040,8 +3136,9 @@ if s06_catalogs:
                         print(f"Updated continuum source table: {os.getcwd()}/{tname}")
                         #lastly sub select based on some minimum contflux ??
 
-                        esel = np.array(cont_tab['sel_det'] == True)
-                        np.savetxt('elixer_cont.dets', cont_tab['detectid'][esel],fmt="%d")
+                        #now done elsewhere
+                        #esel = np.array(cont_tab['sel_det'] == True)
+                        #np.savetxt('elixer_cont.dets', cont_tab['detectid'][esel],fmt="%d")
 
 
                     else:
@@ -3055,6 +3152,7 @@ if s06_catalogs:
             print("Error! Could not combine continuum detections by FoF.")
             print(traceback.format_exc())
 
+    progress_update(cfg,dtprog, "s06b_fof")
     #end if s06b_fof
 
     #we now have clustered lines and continuum
@@ -3066,7 +3164,7 @@ if s06_catalogs:
     #all we REALLY care about at this point is the detectids with matching source_ids
     #we want to roll those in with the original tables and then, for each source_id just
     #  use the one with the highest SNR or lineflux? for lines and the highest continuum for cont sources
-    if s06c_diagnose:
+    if s06c_diagnose and not dtprog["s06c_diagnose"]:
 
         rc = diagnose(cfg)
 
@@ -3077,11 +3175,18 @@ if s06_catalogs:
         if rc != 0:
             print("Diagnose conversion: Limited success. Non-fatal. Will continue")
 
+        progress_update(cfg,dtprog, "s06c_diagnose")
 
-    if s06d_elixer:
+    if s06d_elixer and not dtprog["s06d_elixer"]:
 
        # print(f"*** todo: build up elixer call ")
         rc = prep_elixer(cfg)
+
+        progress_update(cfg,dtprog, "s06d_elixer")
+
+    #s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
+    if dtprog["s06b_fof"] and dtprog["s06c_diagnose"] and dtprog["s06d_elixer"]:
+        progress_update(cfg,dtprog, "s06_catalogs")
 
 
 ##########
