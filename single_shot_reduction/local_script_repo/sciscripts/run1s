@@ -28,8 +28,11 @@ if [ -f /work/03946/hetdex/maverick/${date}/virus/virus0000${shot}.tar ]; then
   cp /work/03946/hetdex/maverick/${date}/virus/virus0000${shot}.tar .
 elif [ -f /scratch/03261/polonius/het_raw/${date}/virus/virus0000${shot}.tar ]; then
   cp /scratch/03261/polonius/het_raw/${date}/virus/virus0000${shot}.tar .
+elif [ -f ${wdir}/../het_raw/${date}/virus/virus0000${shot}.tar ]; then
+  cp ${wdir}/../het_raw/${date}/virus/virus0000${shot}.tar .
 else
-  echo "Cannot find shot tar file, ${date}/virus/virus0000${shot}.tar under /work/03946/hetdex/maverick or /scratch/03261/polonius/het_raw"
+  echo "Cannot find shot tar file, ${date}/virus/virus0000${shot}.tar under /work/03946/hetdex/maverick , /scratch/03261/polonius/het_raw , or ${wdir}/../het_raw"
+  echo "You may need to first copy and extract /corral-repl/utexas/Hobby-Eberly-Telesco/het_raw/<date>.tar to your local het_raw directory"
   echo "Exiting"
   exit -1
 fi
@@ -38,7 +41,8 @@ fi
 cp ${ddir}/rj .
 cp ${ddir}/rback .
 
-
+#note this next line scriptdir is dynamically replaced when run from
+#the single shot reduction code
 scriptdir="/scratch/03261/polonius/hetdex/single_shot/science_reductions/sciscripts/"
 cp ${scriptdir}rbfits .
 cp ${scriptdir}rbfits0 .

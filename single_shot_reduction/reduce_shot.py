@@ -63,13 +63,15 @@ LocalScriptRepo = "./local_script_repo" #useful if running multiple single shots
                                         #  and force a copy from the main repo each time
 
 WorkDirRoot = "./"
+#user specific
+red1path = "/scratch/03261/polonius/red1/reductions/"
+
 
 HETRaw_archive = "/corral-repl/utexas/Hobby-Eberly-Telesco/het_raw/"
 HET_by_date = "/work/03946/hetdex/maverick/"
 karlgettar = "/work/00115/gebhardt/maverick/gettar/"
 karlfplane = "/work/00115/gebhardt/maverick/fplane/"
 karlhome = "/home1/00115/gebhardt"
-red1path = "/scratch/03261/polonius/red1/reductions/"
 hetdex_projects_path = "/scratch/projects/hetdex/"
 hetdex_api_path = os.path.dirname(importlib.util.find_spec("hetdex_api").origin)
 #there is an extra "hetdex_api" at the end that points into the lower level directory for that. h5tools is actually a sibling
