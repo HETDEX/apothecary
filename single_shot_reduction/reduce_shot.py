@@ -280,6 +280,16 @@ def progress_init(cfg):
                 print("****************************")
                 cfg.resume = True
 
+            #consistency check / force
+            dtprog["s04_sky_subtraction"] = dtprog["s04_sky_subtraction"] | dtprog["s04a_get_ifucens"] | \
+                                            dtprog["s04b_rfft"] | dtprog["s04c_rcal_all"] | dtprog["s04d_shot_h5"] | \
+                                            dtprog["s04e_amp_stats"]
+
+            dtprog["s05_detection"] = dtprog["s05_detection"] | dtprog["s05b_rdet_rf1"] | \
+                                            dtprog["s05c_rgetmax"] | dtprog["s05e_detection_hdf5"]
+
+            dtprog["s06_catalogs"] = dtprog["s06_catalogs"] | dtprog["s06b_fof"] | \
+                                            dtprog["s06c_diagnose"] | dtprog["s06d_elixer"]  |  dtprog["s06e_source_cat"]
     except:
         print(f"Exception in progress_init(). {traceback.format_exc()}")
 
