@@ -3019,6 +3019,10 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
             line_tab = line_tab[esel]
 
             if line_tab is not None:
+                tname = f"{cfg.datevshot}_line_sourcecat.tab"
+                line_tab.write(tname, format="ascii", overwrite=True)
+                print(f"Initial lines source table: {os.getcwd()}/{tname}")
+
                 fof_3d_lines_tab = make_3d_friend_table_for_shot(line_tab, dsky_3D=6.0, dwave=4.0)
                 if fof_3d_lines_tab is not None:
                     fof_2d_lines_tab = make_2d_friend_table_for_shot(line_tab, dsky_2D=3.0)
@@ -3076,9 +3080,9 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
                         #np.savetxt('elixer_line.dets',line_tab['detectid'][esel],fmt="%d")
 
                     else:
-                        print("Error! (1) Could not combine lines detections by FoF.")
+                        print("Notice! (1) Could not combine lines detections by FoF or no lines qualified to cluster.")
                 else:
-                    print("Error! (2) Could not combine lines detections by FoF.")
+                    print("Notice! (2) Could not combine lines detections by FoF or no lines qualified to cluster.")
             else:
                 print("Error! Could not combine lines detections. Lines table not found.")
         except:
@@ -3095,6 +3099,10 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
 
             cont_h5.close()
             if cont_tab is not None:
+                tname = f"{cfg.datevshot}_cont_sourcecat.tab"
+                cont_tab.write(tname, format="ascii", overwrite=True)
+                print(f"Initial continuum source table: {os.getcwd()}/{tname}")
+
                 fof_3d_cont_tab = make_3d_friend_table_for_shot(cont_tab, dsky_3D=6.0, dwave=4.0)
                 if fof_3d_cont_tab is not None:
                     fof_2d_cont_tab = make_2d_friend_table_for_shot(cont_tab, dsky_2D=3.0)
@@ -3154,12 +3162,11 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
 
 
                     else:
-                        print("Error! (1) Could not combine continuum detections by FoF.")
+                        print("Notice! (1) Could not combine continuum detections by FoF or no continuum sources qualified to cluster.")
                 else:
-                    print("Error! (2) Could not combine continuum detections by FoF.")
+                    print("Notice! (2) Could not combine continuum detections by FoF or no continuum sources qualified to cluster.")
             else:
                 print("Error! Could not combine continuum detections. Continuum table not found.")
-
         except:
             print("Error! Could not combine continuum detections by FoF.")
             print(traceback.format_exc())
