@@ -2702,11 +2702,14 @@ def prep_elixer(cfg):
             f.write(f"{which_elixer} {elixer_base_cmd} {elixer_line_cmd} \n")
             f.write(f"{which_elixer} {elixer_base_cmd} {elixer_cont_cmd} \n")
 
+        print("Preparing ELiXer SLURMS ... ")
+        os.chdir(elixdir)
+        system_command(cfg,"source elixer_cmd.txt")
 
-        print("ELiXer commands prepared. You may edit 'elixer_cmd.txt' under ./elixer as needed.")
-        print("To run, 'source' the 'elixer_cmd.txt' file. It will set up, but not queue, two SLURM jobs (line and cont).")
-        print("You may then edit each .slurm as needed and sbatch when ready.")
-
+        print("Default ELiXer SLURMS prepared. However, you may edit ./elixer/elixer_cmd.txt re-run if needed.")
+        print("To re-run, remove the ./elixer/line and ./elixer/cont directories then 'source' the edited 'elixer_cmd.txt' file."
+              " It will set up, but not queue, two SLURM jobs (line and cont).")
+        print("You may then edit ./elixer/line/elixer.slurm and ./elixer/cont/elixer.slurm if needed and sbatch when ready.")
 
 
     except:
@@ -3198,7 +3201,6 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
 
     if s06d_elixer and not dtprog["s06d_elixer"]:
 
-       # print(f"*** todo: build up elixer call ")
         rc = prep_elixer(cfg)
 
         progress_update(cfg,dtprog, "s06d_elixer")
