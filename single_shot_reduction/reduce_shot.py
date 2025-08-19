@@ -1821,7 +1821,7 @@ def build_shot_h5(cfg):
     try:
         print("Constructing shot hdf5 file. This will take a while ... ")
         rc = 0
-        os.chdir(os.path.join(cfg.cwd))
+        os.chdir(cfg.cwd)
 
         #needed for hetdex_api
         os.makedirs("match_pngs",exist_ok=True)
@@ -1839,10 +1839,13 @@ def build_shot_h5(cfg):
 
         if os.path.exists(f"{cfg.cwd}/vdrp/shifts/dithall.gaia"):
             cmd += f" --detect_path \"{cfg.cwd}/vdrp/shifts/dithall.gaia\""
+            cfg.starcat_ast = "gaia"
         elif os.path.exists(f"{cfg.cwd}/vdrp/shifts/dithall.sdss"):
             cmd += f" --detect_path \"{cfg.cwd}/vdrp/shifts/dithall.sdss\""
+            cfg.starcat_ast = "sdss"
         elif os.path.exists(f"{cfg.cwd}/vdrp/shifts/dithall.panstarrs"):
             cmd += f" --detect_path \"{cfg.cwd}/vdrp/shifts/dithall.panstarrs\""
+            cfg.starcat_ast = "panstarrs"
         else:
             print("Fatal: cannot find *.dithall file for this shot")
             return -1
@@ -1918,6 +1921,31 @@ def build_shot_h5(cfg):
         # now create_astrometry_hdf5
         ########################
         print("Create astrometry  ... ")
+
+        #some setup that hetdex_api needs
+        os.chdir(os.path.join(cfg.cwd,"vdrp"))
+
+        cmd = f"ln -s shifts/{cfg.starcat_ast}/{cfg.datevshot}/shout.* ."
+        system_command(cfg, cmd)
+
+        cmd = f"ln -s shifts/{cfg.starcat_ast}/{cfg.datevshot}/2* ."
+        system_command(cfg, cmd)
+
+        cmd = f"ln -s shifts/{cfg.starcat_ast}/{cfg.datevshot}/all.mch ."
+        system_command(cfg, cmd)
+
+        cmd = f"ln -s shifts/{cfg.starcat_ast}/{cfg.datevshot}/radec* ."
+        system_command(cfg, cmd)
+
+        cmd = f"ln -s shifts/{cfg.starcat_ast}/{cfg.datevshot}/match* ."
+        system_command(cfg, cmd)
+
+        cmd = f"ln -s ../detect/{cfg.datevshot}/norm.dat ."
+        system_command(cfg, cmd)
+
+        os.chdir(cfg.cwd)
+
+
         cmd = f"python3 {hetdex_api_path}/h5tools/create_astrometry_hdf5.py"
         cmd += " --append"
         cmd += f" --date {cfg.datevshot[0:8]}"
