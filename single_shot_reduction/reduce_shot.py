@@ -2325,115 +2325,121 @@ def diagnose(cfg):
         print("Building Diagnose input (emission lines)  ...")
         name = f"{cfg.datevshot}_line_sourcecat.tab"
         line_tab = Table.read(name,format="ascii")
-        line_h5 = tables.open_file(os.path.join(cfg.cwd, f"{cfg.datevshot}_line.h5"))
 
-        #reminder: if fof clustering re-runs (the step before this one), the gmag will be wiped out
-        if 'gmag' not in line_tab.columns:
-            print("Computing gmags ...")
-            # subselect ... these do not currently have a gmag, so need to make one (since ELiXer has not run yet)
-            line_tab['gmag'] = 99.0
+        if len(line_tab) == 0: #there are no entries
+            del line_tab
+            print("WARNING! No line sources recored. Moving on to continuum.")
+            rc = 1 #not fatal, but not a success
+        else:
+            line_h5 = tables.open_file(os.path.join(cfg.cwd, f"{cfg.datevshot}_line.h5"))
+
+            #reminder: if fof clustering re-runs (the step before this one), the gmag will be wiped out
+            if 'gmag' not in line_tab.columns:
+                print("Computing gmags ...")
+                # subselect ... these do not currently have a gmag, so need to make one (since ELiXer has not run yet)
+                line_tab['gmag'] = 99.0
+
+                for i in range(len(line_tab)):
+                    d = line_tab[i]['detectid']
+
+                    rows = line_h5.root.Spectra.read_where("detectid==d")
+                    if len(rows) != 1:
+                        print(f"Diagnose preselection gmag failure for {d}")
+                        continue
+                    row=rows[0]
+                    gmag, gmag_unc, *_ = SU.get_best_gmag(row['spec1d']*1e-17,row['spec1d_err']*1e-17,G.CALFIB_WAVEGRID)
+                    line_tab['gmag'][i] = gmag
+
+
+                #update
+                line_tab.write(name, format="ascii", overwrite=True)
+                print(f"Updated lines table with gmag: {os.getcwd()}/{name}")
+
+            # now select on gmag < 23
+            sel = np.array(line_tab['gmag'] > 0.0) & np.array(line_tab['gmag'] < 23.0)
+            line_tab = line_tab[sel]
+
+
+            totN = np.sum(sel)
+            DETECTID = np.array(line_tab['detectid'])
+            RA = np.array(line_tab['ra'])
+            DEC = np.array(line_tab['dec'])
+            GMAG = np.array(line_tab['gmag'])
+            #WEIGHT = np.array(line_tab['apcor'])
+
+            RMAG = np.zeros((totN,))
+            IMAG = np.zeros((totN,))
+            ZMAG = np.zeros((totN,))
+            YMAG = np.zeros((totN,))
+            SN = np.zeros((totN,))
+            NAME = np.zeros((totN,))  # np.array(source_spectra['shotid'][sel])
+
+            #re-collect the spec for those selected
+            #line_tab['spec'] = np.zeros((len(line_tab),1036))
+            #line_tab['spec_err'] = np.zeros((len(line_tab),1036))
+            spec_2D = []
+            error_2D = []
+            apcor = []
 
             for i in range(len(line_tab)):
                 d = line_tab[i]['detectid']
 
                 rows = line_h5.root.Spectra.read_where("detectid==d")
                 if len(rows) != 1:
-                    print(f"Diagnose preselection gmag failure for {d}")
+                    print(f"Diagnose preselection spectra failure for {d}")
+                    spec_2D.append(np.zeros(1036))
+                    error_2D.append(np.zeros(1036))
+                    apcor.append(np.zeros(1036))
                     continue
-                row=rows[0]
-                gmag, gmag_unc, *_ = SU.get_best_gmag(row['spec1d']*1e-17,row['spec1d_err']*1e-17,G.CALFIB_WAVEGRID)
-                line_tab['gmag'][i] = gmag
 
+                row = rows[0]
+                #line_tab['spec'][i] = rows['spec1d']
+                #line_tab['spec_err'][i] = rows['spec1d_err']
+                spec_2D.append(row['spec1d'])
+                error_2D.append(row['spec1d_err'])
+                apcor.append(row['apcor'])
 
-            #update
-            line_tab.write(name, format="ascii", overwrite=True)
-            print(f"Updated lines table with gmag: {os.getcwd()}/{name}")
+            #SPEC = np.array(line_tab['spec'])
+            #ERROR = np.array(line_tab['spec_err'])
+            SPEC = np.array(spec_2D)
+            ERROR = np.array(error_2D)
+            WEIGHT = np.array(apcor)
 
-        # now select on gmag < 23
-        sel = np.array(line_tab['gmag'] > 0.0) & np.array(line_tab['gmag'] < 23.0)
-        line_tab = line_tab[sel]
+            line_h5.close()
 
+            num_spectra = len(SPEC)
 
-        totN = np.sum(sel)
-        DETECTID = np.array(line_tab['detectid'])
-        RA = np.array(line_tab['ra'])
-        DEC = np.array(line_tab['dec'])
-        GMAG = np.array(line_tab['gmag'])
-        #WEIGHT = np.array(line_tab['apcor'])
+            #now write out the fits file needed for Diagnose
+            outname = 'diagnose_spectra_line.fits'
+            T = Table([DETECTID, RA, DEC, NAME, GMAG, RMAG, IMAG, ZMAG, YMAG, SN],
+                      names=['detectid', 'RA', 'Dec', 'shotid', 'gmag', 'rmag', 'imag', 'zmag', 'ymag', 'sn'])
+            fits.HDUList([fits.PrimaryHDU(), fits.BinTableHDU(T), fits.ImageHDU(SPEC),
+                          fits.ImageHDU(ERROR), fits.ImageHDU(WEIGHT)]).writeto(outname, overwrite=True)
 
-        RMAG = np.zeros((totN,))
-        IMAG = np.zeros((totN,))
-        ZMAG = np.zeros((totN,))
-        YMAG = np.zeros((totN,))
-        SN = np.zeros((totN,))
-        NAME = np.zeros((totN,))  # np.array(source_spectra['shotid'][sel])
+            #clean up
+            del T
+            del DETECTID
+            del RA
+            del DEC
+            del GMAG
+            del WEIGHT
+            del RMAG
+            del IMAG
+            del ZMAG
+            del YMAG
+            del SN
+            del NAME
+            del SPEC
+            del ERROR
 
-        #re-collect the spec for those selected
-        #line_tab['spec'] = np.zeros((len(line_tab),1036))
-        #line_tab['spec_err'] = np.zeros((len(line_tab),1036))
-        spec_2D = []
-        error_2D = []
-        apcor = []
-
-        for i in range(len(line_tab)):
-            d = line_tab[i]['detectid']
-
-            rows = line_h5.root.Spectra.read_where("detectid==d")
-            if len(rows) != 1:
-                print(f"Diagnose preselection spectra failure for {d}")
-                spec_2D.append(np.zeros(1036))
-                error_2D.append(np.zeros(1036))
-                apcor.append(np.zeros(1036))
-                continue
-
-            row = rows[0]
-            #line_tab['spec'][i] = rows['spec1d']
-            #line_tab['spec_err'][i] = rows['spec1d_err']
-            spec_2D.append(row['spec1d'])
-            error_2D.append(row['spec1d_err'])
-            apcor.append(row['apcor'])
-
-        #SPEC = np.array(line_tab['spec'])
-        #ERROR = np.array(line_tab['spec_err'])
-        SPEC = np.array(spec_2D)
-        ERROR = np.array(error_2D)
-        WEIGHT = np.array(apcor)
-
-        line_h5.close()
-
-        num_spectra = len(SPEC)
-
-        #now write out the fits file needed for Diagnose
-        outname = 'diagnose_spectra_line.fits'
-        T = Table([DETECTID, RA, DEC, NAME, GMAG, RMAG, IMAG, ZMAG, YMAG, SN],
-                  names=['detectid', 'RA', 'Dec', 'shotid', 'gmag', 'rmag', 'imag', 'zmag', 'ymag', 'sn'])
-        fits.HDUList([fits.PrimaryHDU(), fits.BinTableHDU(T), fits.ImageHDU(SPEC),
-                      fits.ImageHDU(ERROR), fits.ImageHDU(WEIGHT)]).writeto(outname, overwrite=True)
-
-        #clean up
-        del T
-        del DETECTID
-        del RA
-        del DEC
-        del GMAG
-        del WEIGHT
-        del RMAG
-        del IMAG
-        del ZMAG
-        del YMAG
-        del SN
-        del NAME
-        del SPEC
-        del ERROR
-
-        #call Diagnose' needs sklearn
-        # looks like these count from 0, so -li is inclusive and -hi is not
-        # might have changed to --low_index and --high_index  or --index_filename
-        # --catalog diagnose_spectra.fits
-        # --normalize     this is a switch only, multiplies the flux by some normalization ????#
-        # --quick   #a switch  ... uses saved models?
-        # --suffix    # probably was -s  ... writes out to "classification_XXX.fits" where XXX is the integer --suffix
-        # python3 /work/05350/ecooper/stampede2/Diagnose/diagnose.py diagnose_spectra.fits -li 0 -hi 5 -s 1 -q
+            #call Diagnose' needs sklearn
+            # looks like these count from 0, so -li is inclusive and -hi is not
+            # might have changed to --low_index and --high_index  or --index_filename
+            # --catalog diagnose_spectra.fits
+            # --normalize     this is a switch only, multiplies the flux by some normalization ????#
+            # --quick   #a switch  ... uses saved models?
+            # --suffix    # probably was -s  ... writes out to "classification_XXX.fits" where XXX is the integer --suffix
+            # python3 /work/05350/ecooper/stampede2/Diagnose/diagnose.py diagnose_spectra.fits -li 0 -hi 5 -s 1 -q
 
         #Diagnose path is: {cfg.scriptdir}/Diagnose/diagnose.py
         print(f"Running Diagnose on {num_spectra} gmag bright emission line sources ...")
@@ -2445,105 +2451,114 @@ def diagnose(cfg):
         print("Building Diagnose input (continuum)  ...")
         name = f"{cfg.datevshot}_cont_sourcecat.tab"
         cont_tab = Table.read(name, format="ascii")
-        cont_h5 = tables.open_file(os.path.join(cfg.cwd, f"{cfg.datevshot}_cont.h5"))
 
-        if 'gmag' not in cont_tab.columns:
-            print("Computing gmags ...")
-            # subselect ... these do not currently have a gmag, so need to make one (since ELiXer has not run yet)
-            cont_tab['gmag'] = 99.0
+        if len(cont_tab) == 0:
+            del cont_tab
+            print("WARNING! No continuum sources recored. ")
+            if rc == 0: #there was not a previous problem
+                rc = 1 # not fatal, but not a success
+            else:
+                rc = -1  #already a problem, so Diagnose fails
+                print("WARNING! Cannot run Diagnose.")
+        else:
+            cont_h5 = tables.open_file(os.path.join(cfg.cwd, f"{cfg.datevshot}_cont.h5"))
+
+            if 'gmag' not in cont_tab.columns:
+                print("Computing gmags ...")
+                # subselect ... these do not currently have a gmag, so need to make one (since ELiXer has not run yet)
+                cont_tab['gmag'] = 99.0
+
+                for i in range(len(cont_tab)):
+                    d = cont_tab[i]['detectid']
+
+                    rows = cont_h5.root.Spectra.read_where("detectid==d")
+                    if len(rows) != 1:
+                        print(f"Diagnose preselection gmag failure for {d}")
+                        continue
+                    row=rows[0]
+                    gmag, gmag_unc, *_ = SU.get_best_gmag(row['spec1d']*1e-17,row['spec1d_err']*1e-17,G.CALFIB_WAVEGRID)
+                    cont_tab['gmag'][i] = gmag
+
+
+                #update
+                cont_tab.write(name, format="ascii", overwrite=True)
+                print(f"Updated lines table with gmag: {os.getcwd()}/{name}")
+
+            totN = len(cont_tab)
+            DETECTID = np.array(cont_tab['detectid'])
+            RA = np.array(cont_tab['ra'])
+            DEC = np.array(cont_tab['dec'])
+            GMAG = np.array(cont_tab['gmag'])
+
+
+            RMAG = np.zeros((totN,))
+            IMAG = np.zeros((totN,))
+            ZMAG = np.zeros((totN,))
+            YMAG = np.zeros((totN,))
+            SN = np.zeros((totN,))
+            NAME = np.zeros((totN,))  # np.array(source_spectra['shotid'][sel])
+
+            # re-collect the spec for those selected
+            spec_2D = []
+            error_2D = []
+            apcor = []
 
             for i in range(len(cont_tab)):
                 d = cont_tab[i]['detectid']
 
                 rows = cont_h5.root.Spectra.read_where("detectid==d")
                 if len(rows) != 1:
-                    print(f"Diagnose preselection gmag failure for {d}")
+                    print(f"Diagnose preselection spectra failure for {d}")
+                    spec_2D.append(np.zeros(1036))
+                    error_2D.append(np.zeros(1036))
+                    apcor.append(np.zeros(1036))
                     continue
-                row=rows[0]
-                gmag, gmag_unc, *_ = SU.get_best_gmag(row['spec1d']*1e-17,row['spec1d_err']*1e-17,G.CALFIB_WAVEGRID)
-                cont_tab['gmag'][i] = gmag
 
+                row = rows[0]
 
-            #update
-            cont_tab.write(name, format="ascii", overwrite=True)
-            print(f"Updated lines table with gmag: {os.getcwd()}/{name}")
+                spec_2D.append(row['spec1d'])
+                error_2D.append(row['spec1d_err'])
+                apcor.append(row['apcor'])
 
-        totN = len(cont_tab)
-        DETECTID = np.array(cont_tab['detectid'])
-        RA = np.array(cont_tab['ra'])
-        DEC = np.array(cont_tab['dec'])
-        GMAG = np.array(cont_tab['gmag'])
+            SPEC = np.array(spec_2D)
+            ERROR = np.array(error_2D)
+            WEIGHT = np.array(apcor)
 
+            cont_h5.close()
 
-        RMAG = np.zeros((totN,))
-        IMAG = np.zeros((totN,))
-        ZMAG = np.zeros((totN,))
-        YMAG = np.zeros((totN,))
-        SN = np.zeros((totN,))
-        NAME = np.zeros((totN,))  # np.array(source_spectra['shotid'][sel])
+            num_spectra = len(SPEC)
 
-        # re-collect the spec for those selected
-        spec_2D = []
-        error_2D = []
-        apcor = []
+            # now write out the fits file needed for Diagnose
+            outname = 'diagnose_spectra_cont.fits'
+            T = Table([DETECTID, RA, DEC, NAME, GMAG, RMAG, IMAG, ZMAG, YMAG, SN],
+                      names=['detectid', 'RA', 'Dec', 'shotid', 'gmag', 'rmag', 'imag', 'zmag', 'ymag', 'sn'])
+            fits.HDUList([fits.PrimaryHDU(), fits.BinTableHDU(T), fits.ImageHDU(SPEC),
+                          fits.ImageHDU(ERROR), fits.ImageHDU(WEIGHT)]).writeto(outname, overwrite=True)
 
-        for i in range(len(cont_tab)):
-            d = cont_tab[i]['detectid']
+            # clean up
+            del T
+            del DETECTID
+            del RA
+            del DEC
+            del GMAG
+            del WEIGHT
+            del RMAG
+            del IMAG
+            del ZMAG
+            del YMAG
+            del SN
+            del NAME
+            del SPEC
+            del ERROR
 
-            rows = cont_h5.root.Spectra.read_where("detectid==d")
-            if len(rows) != 1:
-                print(f"Diagnose preselection spectra failure for {d}")
-                spec_2D.append(np.zeros(1036))
-                error_2D.append(np.zeros(1036))
-                apcor.append(np.zeros(1036))
-                continue
+            # call Diagnose' needs sklearn
 
-            row = rows[0]
+            # Diagnose path is: {cfg.scriptdir}/Diagnose/diagnose.py
+            print(f"Running Diagnose on {num_spectra} continuum sources ...")
+            cmd = f"python3 {cfg.scriptdir}/Diagnose/diagnose.py"
+            cmd += f" {outname} -li 0 -hi {num_spectra} -s 1 -q"
 
-            spec_2D.append(row['spec1d'])
-            error_2D.append(row['spec1d_err'])
-            apcor.append(row['apcor'])
-
-        SPEC = np.array(spec_2D)
-        ERROR = np.array(error_2D)
-        WEIGHT = np.array(apcor)
-
-        cont_h5.close()
-
-        num_spectra = len(SPEC)
-
-        # now write out the fits file needed for Diagnose
-        outname = 'diagnose_spectra_cont.fits'
-        T = Table([DETECTID, RA, DEC, NAME, GMAG, RMAG, IMAG, ZMAG, YMAG, SN],
-                  names=['detectid', 'RA', 'Dec', 'shotid', 'gmag', 'rmag', 'imag', 'zmag', 'ymag', 'sn'])
-        fits.HDUList([fits.PrimaryHDU(), fits.BinTableHDU(T), fits.ImageHDU(SPEC),
-                      fits.ImageHDU(ERROR), fits.ImageHDU(WEIGHT)]).writeto(outname, overwrite=True)
-
-        # clean up
-        del T
-        del DETECTID
-        del RA
-        del DEC
-        del GMAG
-        del WEIGHT
-        del RMAG
-        del IMAG
-        del ZMAG
-        del YMAG
-        del SN
-        del NAME
-        del SPEC
-        del ERROR
-
-        # call Diagnose' needs sklearn
-
-        # Diagnose path is: {cfg.scriptdir}/Diagnose/diagnose.py
-        print(f"Running Diagnose on {num_spectra} continuum sources ...")
-        cmd = f"python3 {cfg.scriptdir}/Diagnose/diagnose.py"
-        cmd += f" {outname} -li 0 -hi {num_spectra} -s 1 -q"
-
-        system_command(cfg, cmd)
-
+            system_command(cfg, cmd)
 
     except:
         print(traceback.format_exc())
@@ -2743,6 +2758,10 @@ if cfg.numexp <= 0:
 
 if cfg.exp <= 0:
     print(f"Working on {cfg.datevshot} with {cfg.numexp} exposure(s) ...")
+    if cfg.numexp == 1 or cfg.numexp == 3: #okay
+        pass
+    else:
+        print(f"!!! WARNING !!! Unusual number of exposures ({cfg.numexp}) !!! Reduction may be problematic. ")
 else:
     if cfg.exp <= cfg.numexp:
         print(f"Working on {cfg.datevshot} exposure #{cfg.exp} ...")
