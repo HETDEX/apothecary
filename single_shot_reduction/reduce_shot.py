@@ -2321,6 +2321,7 @@ def diagnose(cfg):
 
         os.chdir(os.path.join(cfg.cwd))
         rc = 0
+        num_spectra = 0
 
         print("Building Diagnose input (emission lines)  ...")
         name = f"{cfg.datevshot}_line_sourcecat.tab"
@@ -2441,12 +2442,13 @@ def diagnose(cfg):
             # --suffix    # probably was -s  ... writes out to "classification_XXX.fits" where XXX is the integer --suffix
             # python3 /work/05350/ecooper/stampede2/Diagnose/diagnose.py diagnose_spectra.fits -li 0 -hi 5 -s 1 -q
 
-        #Diagnose path is: {cfg.scriptdir}/Diagnose/diagnose.py
-        print(f"Running Diagnose on {num_spectra} gmag bright emission line sources ...")
-        cmd = f"python3 {cfg.scriptdir}/Diagnose/diagnose.py"
-        cmd += f" {outname} -li 0 -hi {num_spectra} -s 0 -q"
+            #Diagnose path is: {cfg.scriptdir}/Diagnose/diagnose.py
+            print(f"Running Diagnose on {num_spectra} gmag bright emission line sources ...")
+            cmd = f"python3 {cfg.scriptdir}/Diagnose/diagnose.py"
+            cmd += f" {outname} -li 0 -hi {num_spectra} -s 0 -q"
 
-        system_command(cfg, cmd)
+            system_command(cfg, cmd)
+        #end bright emission line Diagnose
 
         print("Building Diagnose input (continuum)  ...")
         name = f"{cfg.datevshot}_cont_sourcecat.tab"
