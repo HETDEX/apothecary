@@ -64,7 +64,8 @@ LocalScriptRepo = "./local_script_repo" #useful if running multiple single shots
 
 WorkDirRoot = "./"
 #user specific
-red1path = "/scratch/03261/polonius/red1/reductions/"
+red1path = None # if None, will use the local (cwd) as the basepath, otherwise user can edit and specify one here
+                # "/scratch/03261/polonius/red1/reductions/"
 
 
 HETRaw_archive = "/corral-repl/utexas/Hobby-Eberly-Telesco/het_raw/"
@@ -167,6 +168,8 @@ class Config:
     numexp: int = 0 #number of exposures in the shot
     cwd_orig: str = os.getcwd()
     cwd: str = os.getcwd()
+    #red1dir: str = f"{os.getcwd()}" #e.g. <path>/red1/reductions
+                    # BUT "reductions" is added later, so stop at the "red1" equivalent; so is same as just cwd_orig here
     scriptdir: str = ""
     gettar_fn: str =  ""  # the runs* or runt* file from karlgettar folder with the date, shot, exp data
     starcat_ast = "gaia" #gaia, sdss, panstarrs   for Astrometry
@@ -1387,7 +1390,10 @@ def prepare_reduction_dir(cfg):
             exp = os.path.basename(expdir)[-5:]
             virus_shot = "virus0000" + os.path.basename(expdir)[-8:-5]
             date = cfg.datevshot[0:8]
-            datadir = os.path.join(red1path,f"{date}/virus/{virus_shot}/{exp}/virus")
+            if red1path is not None:
+                datadir = os.path.join(red1path,f"{date}/virus/{virus_shot}/{exp}/virus")
+            else:
+                datadir = os.path.join(cfg.cwd_orig, f"{date}/virus/{virus_shot}/{exp}/virus")
             tarfile = f"d{cfg.datevshot[0:8]}s{cfg.datevshot[-3:]}{exp}_mu.tar"
 
             print(f"Creating directory and untarring ({expdir}/{tarfile}) multi*fits to: {datadir}")
