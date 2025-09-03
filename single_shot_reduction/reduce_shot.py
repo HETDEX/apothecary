@@ -950,7 +950,8 @@ def initial_setup(cfg):
         system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# rtaremc") #not necessary, just for completeness
         system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# runtar")
         system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# runtarm.defunct") #not necessary, just for completeness
-
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# alldet/rfft")
+        system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# getcen/rgetifucen")
 
         #extra files needed
         #vdrp : /work/00115/gebhardt/maverick/fplane ... need the fplane for the date
@@ -2797,10 +2798,24 @@ if cfg.exp <= 0:
     if cfg.numexp == 1 or cfg.numexp == 3: #okay
         pass
     else:
-        print(f"!!! WARNING !!! Unusual number of exposures ({cfg.numexp}) !!! Reduction may be problematic. ")
+        print(f"********************************************************************************************")
+        print(f"!!! WARNING !!! Unusual number of exposures ({cfg.numexp}) !!! Reduction may be problematic.")
+        print(f"                You may want to consider reducing each exposure individually. ")
+        print(f"********************************************************************************************")
 else:
     if cfg.exp <= cfg.numexp:
         print(f"Working on {cfg.datevshot} exposure #{cfg.exp} ...")
+        if int(cfg.datevshot[0:8]) < 20240800 and cfg.numexp == 3:
+            try:
+                dex_dvs = np.loadtxt("/corral-repl/utexas/Hobby-Eberly-Telesco/detect/fwhm.all",dtype=str,usecols=0)
+                if cfg.datevshot in dex_dvs:
+                    print(f"WARNING! {cfg.datevshot} is an original HETDEX observation.")
+                    print(f"         Attempting to use only one exposure may not generate the expected results.")
+                #else: we are not going to print anything ... while this occurred during the original HETDEX run
+                #      this is not a previously reduced HETDEX observation
+            except: #just assume it could be an original observation and warn
+                print(f"WARNING! {cfg.datevshot} appears to be an original HETDEX observation.")
+                print(f"         Attempting to use only one exposure may not generate the expected results.")
     else:
         Quit(cfg, -1, f"Invalid exposure. Requesting exp #{cfg.exp} but {cfg.datevshot} has only {cfg.numexp}")
 
