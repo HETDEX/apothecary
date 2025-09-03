@@ -25,7 +25,9 @@ mkdir -p ${date}${shot}${exp}
 cd ${date}${shot}${exp}
 rm -f out.fits sky.out
 #ls /scratch/00115/gebhardt/red1/reductions/${date}/virus/virus0000${shot}/${exp}/virus/m*fits | awk '{print "\""$1"\""}' > list
-ls /scratch/03261/polonius/red1/reductions/${date}/virus/virus0000${shot}/${exp}/virus/m*fits | awk '{print "\""$1"\""}' > list
+#ls /scratch/03261/polonius/red1/reductions/${date}/virus/virus0000${shot}/${exp}/virus/m*fits | awk '{print "\""$1"\""}' > list
+ls ${resdir}/../../../reductions/${date}/virus/virus0000${shot}/${exp}/virus/m*fits | awk '{print "\""$1"\""}' > list
+
 echo ${mth} ${type} > vred2.in
 ~gebhardt/bin/vred3
 
