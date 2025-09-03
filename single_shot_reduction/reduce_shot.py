@@ -52,6 +52,7 @@ import traceback
 ########################################################################
 EchoCmds = True  #if True echo system commands to the log
 FutureShotDateLimit = 20490101000  # do not allow shots after this dave+shot
+LastKnownFplane = "fp20240731"
 ElixerSnrThresh = 4.5 #do not run elixer on line sources where the S/N < 4.5
 GuiderFWHM_ALL = True #if True and using the GUIDER FWHM, use all within the observation timeframe
                       #if False, just use the two nearest in time to the end of the observation
@@ -942,14 +943,15 @@ def initial_setup(cfg):
         system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rimarb")  # use '#' as sed separator rather than "/"
 
 
-        #update the old red1 path
-        #yes, I want cwd_orig ... I want a single "reductions" direcetory off the top with all the sciXXX as siblings
+        #update the old red1 path; should now all point to the common directory above each sci<YYYYMMDDvSSS> directories
+        #yes, I want cwd_orig ... I want a single "reductions" directory off the top with all the sciXXX as siblings
         system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# rback_field")  # use '#' as sed separator rather than "/"
         system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# rback_fix")
         system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# rerun2")
         system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# rtaremc") #not necessary, just for completeness
         system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# runtar")
         system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# runtarm.defunct") #not necessary, just for completeness
+        #next two are just safeties, the scripts THIS code is using should already have them updated
         system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# alldet/rfft")
         system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# getcen/rgetifucen")
 
@@ -961,9 +963,8 @@ def initial_setup(cfg):
         if os.path.exists(os.path.join(karlfplane, f"fp{cfg.datevshot[0:8]}")):
             shutil.copy2(os.path.join(karlfplane, f"fp{cfg.datevshot[0:8]}"), os.path.join(cfg.cwd,"vdrp/fplane"))
         else:
-            lastknown = "fp20240731"
-            print(f"!!! WARNING !!! fplane file (fp{cfg.datevshot[0:8]}) not found. Using last known ({lastknown}) instead !!!")
-            shutil.copy2(os.path.join(karlfplane, f"{lastknown}"), os.path.join(cfg.cwd, f"vdrp/fplane/fp{cfg.datevshot[0:8]}"))
+            print(f"!!! WARNING !!! fplane file (fp{cfg.datevshot[0:8]}) not found. Using last known ({LastKnownFplane}) instead !!!")
+            shutil.copy2(os.path.join(karlfplane, f"{LastKnownFplane}"), os.path.join(cfg.cwd, f"vdrp/fplane/fp{cfg.datevshot[0:8]}"))
 
         #fix paths in the . cfg files
         system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# vdrp/vdrp.config")
