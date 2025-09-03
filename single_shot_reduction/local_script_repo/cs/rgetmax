@@ -1,7 +1,7 @@
 resdir=$(pwd)
 #datadir="/scratch/00115/gebhardt"
 mkdir -p $resdir/spec/
-datadir="/scratch/03261/polonius/"
+#datadir="/scratch/03261/polonius/"
 cut=20.
 date=$1
 shot=$2
@@ -24,7 +24,8 @@ exp_array=("exp01" "exp02" "exp03")
 
 for exp in "${exp_array[@]}";do
   echo "rgetmax $exp"
-  ln -s ${datadir}/red1/reductions/$date/virus/virus0000$2/${exp}/virus/m*fits .
+  #ln -s ${datadir}/red1/reductions/$date/virus/virus0000$2/${exp}/virus/m*fits .
+  ln -s ${resdir}/../../reductions/$date/virus/virus0000$2/${exp}/virus/m*fits .
   ls m*fits | awk '{print "rfindmax",$1,exp0}' exp0=${exp} | sed s/.fits// > run1
   chmod +x run1
   run1
