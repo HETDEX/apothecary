@@ -2980,9 +2980,10 @@ else:
 
 if s03_fluxcal and not dtprog["s03_fluxcal"]:
 
-    #first need to prepare the reduction directory where the downstream code looks for the multi*fits
-    if prepare_reduction_dir(cfg) < 0:
-        Quit(cfg, -1, "FATAL. Could not untar multi*fits to reduction directory.")
+    #DD 20250904 this step is no longer necessary as we are only using the local copy of the files
+    # #first need to prepare the reduction directory where the downstream code looks for the multi*fits
+    # if prepare_reduction_dir(cfg) < 0:
+    #     Quit(cfg, -1, "FATAL. Could not untar multi*fits to reduction directory.")
 
     star_cat_list = [] #keep the order
 
