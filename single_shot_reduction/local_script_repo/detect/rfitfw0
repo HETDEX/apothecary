@@ -1,5 +1,6 @@
 dir1=$(pwd)
 resdir=$dir1"/fitres"
+#the next line is updated at run time by reduce_shot.py
 datadir="/scratch/03261/polonius/single_shot/science_reductions/"
 #datadir="/scratch/00115/gebhardt/"
 ra=$1
@@ -18,6 +19,7 @@ ifit1=${13}
 mkdir -p /tmp/ras$7_$6
 cd /tmp/ras$7_$6
 ln -s ${datadir}/detect/*.dithall local.dithall
+ln -s ${datadir}/../reductions reductions
 if [ -e ${datadir}detect/$7/norm.dat ]
 then
 cp ${datadir}detect/$7/norm.dat .

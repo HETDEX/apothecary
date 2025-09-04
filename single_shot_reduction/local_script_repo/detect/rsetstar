@@ -27,6 +27,7 @@ mkdir -p coords
 
 
 #dirbase="/scratch/00115/gebhardt/"
+#the next line is updated at run time by reduce_shot.py
 dirbase="/scratch/03261/polonius/single_shot/science_reductions/"
 dirshifts="vdrp/shifts"
 

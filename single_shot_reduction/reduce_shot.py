@@ -75,9 +75,13 @@ karlgettar = "/work/00115/gebhardt/maverick/gettar/"
 karlfplane = "/work/00115/gebhardt/maverick/fplane/"
 karlhome = "/home1/00115/gebhardt"
 hetdex_projects_path = "/scratch/projects/hetdex/"
+elixer_path = os.path.dirname(importlib.util.find_spec("elixer").origin)
 hetdex_api_path = os.path.dirname(importlib.util.find_spec("hetdex_api").origin)
-#there is an extra "hetdex_api" at the end that points into the lower level directory for that. h5tools is actually a sibling
+#there is an extra "hetdex_api" at the end that points into the lower level directory for that.
+#h5tools is actually a sibling
 hetdex_api_path = "/".join(hetdex_api_path.split("/")[0:-1])
+
+
 
 
 #execute steps
@@ -853,6 +857,16 @@ def precheck(cfg):
             print(f"Precheck fail. Dir does not exist: {path_check}")
             return -1
 
+        #common missing installs (that don't show up until later)
+        pkgs=['sklearn','numba']
+        rc = 0
+        for pkg in pkgs:
+            if importlib.util.find_spec(pkg) is None:
+                print(f"Fatal. You need to install '{pkg}'")
+                rc = -1
+
+        if rc != 0:
+            return -1
 
     except:
         print(f"Exception in precheck: {traceback.format_exc()}")
@@ -1829,14 +1843,80 @@ def build_shot_h5(cfg):
     try:
         print("Constructing shot hdf5 file. This will take a while ... ")
         rc = 0
-        os.chdir(cfg.cwd)
 
-        #needed for hetdex_api
-        os.makedirs("match_pngs",exist_ok=True)
+        #some setup that hetdex_api needs
+        os.chdir(os.path.join(cfg.cwd,"vdrp"))
+
+        cmd = f"ln -s shifts/{cfg.starcat_ast}/{cfg.datevshot}/shout.* ."
+        system_command(cfg, cmd)
+
+        cmd = f"ln -s shifts/{cfg.starcat_ast}/{cfg.datevshot}/2* ."
+        system_command(cfg, cmd)
+
+        cmd = f"ln -s shifts/{cfg.starcat_ast}/{cfg.datevshot}/all.mch ."
+        system_command(cfg, cmd)
+
+        cmd = f"ln -s shifts/{cfg.starcat_ast}/{cfg.datevshot}/radec* ."
+        system_command(cfg, cmd)
+
+        cmd = f"ln -s ../detect/{cfg.datevshot}/norm.dat ."
+        system_command(cfg, cmd)
+
+        os.makedirs("match_pngs", exist_ok=True)
+        os.chdir(os.path.join(cfg.cwd, "vdrp/match_pngs"))
+        cmd = f"ln -s ../shifts/{cfg.starcat_ast}/{cfg.datevshot}/match* ."
+        system_command(cfg, cmd)
+
+        os.chdir(cfg.cwd) #also need a match_pngs up one level
+        os.makedirs("match_pngs", exist_ok=True)
+        os.chdir(os.path.join(cfg.cwd, "match_pngs"))
+        cmd = f"ln -s ../vdrp/shifts/{cfg.starcat_ast}/{cfg.datevshot}/match* ."
+        system_command(cfg, cmd)
+
+        # print("Copying match_pngs .... ")
+        # try:
+        #     #note: just copy the pdfs ... hetdex_api create_astrometry handles the conversion to png and renaming
+        #     done = False
+        #     #GAIA first
+        #     mp_path = os.path.join(cfg.cwd,f"vdrp/shifts/gaia/{cfg.datevshot}")
+        #     if os.path.exists(mp_path):
+        #         match_pdfs =  glob.glob(f"{mp_path}/match_exp*.pdf")
+        #         if len(match_pdfs) > 0:
+        #             system_command(cfg, f"cp {mp_path}/match_exp*.pdf {cfg.cwd}/match_pngs")
+        #             done = True
+        #             print("Used GAIA match_pngs")
+        #
+        #     if not done:
+        #         # SDSS next
+        #         mp_path = os.path.join(cfg.cwd, f"vdrp/shifts/sdss/{cfg.datevshot}")
+        #         if os.path.exists(mp_path):
+        #             match_pdfs = glob.glob(f"{mp_path}/match_exp*.pdf")
+        #             if len(match_pdfs) > 0:
+        #                 system_command(cfg, f"cp {mp_path}/match_exp*.pdf {cfg.cwd}/match_pngs")
+        #                 done = True
+        #                 print("Used SDSS match_pngs")
+        #
+        #
+        #     if not done:# PanSTARRS last
+        #         mp_path = os.path.join(cfg.cwd, f"vdrp/shifts/panstarrs/{cfg.datevshot}")
+        #         if os.path.exists(mp_path):
+        #             match_pdfs = glob.glob(f"{mp_path}/match_exp*.pdf")
+        #             if len(match_pdfs) > 0:
+        #                 system_command(cfg, f"cp {mp_path}/match_exp*.pdf {cfg.cwd}/match_pngs")
+        #                 done = True
+        #                 print("Used PanSTARRS match_pngs")
+        #
+        #     if not done:
+        #         print("WARNING!!! Non-fatal. Could not find match_pngs under vdrp/shifts/<catalog>/<datevshot>")
+        # except:
+        #     print(traceback.format_exc())
+
 
         #########################
         # initial hdf5 file
         ########################
+
+        os.chdir(cfg.cwd)
 
         cmd = f"python3 {hetdex_api_path}/h5tools/create_shot_hdf5.py"
         cmd += " --tar"
@@ -1929,30 +2009,6 @@ def build_shot_h5(cfg):
         # now create_astrometry_hdf5
         ########################
         print("Create astrometry  ... ")
-
-        #some setup that hetdex_api needs
-        os.chdir(os.path.join(cfg.cwd,"vdrp"))
-
-        cmd = f"ln -s shifts/{cfg.starcat_ast}/{cfg.datevshot}/shout.* ."
-        system_command(cfg, cmd)
-
-        cmd = f"ln -s shifts/{cfg.starcat_ast}/{cfg.datevshot}/2* ."
-        system_command(cfg, cmd)
-
-        cmd = f"ln -s shifts/{cfg.starcat_ast}/{cfg.datevshot}/all.mch ."
-        system_command(cfg, cmd)
-
-        cmd = f"ln -s shifts/{cfg.starcat_ast}/{cfg.datevshot}/radec* ."
-        system_command(cfg, cmd)
-
-        cmd = f"ln -s shifts/{cfg.starcat_ast}/{cfg.datevshot}/match* ."
-        system_command(cfg, cmd)
-
-        cmd = f"ln -s ../detect/{cfg.datevshot}/norm.dat ."
-        system_command(cfg, cmd)
-
-        os.chdir(cfg.cwd)
-
 
         cmd = f"python3 {hetdex_api_path}/h5tools/create_astrometry_hdf5.py"
         cmd += " --append"
@@ -2745,7 +2801,7 @@ def prep_elixer(cfg):
         cont_h5 = os.path.join(cfg.cwd, f"{cfg.datevshot}_cont.h5")
         diagnose_tab = os.path.join(cfg.cwd,f"diagnose_classifications.tab")
 
-        which_elixer = "selixer.test "
+        which_elixer = f"python {elixer_path}/selixer.py" #"selixer.test "
         elixer_base_cmd = f" -f --slurm 0 --nodes 1 --log info --shot_h5 {shot_h5} --diagnose {diagnose_tab} " \
                           f" --png --error 3.0 --neighborhood 10.0 "
         elixer_line_cmd = f" --name line --dets line.dets  --hdf5 {line_h5} "
@@ -2839,6 +2895,16 @@ if cfg.numexp < 3:
 #########
 # after the initial setup, move stdout and stderr to a log file
 #########
+
+
+#
+# print(f"TESTING match_pngs... ")
+#
+# build_shot_h5(cfg)
+#
+# print(f"EXITING match_pngs")
+# exit(0)
+
 
 
 #cfg.orig_stdout = sys.stdout
