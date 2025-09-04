@@ -31,6 +31,12 @@ import tarfile as tar
 import json
 from datetime import datetime, timedelta
 
+try:
+    from filelock import FileLock
+except:
+    print("You need to install filelock (e.g.: pip install --user filelock) ")
+    exit(-1)
+
 import tables
 from astropy.table import Table, join, Column, MaskedColumn # unique, vstack, hstack
 from astropy.io import fits
@@ -62,7 +68,7 @@ LocalScriptRepo = "./local_script_repo" #useful if running multiple single shots
                                         #then copy locally from here for each shot
                                         #set to None if you do NOT want to use a local script dir cache
                                         #  and force a copy from the main repo each time
-
+Lock_sem_fn = "lsr.lock"
 WorkDirRoot = "./"
 #user specific
 red1path = None # if None, will use the local (cwd) as the basepath, otherwise user can edit and specify one here
@@ -903,25 +909,36 @@ def initial_setup(cfg):
         os.makedirs(workdir)
 
         if LocalScriptRepo is not None:
-            if os.path.exists(LocalScriptRepo): #we want to use it
-                print("Using existing local repo ...")
-                cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
-            else:
-                #copy first to local script repo
-                print("Copying to local repo ...")
-                shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
-                                os.path.join(os.getcwd(),LocalScriptRepo), dirs_exist_ok=True)
-                cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+            #need to see if can get the file lock in case another instance is copying
+            lock = FileLock(Lock_sem_fn)
+            with lock:
+                if os.path.exists(LocalScriptRepo): #we want to use it
+                    print("Using existing local repo ...")
+                    cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                else:
+                    #copy first to local script repo
+                    print("Copying to local repo ...")
+                    shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
+                                    os.path.join(os.getcwd(),LocalScriptRepo), dirs_exist_ok=True)
+                    cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+
+            #lock auto releases
         else:
             print("Using main script repo (may be remote) ...")
             cfg.scriptdir = os.path.join(ScriptRepo,"science_reductions")
     else:
         if LocalScriptRepo is not None:
-            if os.path.exists(LocalScriptRepo): #we want to use it
-                print("Using existing local repo ...")
-                cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
-            else:
-                print("Fatal! --resume selected, but no script repo.")
+            fatal_rtn = False
+            lock = FileLock(Lock_sem_fn)
+            with lock:
+                if os.path.exists(LocalScriptRepo): #we want to use it
+                    print("Using existing local repo ...")
+                    cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                else:
+                    print("Fatal! --resume selected, but no script repo.")
+                    fatal_rtn = True
+            # lock auto releases
+            if fatal_rtn:
                 return -1
         else:
             print("Using main script repo (may be remote) ...")
