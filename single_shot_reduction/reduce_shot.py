@@ -1426,7 +1426,7 @@ def prepare_reduction_dir(cfg):
             if red1path is not None:
                 datadir = os.path.join(red1path,f"{date}/virus/{virus_shot}/{exp}/virus")
             else:
-                datadir = os.path.join(cfg.cwd_orig, f"{date}/virus/{virus_shot}/{exp}/virus")
+                datadir = os.path.join(cfg.cwd_orig, f"reductions/{date}/virus/{virus_shot}/{exp}/virus")
             tarfile = f"d{cfg.datevshot[0:8]}s{cfg.datevshot[-3:]}{exp}_mu.tar"
 
             print(f"Creating directory and untarring ({expdir}/{tarfile}) multi*fits to: {datadir}")
