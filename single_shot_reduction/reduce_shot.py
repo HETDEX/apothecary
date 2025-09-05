@@ -1702,8 +1702,10 @@ def run_rcal(cfg):
                 try:
 
                     hdu = fits.open(os.path.join("cal_out/", outfn))
+                    #the 5 HUDs:  [0] calib, [1] calibe, [2] calib_c, [3] calibe_c, [4] fullsky
+                    #data is (usuall) 1344x1036 ... 112 fibers x 4 amps x 3 dithers by 1036 rectified wavelength bins
                     if len(hdu) != 5:
-                        print(f"fail: bad hdu length. got {len(hdu)}, expected 5")
+                        print(f"[FAIL]: bad hdu length. got {len(hdu)}, expected 5")
                         failed_rcal_list.append(outfn)
                     else:
                         all_zero_list = []
@@ -1714,31 +1716,31 @@ def run_rcal(cfg):
                                 all_zero_list.append(i)
 
                         if len(all_zero_list) > 0:
-                            print(f"fail: all zeroes for HDU[{all_zero_list}]")
+                            print(f"[FAIL]: all zeroes for HDU{all_zero_list}")
                             failed_rcal_list.append(outfn)
-
-                    print("pass")
-                    passed_rcal_list.append(outfn)
+                        else:
+                            print("[Pass]")
+                            passed_rcal_list.append(outfn)
                 except:
                     print(traceback.format_exc())
-                    print("fail")
+                    print("[FAIL]. Exception!")
                     failed_rcal_list.append(outfn)
 
 
 
             else:
-                print("FAIL")
+                print("[FAIL]: no cal_out")
                 failed_rcal_list.append(outfn)
 
         if len(passed_rcal_list) == len(ras):
             rc = 0
-            print("All pass")
+            print("All Pass")
         elif len(failed_rcal_list) == len(ras):  # all failed
             rc = -1
-            print("ALL failed")
+            print("ALL FAIL")
         else:
             rc = 1
-            print(f"Mixed results of {len(ras)}: {len(passed_rcal_list)} pass, {len(failed_rcal_list)} FAIL")
+            print(f"Mixed results of {len(ras)}: {len(passed_rcal_list)} Pass, {len(failed_rcal_list)} FAIL")
 
 
     except:
