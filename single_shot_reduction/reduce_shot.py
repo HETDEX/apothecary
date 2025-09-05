@@ -98,13 +98,13 @@ do_panstarrs = False #only run PanSTARRS if true, otherwise just run the usual G
 
 s03_fluxcal = True
 
-s04_sky_subtraction = True
+s04_make_shot = True
 s04a_get_ifucens = True
 s04b_rfft = True
 s04c_rcal_all = True
 s04d_shot_h5 = True
 s04e_amp_stats = True
-s04_sky_subtraction = s04_sky_subtraction | s04a_get_ifucens | s04b_rfft | s04c_rcal_all | s04d_shot_h5 | s04e_amp_stats #sanity catch
+s04_make_shot = s04_make_shot | s04a_get_ifucens | s04b_rfft | s04c_rcal_all | s04d_shot_h5 | s04e_amp_stats #sanity catch
 
 s05_detection = True
 s05b_rdet_rf1 = True
@@ -133,13 +133,13 @@ if False: #testing
 
     s03_fluxcal = False
 
-    s04_sky_subtraction = False
+    s04_make_shot = False
     s04a_get_ifucens = False
     s04b_rfft = False
     s04c_rcal_all = False
     s04d_shot_h5 = False
     s04e_amp_stats = False
-    s04_sky_subtraction = s04_sky_subtraction | s04a_get_ifucens | s04b_rfft | s04c_rcal_all | s04d_shot_h5 | s04e_amp_stats  # sanity catch
+    s04_make_shot = s04_make_shot | s04a_get_ifucens | s04b_rfft | s04c_rcal_all | s04d_shot_h5 | s04e_amp_stats  # sanity catch
 
     s05_detection = True
     s05b_rdet_rf1 = False
@@ -295,9 +295,20 @@ def progress_init(cfg):
                 cfg.resume = True
 
             #consistency check / force (if ANY under a step are False, then the top of the step becomes False (incomplete))
-            dtprog["s04_sky_subtraction"] = dtprog["s04_sky_subtraction"] and dtprog["s04a_get_ifucens"] and \
-                                            dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] | \
-                                            dtprog["s04e_amp_stats"]
+            if "s04_make_shot" in dtprog.keys():
+                dtprog["s04_make_shot"] = dtprog["s04_make_shot"] and dtprog["s04a_get_ifucens"] and \
+                                                dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] | \
+                                                dtprog["s04e_amp_stats"]
+            else:
+                dtprog["s04_make_shot"] = dtprog["s04_sky_subtraction"] and dtprog["s04a_get_ifucens"] and \
+                                                dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] | \
+                                                dtprog["s04e_amp_stats"]
+                dtprog.pop("s04_sky_subtraction") #remove the old name
+                #ordering is now wrong, but, programatically, it does not matter
+                #should be rare as we move forward, so just noting that the progress.dat for this will be
+                #out of order and move on
+
+
 
             dtprog["s05_detection"] = dtprog["s05_detection"] and dtprog["s05b_rdet_rf1"] and \
                                             dtprog["s05c_rgetmax"] and dtprog["s05e_detection_hdf5"]
@@ -311,7 +322,7 @@ def progress_init(cfg):
         dtprog = {"s01_run1s": False,
                   "s02_vdrp": False,
                   "s03_fluxcal": False,
-                  "s04_sky_subtraction": False,
+                  "s04_make_shot": False,
                   "s04a_get_ifucens": False,
                   "s04b_rfft": False,
                   "s04c_rcal_all": False,
@@ -1609,7 +1620,27 @@ def run_rfft(cfg):
             for suffix in output_suffixes:
                 fn = f"output/d{cfg.datevshot.replace('v','s')}exp{str(exp).zfill(2)}{suffix}"
                 if os.path.exists(fn):
-                    print(f"[Pass] {fn}")
+                    if suffix == "amp.dat":
+                        #todo: check certain columns
+                        col1 = np.loadtxt(fn, dtype=str, usecols=[0],skiprows=1)
+                        #known bad pattern
+                        bad_pattern = '\x00\x00\x00_\x00\x00\x00_\x00\x00\x00_'
+                        if col1 == bad_pattern:
+                            print(f"[FAIL] {fn}. Bad data/format.")
+                        else:
+                            #assume good
+                            print(f"[Pass]")
+                    elif suffix == "ds9.reg": #not important, but just assume good
+                        print(f"[Pass] {fn}")
+                    elif suffix == "sky.dat": #this is the easy one to check
+                        col2 = np.loadtxt(fn,dtype=float,usecols=[1])
+                        if np.any(col2):
+                            print(f"[Pass] {fn}")
+                        else:
+                            print(f"[FAIL] {fn}. All zero values.")
+                    else: #this is the fits ... do we want to check it?
+                        print(f"[Pass] {fn}")
+
                 else:
                     print(f"[FAIL] {fn} file not found")
                     rc = -1 #even though this is fatal, go ahead and loop over all files and expXX so can get into the log
@@ -1662,8 +1693,35 @@ def run_rcal(cfg):
             #check the output exists cal_out/20240730v009_514_103_019_cal.fits
             outfn = f"{cfg.datevshot}_{multi[6:]}_cal.fits"
             if os.path.exists(os.path.join("cal_out/", outfn)):
-                print("pass")
-                passed_rcal_list.append(outfn)
+
+                #check the contents
+                try:
+
+                    hdu = fits.open(os.path.join("cal_out/", outfn))
+                    if len(hdu) != 5:
+                        print(f"fail: bad hdu length. got {len(hdu)}, expected 5")
+                        failed_rcal_list.append(outfn)
+                    else:
+                        all_zero_list = []
+                        for i in range(5):
+                            if np.any(hdu[i].data):
+                                pass #assume otherwise okay
+                            else:
+                                all_zero_list.append(i)
+
+                        if len(all_zero_list) > 0:
+                            print(f"fail: all zeroes for HDU[{all_zero_list}]")
+                            failed_rcal_list.append(outfn)
+
+                    print("pass")
+                    passed_rcal_list.append(outfn)
+                except:
+                    print(traceback.format_exc())
+                    print("fail")
+                    failed_rcal_list.append(outfn)
+
+
+
             else:
                 print("FAIL")
                 failed_rcal_list.append(outfn)
@@ -3049,7 +3107,7 @@ else:
 # getcen and more stuff
 ###########
 
-if s04_sky_subtraction and not dtprog["s04_sky_subtraction"]:
+if s04_make_shot and not dtprog["s04_make_shot"]:
 
     print("Getting IFU centers ...")
     if s04a_get_ifucens and not dtprog["s04a_get_ifucens"]:
@@ -3095,7 +3153,7 @@ if s04_sky_subtraction and not dtprog["s04_sky_subtraction"]:
         progress_update(cfg,dtprog, "s04e_amp_stats")
 
     if dtprog["s04a_get_ifucens"] and dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] and dtprog["s04e_amp_stats"]:
-        progress_update(cfg,dtprog, "s04_sky_subtraction")
+        progress_update(cfg,dtprog, "s04_make_shot")
 else:
     print("Skipping sky subtraction")
 

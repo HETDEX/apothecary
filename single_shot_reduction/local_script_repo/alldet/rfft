@@ -24,9 +24,14 @@ cd /tmp
 mkdir -p ${date}${shot}${exp}
 cd ${date}${shot}${exp}
 rm -f out.fits sky.out
+
+ln -s ${resdir}/../../detect/20*v???.dithall local.dithall
+ln -s ${resdir}/../../../reductions reductions
+
 #ls /scratch/00115/gebhardt/red1/reductions/${date}/virus/virus0000${shot}/${exp}/virus/m*fits | awk '{print "\""$1"\""}' > list
 #ls /scratch/03261/polonius/red1/reductions/${date}/virus/virus0000${shot}/${exp}/virus/m*fits | awk '{print "\""$1"\""}' > list
-ls ${resdir}/../../../reductions/${date}/virus/virus0000${shot}/${exp}/virus/m*fits | awk '{print "\""$1"\""}' > list
+#ls ${resdir}/../../../reductions/${date}/virus/virus0000${shot}/${exp}/virus/m*fits | awk '{print "\""$1"\""}' > list
+ls reductions/${date}/virus/virus0000${shot}/${exp}/virus/m*fits | awk '{print "\""$1"\""}' > list
 
 echo ${mth} ${type} > vred2.in
 ~gebhardt/bin/vred3
