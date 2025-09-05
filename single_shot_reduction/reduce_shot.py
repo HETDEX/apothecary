@@ -1625,7 +1625,7 @@ def run_rfft(cfg):
                         col1 = np.loadtxt(fn, dtype=str, usecols=[0],skiprows=1)
                         #known bad pattern
                         bad_pattern = '\x00\x00\x00_\x00\x00\x00_\x00\x00\x00_'
-                        if col1 == bad_pattern:
+                        if col1[0] == bad_pattern:
                             print(f"[FAIL] {fn}. Bad data/format.")
                         else:
                             #assume good
