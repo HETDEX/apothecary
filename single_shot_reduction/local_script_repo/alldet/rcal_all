@@ -36,6 +36,7 @@ ${f2} ${rap} ${wv} ${wr}
 eof
 
 mv out.fits in.fits
+ln -s ${dir1}/output/* .
 ~gebhardt/bin/imaddsky << eof
 ${f1} ${f2}
 eof

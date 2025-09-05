@@ -3115,12 +3115,14 @@ else:
 
 if s04_make_shot and not dtprog["s04_make_shot"]:
 
-    print("Getting IFU centers ...")
     if s04a_get_ifucens and not dtprog["s04a_get_ifucens"]:
+        print("Getting IFU centers ...")
         if run_make_ifucen(cfg) != 0:
             Quit(cfg,-1,"FATAL. Failed to get IFU centers.")
         else:
             progress_update(cfg,dtprog, "s04a_get_ifucens")
+    else:
+        print("Skipping IFU centers ...")
 
     if s04b_rfft and not dtprog["s04b_rfft"]:
         print("Running rfft (this may take a while) ...")
