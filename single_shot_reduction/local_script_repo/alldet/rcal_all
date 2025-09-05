@@ -1,6 +1,6 @@
 dir1=$(pwd)
 resdir=${dir1}/cal_out
-datadir="/scratch/projects/hetdex/"
+#datadir="/scratch/projects/hetdex/"
 mthd=`echo "$7" | cut -b 1-6`
 ra=$1
 dec=$2
@@ -27,6 +27,8 @@ cd /tmp/ras$7_$6
 cp ${dir1}/../detect/20*v*/norm.dat norm.dat
 cp ${dir1}/../detect/20*v*/fwhm.out fwhm.use
 ln -s ${dir1}/../detect/20*v???.dithall local.dithall
+ln -s ${dir1}/../../reductions reductions
+
 
 ~gebhardt/bin/fitradecsp << eof
 ${ra} ${dec} ${step} ${nstep} ${wv} 3 ${ifit1}
