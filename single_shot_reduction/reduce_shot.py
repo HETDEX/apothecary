@@ -100,7 +100,7 @@ s03_fluxcal = True
 
 s04_make_shot = True
 s04a_get_ifucens = True
-s04b_rfft = True
+s04b_rfft = True  #rfft = run full field on tmp
 s04c_rcal_all = True
 s04d_shot_h5 = True
 s04e_amp_stats = True
@@ -1624,12 +1624,16 @@ def run_rfft(cfg):
                         #todo: check certain columns
                         col1 = np.loadtxt(fn, dtype=str, usecols=[0],skiprows=1)
                         #known bad pattern
+                        #IF you see this, it may be a problem with the "list" of multi*fits for rfft
+                        #  (see alldet/rfft and the creation of "list") ... there is a 120 character limit
+                        #  in the Fortran code for each list entry and previously this issue occured when
+                        #  the entries were 166 characters each
                         bad_pattern = '\x00\x00\x00_\x00\x00\x00_\x00\x00\x00_'
                         if col1[0] == bad_pattern:
                             print(f"[FAIL] {fn}. Bad data/format.")
                         else:
                             #assume good
-                            print(f"[Pass]")
+                            print(f"[Pass] {fn}")
                     elif suffix == "ds9.reg": #not important, but just assume good
                         print(f"[Pass] {fn}")
                     elif suffix == "sky.dat": #this is the easy one to check
