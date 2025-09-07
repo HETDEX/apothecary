@@ -151,21 +151,25 @@ mask = np.zeros(spec.shape, dtype=bool)
 # Loop through the number of spectra
 log.info('Total number of spectra: %i' % spec.shape[0])
 for ind in np.arange(spec.shape[0]):
+    if (ind % 1000) == 999:
+        # print so I know how long this is taking
+        log.info('[Masking] at index %i' % (ind+1))
+    # Initialize this polynomial model for 3rd order
+    P = Polynomial1D(3)
+    # Select values that are not extreme outliers (watch for nans so use nanmedian)
+    wmask = weigh[ind] > 0.3 * np.nanmedian(weigh[ind])
     try:
-        if (ind % 1000) == 999:
-            # print so I know how long this is taking
-            log.info('[Masking] at index %i' % (ind+1))
-        # Initialize this polynomial model for 3rd order
-        P = Polynomial1D(3)
-        # Select values that are not extreme outliers (watch for nans so use nanmedian)
-        wmask = weigh[ind] > 0.3 * np.nanmedian(weigh[ind])
         # Fit Polynomial
         fit = fitter(P, wave[wmask], weigh[ind][wmask])
         # Mask values below 80% of the fit
         mask[ind] = weigh[ind] < 0.8 * fit(wave)
     except:
-        print("Diagnose exception. Non-fatal. Will continue.")
-        print(traceback.format_exc())
+        print("Diagnose fit exception. Non-fatal. Will continue.")
+        #print(traceback.format_exc())
+
+        mask[ind] = True
+
+
 
 
 # Mask neighbor pixels as well because they tend to have issues but don't meet
