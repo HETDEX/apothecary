@@ -171,6 +171,7 @@ if False: #testing
 class Config:
 
     clean: bool = False
+    update_local_repo: bool = False
     overwrite: bool = False
     resume: bool = False
     shotid: int = 0
@@ -209,6 +210,11 @@ if "-clean" in args:
     cfg.clean = True
     #idx = args.index("-clean")
     args.remove("-clean")
+    print("[todo]: --clean option not yet implemented")
+
+if "-update" in args:
+    cfg.update_local_repo = True
+    args.remove("-update")
 
 if "-overwrite" in args:
     cfg.overwrite = True
@@ -923,8 +929,14 @@ def initial_setup(cfg):
             #need to see if can get the file lock in case another instance is copying
             lock = FileLock(Lock_sem_fn)
             with lock:
+                if cfg.update_local_repo:
+                    print("Updating local repo ...")
+                    shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
+                                    os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
+                    cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+
                 if os.path.exists(LocalScriptRepo): #we want to use it
-                    print("Using existing local repo ...")
+                    print("Using local repo ...")
                     cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
                 else:
                     #copy first to local script repo
@@ -942,8 +954,15 @@ def initial_setup(cfg):
             fatal_rtn = False
             lock = FileLock(Lock_sem_fn)
             with lock:
+
+                if cfg.update_local_repo:
+                    print("Updating local repo ...")
+                    shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
+                                    os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
+                    cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+
                 if os.path.exists(LocalScriptRepo): #we want to use it
-                    print("Using existing local repo ...")
+                    print("Using local repo ...")
                     cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
                 else:
                     print("Fatal! --resume selected, but no script repo.")
