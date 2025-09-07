@@ -979,7 +979,7 @@ def initial_setup(cfg):
     cfg.cwd = os.getcwd() #now under the sci<shot> directory
 
 
-    if not resume:
+    if not resume or cfg.update_local_repo:
         print(f"Copying source code to working directory {cfg.cwd}...")
         ## if ANY of this fails it is fatal
 
