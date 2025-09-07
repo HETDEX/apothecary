@@ -1,0 +1,4 @@
+This is a local version of Diagnose as part of Apothecary single_shot reduction.
+This is NOT the official version. 
+See https://github.com/grzeimann/Diagnose
+
