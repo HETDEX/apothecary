@@ -303,11 +303,11 @@ def progress_init(cfg):
             #consistency check / force (if ANY under a step are False, then the top of the step becomes False (incomplete))
             if "s04_make_shot" in dtprog.keys():
                 dtprog["s04_make_shot"] = dtprog["s04_make_shot"] and dtprog["s04a_get_ifucens"] and \
-                                                dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] | \
+                                                dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] and \
                                                 dtprog["s04e_amp_stats"]
             else:
                 dtprog["s04_make_shot"] = dtprog["s04_sky_subtraction"] and dtprog["s04a_get_ifucens"] and \
-                                                dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] | \
+                                                dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] and \
                                                 dtprog["s04e_amp_stats"]
                 dtprog.pop("s04_sky_subtraction") #remove the old name
                 #ordering is now wrong, but, programatically, it does not matter
@@ -2133,6 +2133,24 @@ def build_shot_h5(cfg):
         # shot_h5 = tables.open_file(f"{cfg.datevshot}.h5","a")
         # shot_h5.root.Shot._f_copy(newparent="root", newname="Survey", recursive=True, createparents=True)
         # shot_h5.close()
+
+
+        #for convenience, softlink the shot h5 in parent directory
+        #here
+        shot_link_dir = os.path.join(cfg.cwd_orig, f"shots")
+        if not os.path.exists(shot_link_dir):
+            lock = FileLock(Lock_sem_fn)
+            with lock:
+                Path(shot_link_dir).mkdir(parents=True, exist_ok=True)
+
+        #assume this is the only active task working on this shot
+        shot_link = os.path.join(shot_link_dir,f"{cfg.datevshot}.h5")
+        shot_src = f"{cfg.cwd}/{cfg.datevshot}.h5"
+        if os.path.exists(shot_link):
+            system_command(cfg, f"unlink {shot_link}")
+
+        system_command(cfg, f"ln -s {shot_src} {shot_link}")
+        print(f"Created link to shot h5 file: {shot_src} -> {shot_link}")
 
         print(f"Done: {cfg.cwd}/{cfg.datevshot}.h5")
 
