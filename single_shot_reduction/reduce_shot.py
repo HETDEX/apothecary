@@ -53,6 +53,12 @@ import importlib.util
 
 import traceback
 
+import matplotlib
+matplotlib.use('agg')
+
+import matplotlib.pyplot as plt
+plt.style.use('default')
+
 ########################################################################
 # CONFIGURATION
 ########################################################################
@@ -104,7 +110,8 @@ s04b_rfft = True  #rfft = run full field on tmp
 s04c_rcal_all = True
 s04d_shot_h5 = True
 s04e_amp_stats = True
-s04_make_shot = s04_make_shot | s04a_get_ifucens | s04b_rfft | s04c_rcal_all | s04d_shot_h5 | s04e_amp_stats #sanity catch
+s04f_analysis = True
+s04_make_shot = s04_make_shot | s04a_get_ifucens | s04b_rfft | s04c_rcal_all | s04d_shot_h5 | s04e_amp_stats | s04f_analysis#sanity catch
 
 s05_detection = True
 s05b_rdet_rf1 = True
@@ -300,15 +307,18 @@ def progress_init(cfg):
                 print("****************************")
                 cfg.resume = True
 
-            #consistency check / force (if ANY under a step are False, then the top of the step becomes False (incomplete))
+            if "s04f_analysis" not in dtprog.keys():
+                dtprog["s04f_analysis"] = False
+
+                #consistency check / force (if ANY under a step are False, then the top of the step becomes False (incomplete))
             if "s04_make_shot" in dtprog.keys():
                 dtprog["s04_make_shot"] = dtprog["s04_make_shot"] and dtprog["s04a_get_ifucens"] and \
                                                 dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] and \
-                                                dtprog["s04e_amp_stats"]
+                                                dtprog["s04e_amp_stats"] and dtprog["s04f_analysis"]
             else:
                 dtprog["s04_make_shot"] = dtprog["s04_sky_subtraction"] and dtprog["s04a_get_ifucens"] and \
                                                 dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] and \
-                                                dtprog["s04e_amp_stats"]
+                                                dtprog["s04e_amp_stats"] and dtprog["s04f_analysis"]
                 dtprog.pop("s04_sky_subtraction") #remove the old name
                 #ordering is now wrong, but, programatically, it does not matter
                 #should be rare as we move forward, so just noting that the progress.dat for this will be
@@ -334,6 +344,7 @@ def progress_init(cfg):
                   "s04c_rcal_all": False,
                   "s04d_shot_h5": False,
                   "s04e_amp_stats": False,
+                  "s04f_analysis": False,
                   "s05_detection": False,
                   "s05b_rdet_rf1": False,
                   "s05c_rgetmax": False,
@@ -2220,6 +2231,177 @@ def amp_stats(cfg,shot_h5_fqfn=None):
 
     return rc
 
+
+
+def shot_analyisis(cfg):
+    """
+
+    this needs the shot h5 file to have been completed to work
+    :param cfg:
+    :return:
+    """
+
+    try:
+        print(f"Making basic IFU analysis images ...")
+        rc = 0
+        shot_h5_fqfn = os.path.join(cfg.cwd, f"{cfg.datevshot}.h5")
+        h5 = tables.open_file(shot_h5_fqfn)
+
+        #make the output location
+        analysis_dir = os.path.join(cfg.cwd,"analysis/")
+        Path(analysis_dir).mkdir(parents=True, exist_ok=True)
+        os.chdir(analysis_dir)
+
+        ######################################################
+        # matched is already present in /matched_pngs directory
+        # but can make a link
+        ######################################################
+        print("Linking match_png")
+        system_command(cfg, "ln -s ../match_pngs/match*.png .")
+
+
+        ######################################################
+        # coadds ... just put at the top of /analysis
+        ######################################################
+        print(f"Making coadd image(s): ... ")
+
+        try:
+            plt.close('all')
+            plt.figure(figsize=(8, 8))
+            plt.title(f"{cfg.datevshot} x1")
+            plt.imshow(h5.root.Astrometry.CoaddImages.png_exp01.read())  # ,origin="upper")
+            plt.tight_layout()
+            plt.savefig(f"coadd_{cfg.datevshot}_exp01.png", dpi=96)
+        except:
+            pass
+
+        try:
+            plt.close('all')
+            plt.figure(figsize=(8, 8))
+            plt.title(f"{cfg.datevshot} x2")
+            plt.imshow(h5.root.Astrometry.CoaddImages.png_exp02.read())  # ,origin="upper")
+            plt.tight_layout()
+            plt.savefig(f"coadd_{cfg.datevshot}_exp02.png", dpi=96)
+        except:
+            pass
+
+        try:
+            plt.close('all')
+            plt.figure(figsize=(8, 8))
+            plt.title(f"{cfg.datevshot} x3")
+            plt.imshow(h5.root.Astrometry.CoaddImages.png_exp03.read())  # ,origin="upper")
+            plt.tight_layout()
+            plt.savefig(f"coadd_{cfg.datevshot}_exp03.png", dpi=96)
+        except:
+            pass
+
+        ##################################################
+        # 4amp x 3dither (normally) pngs for each IFU
+        # there are many, so make a subdir
+        ##################################################
+
+        analysis_dir = os.path.join(cfg.cwd,"analysis/ifus/")
+        Path(analysis_dir).mkdir(parents=True, exist_ok=True)
+        os.chdir(analysis_dir)
+        mfs_in_shot = np.unique(h5.root.Data.FiberIndex.read(field="multiframe"))
+        ifus_in_shot = np.unique([mfs[0:-3] for mfs in mfs_in_shot])
+        slotids = [ifu[10:13] for ifu in ifus_in_shot]
+        #put these in order of slotid
+        slotids, ifus_in_shot = zip(*sorted(zip(slotids, ifus_in_shot)))
+
+        img = "clean_image"
+        cmap = "gray"
+
+        #just assume 3 dithers ... if they do not exist, they will be blank
+        #there are a few that have 4 or more exposures and we will just ignore that
+        for ii, mf_base in enumerate(ifus_in_shot):
+            print(f"Making basic IFU analysis images: {mf_base.decode()}")
+            plt.close('all')
+            fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(9, 12))
+            plot_config = list(np.arange(431, 443, 1))
+            fig.suptitle(f"{cfg.datevshot} {mf_base.decode()}")
+
+            for ai, amp in enumerate([b'_RU', b'_RL', b'_LL', b'_LU']):
+                ei = 0  # exposure index
+                # print(ai,ei,amp)
+                mf = mf_base + amp
+                data = h5.root.Data.Images.read_where("multiframe==mf", field=img)
+                exp = h5.root.Data.Images.read_where("multiframe==mf", field='expnum')
+
+                # ax = plt.subplot(plot_config[ci])
+                ax = axes[ai, ei]
+                ei += 1
+                sel = exp == 1
+                try:
+                    if np.count_nonzero(sel) == 1:
+                        ax.set_title(f"{amp.decode()} x1")
+                        vmin, vmax = Utils.get_vrange(data[sel][0], contrast=0.25)
+                        if amp != b'_LU':
+                            ax.set_xticks([])
+                        ax.imshow(data[sel][0], cmap=cmap, vmin=vmin, vmax=vmax)
+                    else:
+                        ax.set_xticks([])
+                        ax.set_yticks([])
+
+                except:
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+
+                sel = exp == 2
+                ax = axes[ai, ei]
+                ei += 1
+                try:
+                    if np.count_nonzero(sel) == 1:
+
+                        ax.set_title(f"{amp.decode()} x2")
+                        vmin, vmax = Utils.get_vrange(data[sel][0], contrast=0.25)
+                        # ax.yaxis.label.set_visible(False)
+                        ax.set_yticks([])
+                        if amp != b'_LU':
+                            ax.set_xticks([])
+                        ax.imshow(data[sel][0], cmap=cmap, vmin=vmin, vmax=vmax)
+                    else:
+                        ax.set_xticks([])
+                        ax.set_yticks([])
+
+                except:
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+
+                sel = exp == 3
+                ax = axes[ai, ei]
+                ei += 1
+                try:
+                    if np.count_nonzero(sel) == 1:
+                        ax.set_title(f"{amp.decode()} x3")
+                        vmin, vmax = Utils.get_vrange(data[sel][0], contrast=0.25)
+                        if amp != b'_LU':
+                            ax.set_xticks([])
+                        ax.set_yticks([])
+                        ax.imshow(data[sel][0], cmap=cmap, vmin=vmin, vmax=vmax)
+                    else:
+                        ax.set_xticks([])
+                        ax.set_yticks([])
+
+                except:
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+
+            plt.tight_layout()
+            plt.savefig(f"i{mf_base.decode()[10:13]}_{cfg.datevshot}_{mf_base.decode()}.png", dpi=96)
+
+
+    except:
+        print(traceback.format_exc())
+        rc = -1
+        print(f"Could produce amp statistics for:  {cfg.datevshot}")
+
+    try:
+        h5.close()
+    except:
+        pass
+
+    return rc
 def build_detection_tables(cfg):
     """
 
@@ -3196,6 +3378,13 @@ if s04_make_shot and not dtprog["s04_make_shot"]:
         if rc < 0:
             print("Non-fatal. Could not compute amp stats from shot h5 file. Will continue anyway with catalog creation.")
         progress_update(cfg,dtprog, "s04e_amp_stats")
+
+    #basic shot analysis (mostly images for review)
+    if s04f_analysis and not dtprog["s04f_analysis"]:
+        rc = shot_analyisis(cfg)
+        if rc < 0:
+            print("Non-fatal. Could not complete basic shot analysis output.")
+        progress_update(cfg,dtprog, "s04f_analysis")
 
     if dtprog["s04a_get_ifucens"] and dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] and dtprog["s04e_amp_stats"]:
         progress_update(cfg,dtprog, "s04_make_shot")
