@@ -2215,7 +2215,10 @@ def amp_stats(cfg,shot_h5_fqfn=None):
             #NOTICE: the "flag" key DOES NOT EXIST here ... it is added to table t above, but not to the shot_dict
             print(f"Adding AmpStats table to  {shot_h5_fqfn} ...")
             h5 = tables.open_file(shot_h5_fqfn,mode="a")
-            AmpStats.stats_update_shot(h5,shot_dict)
+
+            #need to update the shot_dict with the results from stats_qc
+
+            AmpStats.stats_update_shot(h5,shot_dict=None,shot_dict_tab=t)
 
 
         else:
