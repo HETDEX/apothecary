@@ -2220,6 +2220,7 @@ def amp_stats(cfg,shot_h5_fqfn=None):
 
             AmpStats.stats_update_shot(h5,shot_dict=None,shot_dict_tab=t)
 
+            del t
 
         else:
             print(f"FAIL. Could not compute amp stats.")
