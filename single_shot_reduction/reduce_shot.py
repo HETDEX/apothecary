@@ -2189,34 +2189,33 @@ def amp_stats(cfg,shot_h5_fqfn=None):
         print(f"Computing amp statistics from: {shot_h5_fqfn} ... ")
         shot_dict = AmpStats.make_stats_for_shot(fqfn=shot_h5_fqfn,save=True,preload=False)
 
-        # if shot_dict is not None:
-        #     #... not sure I want to actually modify the h5 file
-        #     # the code is a bit dated (in hetdex api) and we had discussions about leaving the shot h5 files alone
-        #     # ... this, though, is different now since these are not HETDEX and are working on individual shots
-        #     #needs the actual h5 file
-        #     h5 = tables.open_file(shot_h5_fqfn,mode="a")
-        #     AmpStats.stats_update_shot(h5,shot_dict)
-        # else:
-        #     print(f"FAIL. Could not compute amp stats.")
-        #     rc = -1
-
 
         if shot_dict is not None:
             t = AmpStats.stats_shot_dict_to_table(shot_dict)
             t = t[t['n_lo'] >= 0] #use n_lo column to select ... the -1 values are where this failed
                                   # (e.g. usually for dithers that don't exist)
+
             #???how much of stats_qc needs to be re-done since it is based on 3-dithers and some joint statistics???
             #several of the checks are looking for extreme variation over the dithers, which can't be done with just one dither
             t = AmpStats.stats_qc(t, extend=True)
 
-            t.write(f"{cfg.datevshot}_ampstats.fits",format="fits")
-            t.write(f"{cfg.datevshot}_ampstats.tab", format="ascii")
+            t.write(f"{cfg.datevshot}_ampstats.fits",format="fits",overwrite=True)
+            t.write(f"{cfg.datevshot}_ampstats.tab", format="ascii",overwrite=True)
 
             #always creat the bad amps file, even if none trigger
             with open(f"{cfg.datevshot}_badamps.txt","w") as f:
-                for row in t[t['flag']>0]:
+                for row in t[t['flag']!=1]: #1 == Good, 0 = Bad
                     f.write(f"{row['multiframe']} exp{str(row['expnum']).zfill(2)} \n")
 
+
+            #assuming these are post-HETDEX, go ahead and put this in the shot.h5 file
+            #NOTICE: this is not done for the original HETDEX shots
+            #needs the actual h5 file
+
+            #NOTICE: the "flag" key DOES NOT EXIST here ... it is added to table t above, but not to the shot_dict
+            print(f"Adding AmpStats table to  {shot_h5_fqfn} ...")
+            h5 = tables.open_file(shot_h5_fqfn,mode="a")
+            AmpStats.stats_update_shot(h5,shot_dict)
 
 
         else:
