@@ -43,8 +43,11 @@ from astropy.io import fits
 from h5tools import amp_stats as AmpStats
 import hetdex_tools.fof_kdtree as fof
 
+# noinspection PyUnresolvedReferences
 from elixer import global_config as G
+# noinspection PyUnresolvedReferences
 from elixer import spectrum_utilities as SU
+# noinspection PyUnresolvedReferences
 from elixer import utilities as Utils
 
 
@@ -129,40 +132,40 @@ s06e_source_cat = True #make a source catalog
 
 s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
 
-
-if False: #testing
-    print("#################### TESTING ##########################")
-    # execute steps
-    s01_run1s = False
-
-    s02_vdrp = False
-    do_panstarrs = False  # only run PanSTARRS if true, otherwise just run the usual GAIA and SDSS
-
-    s03_fluxcal = False
-
-    s04_make_shot = False
-    s04a_get_ifucens = False
-    s04b_rfft = False
-    s04c_rcal_all = False
-    s04d_shot_h5 = False
-    s04e_amp_stats = False
-    s04_make_shot = s04_make_shot | s04a_get_ifucens | s04b_rfft | s04c_rcal_all | s04d_shot_h5 | s04e_amp_stats  # sanity catch
-
-    s05_detection = True
-    s05b_rdet_rf1 = False
-    s05c_rgetmax = True
-    #s05d_detection_tables = False  #builds as fits files... this is replaced by the hdf5 version
-    s05e_detection_hdf5 = True
-   # s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_detection_tables | s05e_detection_hdf5  # sanity catch
-    s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05e_detection_hdf5  # sanity catch
-
-    s06_catalogs = True
-    s06b_fof = True  # cluster the lines and continuum sources (separately)
-    s06c_diagnose = True  # run Diagnose
-    s06d_elixer = True  # run elixer
-    s06e_source_cat = False  # make a source catalog
-
-    s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
+#
+# if False: #testing
+#     print("#################### TESTING ##########################")
+#     # execute steps
+#     s01_run1s = False
+#
+#     s02_vdrp = False
+#     do_panstarrs = False  # only run PanSTARRS if true, otherwise just run the usual GAIA and SDSS
+#
+#     s03_fluxcal = False
+#
+#     s04_make_shot = False
+#     s04a_get_ifucens = False
+#     s04b_rfft = False
+#     s04c_rcal_all = False
+#     s04d_shot_h5 = False
+#     s04e_amp_stats = False
+#     s04_make_shot = s04_make_shot | s04a_get_ifucens | s04b_rfft | s04c_rcal_all | s04d_shot_h5 | s04e_amp_stats  # sanity catch
+#
+#     s05_detection = True
+#     s05b_rdet_rf1 = False
+#     s05c_rgetmax = True
+#     #s05d_detection_tables = False  #builds as fits files... this is replaced by the hdf5 version
+#     s05e_detection_hdf5 = True
+#    # s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05d_detection_tables | s05e_detection_hdf5  # sanity catch
+#     s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05e_detection_hdf5  # sanity catch
+#
+#     s06_catalogs = True
+#     s06b_fof = True  # cluster the lines and continuum sources (separately)
+#     s06c_diagnose = True  # run Diagnose
+#     s06d_elixer = True  # run elixer
+#     s06e_source_cat = False  # make a source catalog
+#
+#     s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
 
 
 
@@ -1075,6 +1078,7 @@ def initial_setup(cfg):
                 rtafn = os.path.join(karlgettar, f"rta.202500")
             else:
                 #should not happen
+                rtafn = None #just to turn off warning
                 Quit(cfg,-1,"Fatal. Cannot locate suitable rta file")
 
             rta_date, rta_shot, rta_ra, rta_dec, rta_v = np.loadtxt(rtafn,
@@ -1555,6 +1559,7 @@ def check_fluxcalibration(cfg):
     #          >> if they exist (e.g. that might have failed during vdrp)
     #          >> then, rerun   run_fluxcalibration() and check again
 
+    out = None
     try:
         #20240730v006sedtp_f.dat
         if os.path.exists(f"tp/{cfg.datevshot}sedtp_f.dat"):
@@ -3112,17 +3117,32 @@ def prep_elixer(cfg):
         rc = 0
         os.chdir(os.path.join(cfg.cwd))
 
+        print("Preparing detctions lists for ELiXer ...")
         #make subdirs elixer/line, elixer/cont
         elixdir = os.path.join(cfg.cwd,"elixer/")
         Path(elixdir).mkdir(parents=True, exist_ok=True)
 
+        try:
+            #we are in the shot working dir
+            h5 = tables.open_file(f"{cfg.datevshot}.h5",mode='r')
+            bad_amps_list = list(h5.root.AmpStats.read_where("flag==0", field="multiframe").astype(str))
+            print(f"Loaded {len(bad_amps_list)} bad amps ...")
+            h5.close()
+        except:
+            print("Could not load bad_amps_list")
+            bad_amps_list = []
+
         tab = Table.read(f"{cfg.datevshot}_line_sourcecat.tab",format="ascii")
-        line_dets = list(tab['detectid'])
+        sel = np.array([x['multiframe'] not in bad_amps_list for x in tab])
+        print(f"Excluding {len(sel)-np.count_nonzero(sel)} / {len(sel)} line detections as residing on bad amps.")
+        line_dets = list(tab['detectid'][sel])
         np.savetxt(os.path.join(elixdir, "line.dets"), line_dets, fmt="%d")
         del tab
 
         tab = Table.read(f"{cfg.datevshot}_cont_sourcecat.tab",format="ascii")
-        cont_dets = list(tab['detectid'])
+        sel = np.array([x['multiframe'] not in bad_amps_list for x in tab])
+        print(f"Excluding {len(sel) - np.count_nonzero(sel)} / {len(sel)} continuum detections as residing on bad amps.")
+        cont_dets = list(tab['detectid'][sel])
         np.savetxt(os.path.join(elixdir, "cont.dets"), cont_dets, fmt="%d")
         del tab
 
