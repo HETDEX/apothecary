@@ -2405,250 +2405,277 @@ def shot_analyisis(cfg):
         pass
 
     return rc
-def build_detection_tables(cfg):
-    """
-
-    build a catalog astropy table (fits format) for the line and continuum detections
-
-    :param cfg:
-    :return:
-    """
 
 
-    #table definitions
-
-    #since there should never be more than maybe a few thousand lines at MOST (these are single observations)
-    #I don't think there is any need to break up the table creation into chunks and then vstack the chunks
-    #Lines Detections Table
-
-    mc_colnames = ['wave', 'wave_err', 'flux', 'flux_err', 'linewidth', 'linewidth_err',
-                   'continuum', 'continuum_err', 'sn', 'sn_err', 'chi2', 'chi2_err', 'ra', 'dec',
-                   'datevshot', 'noise_ratio', 'linewidth_fix', 'chi2_fix', 'chi2fib',
-                   'src_index', 'multiname', 'exp', 'xifu', 'yifu', 'xraw', 'yraw', 'weight',
-                   'apcor', 'sn_cen', 'flux_noise_1sigma', 'sn_3fib', 'sn_3fib_cen', 'dummy']
-
-    spec_colnames = ["wave1d", "spec1d_nc", "spec1d_nc_err", "counts1d", "counts1d_err",
-                     "apsum_counts", "apsum_counts_err", "dummy", "apcor", "flag_pix", "src_index"]
-
-    list_colnames = ["ra", "dec", "x_ifu", "y_ifu", "multiname", "expnum", "distance", "wave", "timestamp", "date",
-                     "obsid", "x_raw", "y_raw", "weight", "flag", "src_index"]
-
-    LT = Table(dtype=[
-        ('line_detectid', np.int64), #just a rolling ID number with a prefix
-        ('shotid', np.int64),        #YYYYMMDDSSS these should all be the same shotid, but might be handy if vstacking outside of this use
-        ('ifu','S11'),               #w/o leading "multi_"  so just "123_456_789" (e.g. the IFU)
-        ('amp','S2'),                # "LL,LU,RL,RU"
-        ('fibernum', 'S3'),          #"001"-"112"
-        ('expnum','S2'),             #"01" to "03" (usually)
-        ('ra', np.float32), ('dec', np.float32), #decimal degrees
-        ('xifu', np.float32), ('yifu', np.float32),  # decimal degrees
-        ('xraw', np.float32), ('yraw', np.float32),
-
-        ('sn', np.float32), ('sn_err', np.float32),
-        ('sn_cen', np.float32), ('sn_3fib', np.float32), ('sn_3fib_cen', np.float32),
-        ('noise_ratio', np.float32),
-        ('chi2', np.float32),  ('chi2_err', np.float32),  # of the fit
-        ('chi2fib', np.float32), ('chi2_fix', np.float32),
-        ('apcor', np.float32),
-        ('wave', np.float32), ('wave_err', np.float32),  # AA
-        ('linewidth', np.float32), ('linewidth_err', np.float32),  #fit sigma AA
-        ('lineflux',np.float32), ('lineflux_err',np.float32),  #of ths fit, in ergs/s/cm2
-        ('continuum', np.float32), ('continuum_err', np.float32),  # of ths fit, in ergs/s/cm2/AA
-
-
-        ('obs_fluxd', (np.float32, 1036)),      #local sky subtracted, 1d flux in 1e-17 ergs/s/cm2/AA (so /2AA) NOT dust corrected
-        ('obs_fluxd_err', (np.float32, 1036)),
-       # ('dust_x', (np.float32, 1036)),         #multiplier for dust correction
-       ])
-
-    #continuum detections table (few different columns)
-    CT = Table(dtype=[
-        ('cont_detectid', np.int64),  # just a rolling ID number with a prefix
-        ('shotid', np.int64),
-        # YYYYMMDDSSS these should all be the same shotid, but might be handy if vstacking outside of this use
-        ('ifu', 'S11'),  # w/o leading "multi_"  so just "123_456_789" (e.g. the IFU)
-        ('amp', 'S2'),  # "LL,LU,RL,RU"
-        ('fibernum', 'S3'),  # "001"-"112"
-        ('expnum', 'S2'),  # "01" to "03" (usually)
-        ('ra', np.float32), ('dec', np.float32),  # decimal degrees
-        ('xifu', np.float32), ('yifu', np.float32),  # decimal degrees
-        ('xraw', np.float32), ('yraw', np.float32),
-        ('apcor', np.float32),
-
-
-        ('obs_fluxd', (np.float32, 1036)), # local sky subtracted, 1d flux in 1e-17 ergs/s/cm2/AA (so /2AA) NOT dust corrected
-        ('obs_fluxd_err', (np.float32, 1036)),
-    ])
-
-    try:
-        print("Building lines catalog ...")
-        os.chdir(os.path.join(cfg.cwd))
-        mc_files = glob.glob("alldet/detect_out/*.mc")  # should be 1:1 with *.list and *.mc
-        datevshot = datevshot = cfg.datevshot
-        #todo: convert flux to fluxd (and flux_err to fluxd_err)
-        # e.g.    like         rowspectra["spec1d"] = dataspec["spec1d_nc"] / dataspec["apcor"]
-        #                      rowspectra["spec1d_err"] = dataspec["spec1d_nc_err"] / dataspec["apcor"]
-        #todo: apply apcor (divide fluxd and fluxd_err by apcor)
-        #todo: fetch and apply dust correction
-        #todo: fetch and apply OTHER corrections (like wd, ... see hetdex_api:create_detecet_hdf5.py
-
-        #todo: check on building shot h5 file ... see Google docs (ingestion) and hetdex_api
-
-        #Table is LT
-        T = LT
-        detectid_ct = np.int64(cfg.datevshot.replace('v','',))*np.int64(1e7) + 1000000  #YYYYMMDDSSS1000000
-
-        for mc in mc_files:
-
-            sp = mc.replace(".mc", ".spec")
-            ld = mc.replace(".mc", ".list")
-
-            if not os.path.exists(sp) or not os.path.exists(ld):
-                continue
-
-            bn = os.path.basename(mc)
-            datevshot = str(bn[0:12])
-            shotid = np.int64(datevshot.replace('v', ''))
-            ifu = str(bn[13:24])  # spec_slot_ifuid"
-
-            try:
-                t_mc = Table.read(mc, format="ascii.no_header", names=mc_colnames)
-                t_sp = Table.read(sp, format="ascii.no_header", names=spec_colnames)
-               # t_ld = Table.read(ld, format="ascii.no_header", names=list_colnames)
-            except:
-                continue
-
-
-            #multiple entries in each list (one per fiber) for each mc entry
-            for row in t_mc:
-                src_index = row['src_index']
-
-                t1 = t_mc[t_mc['src_index'] == src_index]  #one row
-                t2 = t_sp[t_sp['src_index'] == src_index]  #many rows (one for each wavelength for the src_index)
-                #don't actually need the *.list file for this version of the table
-                #t3 = t_ld[t_ld['src_index'] == src_index]  #several rows, one for each fiber
-
-                #sort t3 by weight so highest weight is top
-                #t3.sort('weight').reverse()
-
-                detectid_ct += 1
-
-                T.add_row([
-                    detectid_ct,
-                    shotid,
-                    ifu,
-                    t1['multiname'][0].split("_")[4], #amp #multi_323_043_040_LL_093
-                    t1['multiname'][0].split("_")[5],  # fibernum #multi_323_043_040_LL_093 (top fiber, should match sorted t3[0]
-                    #should be same as t3['multiname'][0] striped to fiber
-                    t1['exp'][0][-2:], #input is "exp01" just want the "01"
-                    t1['ra'][0],
-                    t1['dec'][0],
-                    t1['xifu'][0],
-                    t1['yifu'][0],
-                    t1['xraw'][0],
-                    t1['yraw'][0],
-                    t1['sn'][0],
-                    t1['sn_err'][0],
-                    t1['sn_cen'][0],
-                    t1['sn_3fib'][0],
-                    t1['sn_3fib_cen'][0],
-                    t1['noise_ratio'][0],
-                    t1['chi2'][0],
-                    t1['chi2_err'][0],
-                    t1['chi2fib'][0],
-                    t1['chi2_fix'][0],
-                    t1['apcor'][0],
-                    t1['wave'][0],
-                    t1['wave_err'][0],
-                    t1['linewidth'][0],
-                    t1['linewidth_err'][0],
-                    t1['flux'][0],
-                    t1['flux_err'][0],
-                    t1['continuum'][0],
-                    t1['continuum_err'][0],
-
-                    np.array(t2['spec1d_nc'] / 2.), # observed flux density (hence the /2.0 AA)
-                    np.array(t2['spec1d_nc_err'] / 2.),# error
-                ])
-
-        tname = f"{datevshot}_line.fits"
-        T.write(tname,format="fits",overwrite=True)
-        print(f"Wrote raw lines table: {os.getcwd()}/{tname}")
-
-    except:
-        print(traceback.format_exc())
-        rc = -1
-        print(f"Exception building line detections table:  {cfg.datevshot}")
-
-    try:
-        print("Building continuum catalog ...")
-        os.chdir(os.path.join(cfg.cwd))
-        spec_files = glob.glob("cs/spec/*.spec") #should be 1:1 with *.list (there are no *.mc)
-
-        detectid_ct = np.int64(cfg.datevshot.replace('v', '', )) * np.int64(1e7) + 9000000
-        datevshot = cfg.datevshot
-
-        T = CT
-
-        for sp in spec_files:
-            #one each for each continuum detection (note: these are not clustered into sources)
-            ld = sp.replace(".spec", ".list")
-
-            if not os.path.exists(ld):
-                continue
-
-            bn = os.path.basename(sp)
-            datevshot = str(bn[0:12])
-            shotid = np.int64(datevshot.replace('v', ''))
-            #ifu = str(bn[13:24])  # spec_slot_ifuid"
-
-            try:
-                t_sp = Table.read(sp, format="ascii.no_header", names=spec_colnames) #one row for each wavelength bin
-                t_ld = Table.read(ld, format="ascii.no_header", names=list_colnames) #one for for each fiber
-            except:
-                continue
-
-            src_index = t_ld['src_index'][0] #all the same src_index ... usually this is a value of 1, but can be 0
-
-            # there is no *.mc for continuum sources
-            #t1 = t_mc[t_mc['src_index'] == src_index]  # one row
-            t2 = t_sp[t_sp['src_index'] == src_index]  # many rows (one for each wavelength for the src_index)
-            t3 = t_ld[t_ld['src_index'] == src_index]  #several rows, one for each fiber
-
-            # sort t3 by weight so the highest weight is top
-            # t3.sort('weight').reverse()
-
-            detectid_ct += 1
-
-            T.add_row([
-                    detectid_ct,
-                    shotid,
-                    t3['multiname'][0][6:17], #ifu
-                    t3['multiname'][0].split("_")[4], #amp #multi_323_043_040_LL_093
-                    t3['multiname'][0].split("_")[5][0:3],  # fibernum #multi_414_038_035_RL_083.ixy
-                    t3['expnum'][0][-2:], #input is "exp01" just want the "01"
-                    t3['ra'][0],
-                    t3['dec'][0],
-                    t3['x_ifu'][0],
-                    t3['y_ifu'][0],
-                    t3['x_raw'][0],
-                    t3['y_raw'][0],
-                    np.mean(t2['apcor']),
-
-
-                    np.array(t2['spec1d_nc'] / 2.), # observed flux density (hence the /2.0 AA)
-                    np.array(t2['spec1d_nc_err'] / 2.),# error
-                ])
-
-        tname = f"{datevshot}_cont.fits"
-        T.write(tname, format="fits", overwrite=True)
-        print(f"Wrote raw continuum table: {os.getcwd()}/{tname}")
-
-    except:
-        print(traceback.format_exc())
-        rc = -1
-        print(f"Exception building line detections table:  {cfg.datevshot}")
-#end build_detection_tables
+# defunct now
+# def build_detection_tables(cfg):
+#     """
+#
+#     build a catalog astropy table (fits format) for the line and continuum detections
+#
+#     :param cfg:
+#     :return:
+#     """
+#
+#
+#     #table definitions
+#
+#     #since there should never be more than maybe a few thousand lines at MOST (these are single observations)
+#     #I don't think there is any need to break up the table creation into chunks and then vstack the chunks
+#     #Lines Detections Table
+#
+#     mc_colnames = ['wave', 'wave_err', 'flux', 'flux_err', 'linewidth', 'linewidth_err',
+#                    'continuum', 'continuum_err', 'sn', 'sn_err', 'chi2', 'chi2_err', 'ra', 'dec',
+#                    'datevshot', 'noise_ratio', 'linewidth_fix', 'chi2_fix', 'chi2fib',
+#                    'src_index', 'multiname', 'exp', 'xifu', 'yifu', 'xraw', 'yraw', 'weight',
+#                    'apcor', 'sn_cen', 'flux_noise_1sigma', 'sn_3fib', 'sn_3fib_cen', 'dummy']
+#
+#     spec_colnames = ["wave1d", "spec1d_nc", "spec1d_nc_err", "counts1d", "counts1d_err",
+#                      "apsum_counts", "apsum_counts_err", "dummy", "apcor", "flag_pix", "src_index"]
+#
+#     list_colnames = ["ra", "dec", "x_ifu", "y_ifu", "multiname", "expnum", "distance", "wave", "timestamp", "date",
+#                      "obsid", "x_raw", "y_raw", "weight", "flag", "src_index"]
+#
+#     LT = Table(dtype=[
+#         ('line_detectid', np.int64), #just a rolling ID number with a prefix
+#         ('shotid', np.int64),        #YYYYMMDDSSS these should all be the same shotid, but might be handy if vstacking outside of this use
+#         ('ifu','S11'),               #w/o leading "multi_"  so just "123_456_789" (e.g. the IFU)
+#         ('amp','S2'),                # "LL,LU,RL,RU"
+#         ('fibernum', 'S3'),          #"001"-"112"
+#         ('expnum','S2'),             #"01" to "03" (usually)
+#         ('ra', np.float32), ('dec', np.float32), #decimal degrees
+#         ('xifu', np.float32), ('yifu', np.float32),  # decimal degrees
+#         ('xraw', np.float32), ('yraw', np.float32),
+#
+#         ('sn', np.float32), ('sn_err', np.float32),
+#         ('sn_cen', np.float32), ('sn_3fib', np.float32), ('sn_3fib_cen', np.float32),
+#         ('noise_ratio', np.float32),
+#         ('chi2', np.float32),  ('chi2_err', np.float32),  # of the fit
+#         ('chi2fib', np.float32), ('chi2_fix', np.float32),
+#         ('apcor', np.float32),
+#         ('wave', np.float32), ('wave_err', np.float32),  # AA
+#         ('linewidth', np.float32), ('linewidth_err', np.float32),  #fit sigma AA
+#         ('lineflux',np.float32), ('lineflux_err',np.float32),  #of ths fit, in ergs/s/cm2
+#         ('continuum', np.float32), ('continuum_err', np.float32),  # of ths fit, in ergs/s/cm2/AA
+#
+#
+#         ('obs_fluxd', (np.float32, 1036)),      #local sky subtracted, 1d flux in 1e-17 ergs/s/cm2/AA (so /2AA) NOT dust corrected
+#         ('obs_fluxd_err', (np.float32, 1036)),
+#        # ('dust_x', (np.float32, 1036)),         #multiplier for dust correction
+#        ])
+#
+#     #continuum detections table (few different columns)
+#     CT = Table(dtype=[
+#         ('cont_detectid', np.int64),  # just a rolling ID number with a prefix
+#         ('shotid', np.int64),
+#         # YYYYMMDDSSS these should all be the same shotid, but might be handy if vstacking outside of this use
+#         ('ifu', 'S11'),  # w/o leading "multi_"  so just "123_456_789" (e.g. the IFU)
+#         ('amp', 'S2'),  # "LL,LU,RL,RU"
+#         ('fibernum', 'S3'),  # "001"-"112"
+#         ('expnum', 'S2'),  # "01" to "03" (usually)
+#         ('ra', np.float32), ('dec', np.float32),  # decimal degrees
+#         ('xifu', np.float32), ('yifu', np.float32),  # decimal degrees
+#         ('xraw', np.float32), ('yraw', np.float32),
+#         ('apcor', np.float32),
+#
+#
+#         ('obs_fluxd', (np.float32, 1036)), # local sky subtracted, 1d flux in 1e-17 ergs/s/cm2/AA (so /2AA) NOT dust corrected
+#         ('obs_fluxd_err', (np.float32, 1036)),
+#     ])
+#
+#     #get the bad amps
+#
+#     try:
+#         #we are in the shot working dir
+#         h5 = tables.open_file(f"{cfg.datevshot}.h5",mode='r')
+#         bad_amps_list = list(h5.root.AmpStats.read_where("flag==0", field="multiframe").astype(str))
+#         print(f"Loaded {len(bad_amps_list)} bad amps ...")
+#         h5.close()
+#     except:
+#         print("Could not load bad_amps_list")
+#         bad_amps_list = []
+#
+#     try:
+#         print("Building lines catalog ...")
+#         os.chdir(os.path.join(cfg.cwd))
+#         mc_files = glob.glob("alldet/detect_out/*.mc")  # should be 1:1 with *.list and *.mc
+#         datevshot = datevshot = cfg.datevshot
+#         #todo: convert flux to fluxd (and flux_err to fluxd_err)
+#         # e.g.    like         rowspectra["spec1d"] = dataspec["spec1d_nc"] / dataspec["apcor"]
+#         #                      rowspectra["spec1d_err"] = dataspec["spec1d_nc_err"] / dataspec["apcor"]
+#         #todo: apply apcor (divide fluxd and fluxd_err by apcor)
+#         #todo: fetch and apply dust correction
+#         #todo: fetch and apply OTHER corrections (like wd, ... see hetdex_api:create_detecet_hdf5.py
+#
+#         #todo: check on building shot h5 file ... see Google docs (ingestion) and hetdex_api
+#
+#         #Table is LT
+#         T = LT
+#         detectid_ct = np.int64(cfg.datevshot.replace('v','',))*np.int64(1e7) + 1000000  #YYYYMMDDSSS1000000
+#
+#         for mc in mc_files:
+#
+#             sp = mc.replace(".mc", ".spec")
+#             ld = mc.replace(".mc", ".list")
+#
+#             if not os.path.exists(sp) or not os.path.exists(ld):
+#                 continue
+#
+#             bn = os.path.basename(mc)
+#             datevshot = str(bn[0:12])
+#             shotid = np.int64(datevshot.replace('v', ''))
+#             ifu = str(bn[13:24])  # spec_slot_ifuid"
+#
+#             try:
+#                 t_mc = Table.read(mc, format="ascii.no_header", names=mc_colnames)
+#                 t_sp = Table.read(sp, format="ascii.no_header", names=spec_colnames)
+#                # t_ld = Table.read(ld, format="ascii.no_header", names=list_colnames)
+#             except:
+#                 continue
+#
+#
+#             #multiple entries in each list (one per fiber) for each mc entry
+#             for row in t_mc:
+#                 src_index = row['src_index']
+#
+#                 t1 = t_mc[t_mc['src_index'] == src_index]  #one row
+#                 t2 = t_sp[t_sp['src_index'] == src_index]  #many rows (one for each wavelength for the src_index)
+#                 #don't actually need the *.list file for this version of the table
+#                 #t3 = t_ld[t_ld['src_index'] == src_index]  #several rows, one for each fiber
+#
+#                 #sort t3 by weight so highest weight is top
+#                 #t3.sort('weight').reverse()
+#
+#                 #check t1['multiname][0] vs bad amps
+#                 if t1['multiname'][0][0:-4] in bad_amps_list:
+#                     print(f"Skipping line detect in mc {mc} at index {src_index} for matching bad amp.")
+#                     continue
+#                 else: #for debug
+#                     print(f"DEBUG: {t1['multiname'][0]} or {t1['multiname'][0][0:-4]} not in bad amps list.")
+#
+#                 detectid_ct += 1
+#
+#                 T.add_row([
+#                     detectid_ct,
+#                     shotid,
+#                     ifu,
+#                     t1['multiname'][0].split("_")[4], #amp #multi_323_043_040_LL_093
+#                     t1['multiname'][0].split("_")[5],  # fibernum #multi_323_043_040_LL_093 (top fiber, should match sorted t3[0]
+#                     #should be same as t3['multiname'][0] striped to fiber
+#                     t1['exp'][0][-2:], #input is "exp01" just want the "01"
+#                     t1['ra'][0],
+#                     t1['dec'][0],
+#                     t1['xifu'][0],
+#                     t1['yifu'][0],
+#                     t1['xraw'][0],
+#                     t1['yraw'][0],
+#                     t1['sn'][0],
+#                     t1['sn_err'][0],
+#                     t1['sn_cen'][0],
+#                     t1['sn_3fib'][0],
+#                     t1['sn_3fib_cen'][0],
+#                     t1['noise_ratio'][0],
+#                     t1['chi2'][0],
+#                     t1['chi2_err'][0],
+#                     t1['chi2fib'][0],
+#                     t1['chi2_fix'][0],
+#                     t1['apcor'][0],
+#                     t1['wave'][0],
+#                     t1['wave_err'][0],
+#                     t1['linewidth'][0],
+#                     t1['linewidth_err'][0],
+#                     t1['flux'][0],
+#                     t1['flux_err'][0],
+#                     t1['continuum'][0],
+#                     t1['continuum_err'][0],
+#
+#                     np.array(t2['spec1d_nc'] / 2.), # observed flux density (hence the /2.0 AA)
+#                     np.array(t2['spec1d_nc_err'] / 2.),# error
+#                 ])
+#
+#         tname = f"{datevshot}_line.fits"
+#         T.write(tname,format="fits",overwrite=True)
+#         print(f"Wrote raw lines table: {os.getcwd()}/{tname}")
+#
+#     except:
+#         print(traceback.format_exc())
+#         rc = -1
+#         print(f"Exception building line detections table:  {cfg.datevshot}")
+#
+#     try:
+#         print("Building continuum catalog ...")
+#         os.chdir(os.path.join(cfg.cwd))
+#         spec_files = glob.glob("cs/spec/*.spec") #should be 1:1 with *.list (there are no *.mc)
+#
+#         detectid_ct = np.int64(cfg.datevshot.replace('v', '', )) * np.int64(1e7) + 9000000
+#         datevshot = cfg.datevshot
+#
+#         T = CT
+#
+#         for sp in spec_files:
+#             #one each for each continuum detection (note: these are not clustered into sources)
+#             ld = sp.replace(".spec", ".list")
+#
+#             if not os.path.exists(ld):
+#                 continue
+#
+#             bn = os.path.basename(sp)
+#             datevshot = str(bn[0:12])
+#             shotid = np.int64(datevshot.replace('v', ''))
+#             #ifu = str(bn[13:24])  # spec_slot_ifuid"
+#
+#             try:
+#                 t_sp = Table.read(sp, format="ascii.no_header", names=spec_colnames) #one row for each wavelength bin
+#                 t_ld = Table.read(ld, format="ascii.no_header", names=list_colnames) #one for for each fiber
+#             except:
+#                 continue
+#
+#             src_index = t_ld['src_index'][0] #all the same src_index ... usually this is a value of 1, but can be 0
+#
+#             # there is no *.mc for continuum sources
+#             #t1 = t_mc[t_mc['src_index'] == src_index]  # one row
+#             t2 = t_sp[t_sp['src_index'] == src_index]  # many rows (one for each wavelength for the src_index)
+#             t3 = t_ld[t_ld['src_index'] == src_index]  #several rows, one for each fiber
+#
+#             # sort t3 by weight so the highest weight is top
+#             # t3.sort('weight').reverse()
+#
+#
+#             if t3['multiname'][0][0:-4] in bad_amps_list:
+#                 print(f"Skipping continuum detect in sp {sp} at index {src_index} for matching bad amp.")
+#                 continue
+#
+#             detectid_ct += 1
+#
+#             T.add_row([
+#                     detectid_ct,
+#                     shotid,
+#                     t3['multiname'][0][6:17], #ifu
+#                     t3['multiname'][0].split("_")[4], #amp #multi_323_043_040_LL_093
+#                     t3['multiname'][0].split("_")[5][0:3],  # fibernum #multi_414_038_035_RL_083.ixy
+#                     t3['expnum'][0][-2:], #input is "exp01" just want the "01"
+#                     t3['ra'][0],
+#                     t3['dec'][0],
+#                     t3['x_ifu'][0],
+#                     t3['y_ifu'][0],
+#                     t3['x_raw'][0],
+#                     t3['y_raw'][0],
+#                     np.mean(t2['apcor']),
+#
+#
+#                     np.array(t2['spec1d_nc'] / 2.), # observed flux density (hence the /2.0 AA)
+#                     np.array(t2['spec1d_nc_err'] / 2.),# error
+#                 ])
+#
+#         tname = f"{datevshot}_cont.fits"
+#         T.write(tname, format="fits", overwrite=True)
+#         print(f"Wrote raw continuum table: {os.getcwd()}/{tname}")
+#
+#     except:
+#         print(traceback.format_exc())
+#         rc = -1
+#         print(f"Exception building line detections table:  {cfg.datevshot}")
+# #end build_detection_tables
 
 
 def build_detection_hdf5(cfg):
@@ -3426,10 +3453,6 @@ if s05_detection and not dtprog["s05_detection"]:
         progress_update(cfg,dtprog, "s05c_rgetmax")
     else:
         print("skipping rgetmax (continuum detection)")
-
-
-    # if s05d_detection_tables:
-    #     rc = build_detection_tables(cfg)
 
     if s05e_detection_hdf5 and not dtprog["s05e_detection_hdf5"]:
         rc = build_detection_hdf5(cfg)
