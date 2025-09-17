@@ -3153,7 +3153,7 @@ def prep_elixer(cfg):
 
         which_elixer = f"python {elixer_path}/selixer.py" #"selixer.test "
         elixer_base_cmd = f" -f --slurm 0 --nodes 1 --log info --shot_h5 {shot_h5} --diagnose {diagnose_tab} " \
-                          f" --png --error 3.0 --neighborhood 10.0 "
+                          f" --png --error 3.0 --neighborhood 10.0 --post_merge 2 "
         elixer_line_cmd = f" --name line --dets line.dets  --hdf5 {line_h5} "
         elixer_cont_cmd = f" --name cont --continuum --dets cont.dets  --hdf5 {cont_h5} "
 
