@@ -66,6 +66,8 @@ plt.style.use('default')
 # CONFIGURATION
 ########################################################################
 EchoCmds = True  #if True echo system commands to the log
+FilterDetsOnBadAmps = False # if True, do NOT pass detections that are on reported bad amps to elixer for processing
+DefaultClean = 1 #clean 0 does nothing, 1 cleans script files and temporary stuff, 2,3,4,5 are increasingly agressive
 FutureShotDateLimit = 20490101000  # do not allow shots after this dave+shot
 LastKnownFplane = "fp20240731"
 ElixerSnrThresh = 4.5 #do not run elixer on line sources where the S/N < 4.5
@@ -180,7 +182,8 @@ s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_sour
 @dataclass
 class Config:
 
-    clean: bool = False
+    clean: int = 0 #post run clean level; 0 = do not clean
+    clean_only: bool = False #if True, do nothing except for -clean
     update_local_repo: bool = False
     overwrite: bool = False
     resume: bool = False
@@ -217,10 +220,21 @@ args = [x.replace("--","-") for x in args]
 cfg = Config()
 
 if "-clean" in args:
-    cfg.clean = True
-    #idx = args.index("-clean")
+    i = args.index("-clean")
+    try:
+        cfg.clean = int(args[i+1])
+        if cfg.clean < 0:   #negative values are the same, but force just the clean operation (e.g. to be used on an old run)
+            cfg.clean *= -1
+            cfg.clean_only = True
+    except:
+        print(f"Invalid -clean specified")
+        exit(-1)
+
+    del args[i+1]  # args.pop(0) #remove THIS file
     args.remove("-clean")
-    print("[todo]: --clean option not yet implemented")
+else:
+    cfg.clean = DefaultClean #usually this is level 1
+
 
 if "-update" in args:
     cfg.update_local_repo = True
@@ -269,6 +283,288 @@ else:
 ########################################################################
 # worker functions
 ########################################################################
+
+
+def safe_cd(path):
+    """
+    attempt to cd and return True only if new cwd() matches
+
+    this fails for ".." for example
+    so is only useful, in its current form for non wildcard or special paths
+
+    :param cfg:
+    :param path:
+    :return:
+    """
+
+    try:
+        orig = os.getcwd()
+        os.chdir(path)
+        if os.getcwd()[-1*len(path):] == path:
+            return True
+        else:
+            os.chdir(orig)
+            print(f"!!!!! WARNING. Failed to cd to {path} ")
+            return False
+    except:
+        return False
+
+def post_clean(cfg):
+    """
+    clean up after the run ...
+
+    !!! this is not the safest way to do this, but it is fast and simple (using system commands to rm and unlink)
+
+    for now, there are only two differences ...
+    1 = basic clean (remove script files, intermediate files)
+        (keep: mc files, spec files, etc)
+        (discard vdrp ?)
+    2 = remove same as (1) but also more agressively remove (logs, helper data files, etc)
+
+    :param cfg:
+    :return:
+    """
+
+    try:
+        if cfg.clean <=0:
+            print("No -clean")
+            return
+
+
+        if not safe_cd(os.path.join(cfg.cwd,f"sci{cfg.datevshot}")):
+            print("Could not initiate --clean")
+            return
+
+        #os.chdir(os.path.join(cfg.cwd,f"sci{cfg.datevshot}"))
+        cfg.cwd = os.getcwd()  # now under the sci<shot> directory
+
+        #defpending on the status of the run, some of these paths may not exist
+        if cfg.clean >= 1:
+            #top scripts
+            flist = ["lsr.lock", "make_good_shots","make_hdrX.use","rback1","rback1_s","rback_field",
+                    "rback_fix","rbacks","rbfits","rbfits0","rbfits_fix","rbfits_s","rerun","rerun2","rfield",
+                    "rfield.single","rfixspec","rimarb", "rsetdate","rsetdate0", "rtaras", "rtaremc",
+                    "run0s", "run1s", "run2s", "runtar", "runtar0.slurm", "runtarm.defunct", "sun_use.dat",
+                     "ifustat_20250828011.tab"]
+            for fn in flist:
+                system_command(cfg,f"rm {fn}")
+
+            system_command(cfg,"unlink reductions")
+
+            ############################
+            #individual exposures
+            ############################
+            system_command(cfg,f"rm -rf d{cfg.datevshot.replace('v','s')}exp*")
+
+            #########################
+            #vdrp
+            #########################
+            if safe_cd(os.path.join(cfg.cwd,"vdrp")):
+                #os.chdir(os.path.join(cfg.cwd,"vdrp"))
+                #unlinks
+                system_command(cfg, "unlink all.mch")
+                system_command(cfg, "unlink norm.dat")
+                system_command(cfg, "unlink shout.ifu")
+                system_command(cfg, "unlink shout.ifustars")
+                flist = glob.glob(f"{cfg.datevshot[0:8]}*")
+                #exclude the .log
+                flist.remove(f"{cfg.datevshot}.log")
+                for fn in flist:
+                    system_command(cfg,f"unlink {fn}")
+
+                flist = glob.glob(f"radec*")
+                for fn in flist:
+                    system_command(cfg,f"unlink {fn}")
+
+                system_command(cfg, "rm -rf match_pngs")
+
+                system_command(cfg,"rm -rf fplane")
+                system_command(cfg,"rm fplane*") #flat files
+                system_command(cfg, "rm jan.txt")  # flat files
+                system_command(cfg, "rm readme.install")  # flat files
+                system_command(cfg, "rm setup.sh")  # flat files
+                system_command(cfg, "rm astrometry.py")  # flat files
+
+                system_command(cfg, "rm -rf vdrp")
+                system_command(cfg, "rm vdrp*")
+                system_command(cfg, "rm shuf*")
+
+                if safe_cd(os.path.join(cfg.cwd, "vdrp/shifts")):
+                    system_command(cfg, f"unlink dithall")
+                    system_command(cfg, f"unlink {cfg.datevshot}")
+
+                    flist = ["build_dithall","check_norms","check_shout.ifu","clean_dithall","clean_rta","cp2dithall",
+                             "getpdf","getrdlist","gn.rt","jobsplitter","make_astrom_slurm","make_good_shots","mkhdr",
+                             "plotxy.def","rbadsh","rbadsh0","rclean","rcleanshot","rgetdith","rhdr1.r1","rshotsrm","rta.*",
+                             "runsh1","runsh2","run_shifts_old.sh","run_shifts.sh","tmp*"]
+                    for fn in flist:
+                        system_command(cfg,f"rm {fn}")
+
+
+
+            ############################
+            # getcen
+            ############################
+            if safe_cd(cfg.cwd):
+                system_command(cfg, f"rm -rf ./getcen")
+
+
+            ############################
+            # alldet
+            ############################
+            if safe_cd(os.path.join(cfg.cwd,"alldet")):
+                system_command(cfg, f"rm check*")
+                system_command(cfg, f"rm make*")
+                system_command(cfg, f"rm r*")
+                system_command(cfg, f"rm fwhm.use")
+                system_command(cfg, f"rm norm.dat")
+                system_command(cfg, f"rm sky_res.use")
+
+            ############################
+            # cs
+            ############################
+            if safe_cd(os.path.join(cfg.cwd,"cs")):
+                system_command(cfg, f"rm r*")
+                system_command(cfg, f"rm make*")
+
+            if safe_cd(os.path.join(cfg.cwd, "cs/spec")):
+                system_command(cfg, f"rm r*")
+                system_command(cfg, f"rm *.tar")
+                system_command(cfg, f"rm *.rcs")
+
+
+
+            ####################################
+            # extraneous spec from build h5?
+            ####################################
+            if safe_cd(cfg.cwd):
+                system_command(cfg, f"rm -rf spec")
+
+            ##################################
+            # detect
+            ##################################
+            if safe_cd(os.path.join(cfg.cwd,"detect")):
+                system_command(cfg, f"rm -rf r_backup")
+                system_command(cfg, f"rm -rf backup")
+                system_command(cfg, f"rm -rf cal_script")
+                system_command(cfg, f"rm -rf data")
+
+                system_command(cfg, f"rm r*")
+                system_command(cfg, f"rm make*")
+
+                system_command(cfg,f"unlink {cfg.datevshot}.dithall")
+
+                flist = ["update_fwhm_norm","check_tp","jobsplitter","extcor.dat","qfit_gaia.py","template.slurm","tpavg.dat"]
+                for fn in flist:
+                    system_command(cfg, f"rm {fn}")
+
+                if safe_cd(os.path.join(cfg.cwd,f"detect/{cfg.datevshot}")):
+                    flist = ["getsdssg","rfitfw0","rgetfw0", "rgettp0","rgettp0.karl", "rsp3fc","rspstar0","rspstar3",
+                             "runstar0","j1","rgetfw","rgettp","rgettp0b","rsp3f","rspstar","rspstar2","runstar"]
+                    for fn in flist:
+                        system_command(cfg, f"rm {fn}")
+
+
+
+            ####################################
+            # Diagnose
+            ####################################
+            if safe_cd(cfg.cwd):
+                system_command(cfg,"rm -rf ./Diagnose")
+                flist = ["classification_000.fits","classification_001.fits","diagnose_spectra_cont.fits","diagnose_spectra_line.fits"]
+                for fn in flist:
+                    system_command(cfg,f"rm {fn}")
+
+
+
+        if cfg.clean >= 2:  #more aggressive
+
+            if safe_cd(cfg.cwd):
+                system_command(cfg, f"rm 20250828011_stats.pickle")
+                system_command(cfg, f"rm 20250828011_ampstats.fits")
+
+            #########################
+            # vdrp
+            #########################
+            if safe_cd(cfg.cwd):
+                system_command(cfg, f"rm -rf vdrp")
+
+            ##################################
+            # detect
+            ##################################
+            if safe_cd(cfg.cwd):
+                system_command(cfg, f"rm -rf detect")
+            #if safe_cd(os.path.join(cfg.cwd,"detect")):
+            #    system_command(cfg, f"rm -rf {cfg.datevshot}")
+
+
+            ############################
+            # alldet
+            ############################
+
+            if safe_cd(os.path.join(cfg.cwd, "alldet")):
+                system_command(cfg, f"rm -rf cal_out")
+                system_command(cfg, f"rm -rf output")
+                system_command(cfg, f"rm *.log")
+
+            ############################
+            # cs
+            ############################
+            if safe_cd(os.path.join(cfg.cwd,"cs")):
+                system_command(cfg, f"rm *.log")
+
+                if safe_cd(os.path.join(cfg.cwd, "cs/spec")):
+                    system_command(cfg, f"rm *.log")
+
+            ##################################
+            # ELiXer
+            ##################################
+            if safe_cd(cfg.cwd):
+                #elixer basic clean .. this leaves the top logs and the h5 files and all_pngs
+                system_command(cfg, f"rm -rf ./elixer/line/dispatch_*")
+                system_command(cfg, f"rm -rf ./elixer/cont/dispatch_*")
+                system_command(cfg, f"rm ./elixer/line/ELIXER.o*")
+                system_command(cfg, f"rm ./elixer/line/ELIXER.e*")
+                system_command(cfg, f"rm ./elixer/line/elixer.run")
+                system_command(cfg, f"rm ./elixer/line/elixer.slurm")
+                system_command(cfg, f"rm ./elixer/cont/ELIXER.o*")
+                system_command(cfg, f"rm ./elixer/cont/ELIXER.e*")
+                system_command(cfg, f"rm ./elixer/cont/elixer.run")
+                system_command(cfg, f"rm ./elixer/cont/elixer.slurm")
+
+
+
+        if cfg.clean >= 3:  # still more aggressive
+            #removes the last of the build analysis stuff and logs
+            if safe_cd(cfg.cwd):
+                system_command(cfg, f"rm {cfg.datevshot}_ampstats.tab")
+                system_command(cfg, f"rm -rf analysis")
+                system_command(cfg, f"rm -rf match_pngs")
+                system_command(cfg, "rm *.log")
+                system_command(cfg, "rm elixer/*.log")
+                system_command(cfg, "rm elixer/*.dets")
+                system_command(cfg, "rm elixer/elixer_cmd.txt")
+                system_command(cfg, "rm elixer/line/*.log")
+                system_command(cfg, "rm elixer/cont/*.log")
+
+
+        if cfg.clean >= 4:  # still more aggressive
+            #removes the various original .mc, .spec, etc files
+            #removed diagnose specific classifications
+            if safe_cd(cfg.cwd):
+                system_command(cfg, f"rm -rf alldet")
+                system_command(cfg, f"rm -rf cs")
+
+
+        if cfg.clean >= 5:  # ONLY keep the shot
+            if safe_cd(cfg.cwd):
+                system_command(cfg, f"rm -rf elixer")
+                system_command(cfg, f"rm diagnose_classifications.tab")
+                system_command(cfg, f"rm {cfg.datevshot}_*")
+
+
+    except:
+        print(f"Exception in post_clean(). {traceback.format_exc()}")
 
 
 def progress_update(cfg,progress_dict,key=None,status=True):
@@ -3122,14 +3418,17 @@ def prep_elixer(cfg):
         elixdir = os.path.join(cfg.cwd,"elixer/")
         Path(elixdir).mkdir(parents=True, exist_ok=True)
 
-        try:
-            #we are in the shot working dir
-            h5 = tables.open_file(f"{cfg.datevshot}.h5",mode='r')
-            bad_amps_list = list(h5.root.AmpStats.read_where("flag==0", field="multiframe").astype(str))
-            print(f"Loaded {len(bad_amps_list)} bad amps ...")
-            h5.close()
-        except:
-            print("Could not load bad_amps_list")
+        if FilterDetsOnBadAmps:
+            try:
+                #we are in the shot working dir
+                h5 = tables.open_file(f"{cfg.datevshot}.h5",mode='r')
+                bad_amps_list = list(h5.root.AmpStats.read_where("flag==0", field="multiframe").astype(str))
+                print(f"Loaded {len(bad_amps_list)} bad amps ...")
+                h5.close()
+            except:
+                print("Could not load bad_amps_list")
+                bad_amps_list = []
+        else:
             bad_amps_list = []
 
         tab = Table.read(f"{cfg.datevshot}_line_sourcecat.tab",format="ascii")
@@ -3190,6 +3489,11 @@ def prep_elixer(cfg):
 ###########
 # setup
 ###########
+
+if cfg.clean_only:
+    print(f"Performing only the CLEAN, level : {cfg.clean} ...")
+    post_clean(cfg)
+    Quit(cfg,0,"Clean complete. Exiting")
 
 rc = precheck(cfg)
 if rc < 0:
@@ -3706,6 +4010,8 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
 ##########
 # DONE
 ##########
+
+post_clean(cfg)
 
 Quit(cfg, 0, f"Complete: {cfg.datevshot}")
 
