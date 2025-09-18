@@ -229,8 +229,8 @@ if "-help" in args:
     switches (all optional):
     --clean <integer> : -5 to 5; 0 performs no cleanup (e.g. for full debugging), 
                       negatives do the same as positives except they force the clean up immediately and as the only action
-                      1 = basic cleaning of scripts and intermediate files
-                      2 = removes (all?) intermediate files, and most debugging files, vdrp, etc
+                      1 = [default] basic cleaning of scripts and non-informative intermediate files
+                      2 = removes additional intermediate files, and most debugging files, vdrp, etc
                       3 = removes logging information, analysis, match_pngs, etc
                       4 = removes the .mc, .spec, .list, etc files 
                       5 = removes EVERYTHING except the shot h5 file
