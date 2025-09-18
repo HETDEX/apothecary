@@ -227,7 +227,7 @@ if "-help" in args:
            where <shot> is YYYYMMDDSSS or YYYYMMDDvSSS
     
     switches (all optional):
-    --clean <integer>: -5 to 5; 0 performs no cleanup (e.g. for full debugging), 
+    --clean <integer> : -5 to 5; 0 performs no cleanup (e.g. for full debugging), 
                       negatives do the same as positives except they force the clean up immediately and as the only action
                       1 = basic cleaning of scripts and intermediate files
                       2 = removes (all?) intermediate files, and most debugging files, vdrp, etc
