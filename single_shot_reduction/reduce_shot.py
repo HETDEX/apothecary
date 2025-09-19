@@ -30,6 +30,7 @@ from dataclasses import dataclass
 import tarfile as tar
 import json
 from datetime import datetime, timedelta
+import multiprocessing
 
 try:
     from filelock import FileLock
@@ -2038,6 +2039,57 @@ def run_rfft(cfg):
 
 
 
+def mp_rcal_worker(out_list,cfg,set_idx,indicies,multis, ras, decs):
+    """
+    worker for multithreaded calls to run_rcal
+
+    :param cfg:
+    :param out_list: if tracking results, they would go here
+    :return:
+    """
+
+    print(f"mp_rcal_worker serial for: {multis}")
+    for multi, ra, dec, ix in zip(multis, ras, decs,indicies):
+        print(f"{set_idx}-{ix}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ")  # ,end="")
+        cmd = f"rcal_all {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 106"
+        system_command(cfg, cmd)
+
+
+def mp_rcal(cfg,multis, ras, decs,num_procs=10):
+    """
+
+    these are running basically blind ... the output is to files and I only need to know that it is done,
+    regardless of success or fail
+
+    so, break up in to XXX tasks here and spin up, then return when all done
+
+    :param cfg:
+    :return:
+    """
+
+    print(f"Top of mp_rcal: len(multis) = {len(multis)}")
+
+    with multiprocessing.Manager() as manager:
+        mgr_list = manager.list()
+        idx = np.array_split(np.arange(len(multis)),num_procs)
+        processes = []
+
+        for i in range(num_procs):
+            print(f"Spinning up mp_rcal i={i},  len(multis) = {len(multis[idx[i]])}, idx[i] = {idx[i]}")
+            process = multiprocessing.Process(target=mp_rcal_worker,
+                                               args=(mgr_list,cfg,i,idx[i],multis[idx[i]],ras[idx[i]],decs[idx[i]]))
+
+            processes.append(process)
+            process.start()
+
+        # Wait for processes to complete
+        for process in processes:
+            print(f"Joining {process}")
+            process.join()
+
+        print("mp_rcal all done")
+        #again, don't care about the results here, just need them done
+
 def run_rcal(cfg):
     """
 
@@ -2065,20 +2117,26 @@ def run_rcal(cfg):
 
         multis = np.loadtxt(os.path.join("../getcen/",f"ifucen_{cfg.datevshot}.dat"),dtype=str,usecols=(0),unpack=True)
         ras,decs = np.loadtxt(os.path.join("../getcen/", f"ifucen_{cfg.datevshot}.dat"), dtype=float,usecols=(1,2),unpack=True)
-        print(f"run_rcal ({len(ras)})...")
-        ct = 0
-        for multi,ra,dec in zip(multis,ras,decs):
-            ct +=1
-            print(f"{ct}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ",end="")
-            system_command(cfg,f"rcal_all {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 106")
+        # print(f"run_rcal ({len(ras)})...")
+        # ct = 0
+        # for multi,ra,dec in zip(multis,ras,decs):
+        #     ct +=1
+        #     print(f"{ct}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ",end="")
+        #     system_command(cfg,f"rcal_all {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 106")
 
+        print(f"run_rcal ***MULTITHREADED*** ({len(ras)})...")
+        mp_rcal(cfg, multis, ras, decs, num_procs=10)
+
+        #now check them all
+        ct = 0
+        for multi, ra, dec in zip(multis, ras, decs):
+            ct += 1
             #check the output exists cal_out/20240730v009_514_103_019_cal.fits
+            print(f"{ct}) checking {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ", end="")
             outfn = f"{cfg.datevshot}_{multi[6:]}_cal.fits"
             if os.path.exists(os.path.join("cal_out/", outfn)):
-
                 #check the contents
                 try:
-
                     hdu = fits.open(os.path.join("cal_out/", outfn))
                     #the 5 HUDs:  [0] calib, [1] calibe, [2] calib_c, [3] calibe_c, [4] fullsky
                     #data is (usuall) 1344x1036 ... 112 fibers x 4 amps x 3 dithers by 1036 rectified wavelength bins
@@ -2103,8 +2161,6 @@ def run_rcal(cfg):
                     print(traceback.format_exc())
                     print("[FAIL]. Exception!")
                     failed_rcal_list.append(outfn)
-
-
 
             else:
                 print("[FAIL]: no cal_out")
@@ -2131,6 +2187,62 @@ def run_rcal(cfg):
     return rc
 
 
+def mp_rf1_worker(out_list,cfg,set_idx,indicies,multis, ras, decs):
+    """
+    worker for multithreaded calls to rf1
+
+    :param cfg:
+    :param out_list: if tracking results, they would go here
+    :return:
+    """
+
+    print(f"mp_rf1_worker serial for: {multis}")
+    for multi, ra, dec, ix in zip(multis, ras, decs,indicies):
+        print(f"{set_idx}-{ix}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ")  # ,end="")
+        cmd = f"rf1 {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 104\n"
+        system_command(cfg, cmd)
+
+
+def mp_rf1(cfg,multis, ras, decs,num_procs=10):
+    """
+
+    these are running basically blind ... the output is to files and I only need to know that it is done,
+    regardless of success or fail
+
+    so, break up in to XXX tasks here and spin up, then return when all done
+
+    :param cfg:
+    :return:
+    """
+    #cmd = f"rf1 {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 104\n"
+    #system_command(cfg, cmd)
+
+    #num_jobs = np.count_nonzero(len(multis))
+    #num_multi_per_job = int(np.ceil(num_jobs / num_threads))  #min(max_threads, num_jobs // nominal_jobs_per_process)
+
+    print(f"Top of mp_rf1: len(multis) = {len(multis)}")
+
+    with multiprocessing.Manager() as manager:
+        mgr_list = manager.list()
+        idx = np.array_split(np.arange(len(multis)),num_procs)
+        processes = []
+
+        for i in range(num_procs):
+            print(f"Spinning up rf1 i={i},  len(multis) = {len(multis[idx[i]])}, idx[i] = {idx[i]}")
+            process = multiprocessing.Process(target=mp_rf1_worker,
+                                               args=(mgr_list,cfg,i,idx[i],multis[idx[i]],ras[idx[i]],decs[idx[i]]))
+
+            processes.append(process)
+            process.start()
+
+        # Wait for processes to complete
+        for process in processes:
+            print(f"Joining {process}")
+            process.join()
+
+        print("rdet_rf1 all done")
+        #again, don't care about the results here, just need them done
+
 def rdet_rf1(cfg):
     """
     emission line detections
@@ -2154,21 +2266,30 @@ def rdet_rf1(cfg):
         multis = np.loadtxt(os.path.join("../getcen/",f"ifucen_{cfg.datevshot}.dat"),dtype=str,usecols=(0),unpack=True)
         ras,decs = np.loadtxt(os.path.join("../getcen/", f"ifucen_{cfg.datevshot}.dat"), dtype=float,usecols=(1,2),unpack=True)
 
-        print(f"line detections (rdet_rf1) ({len(ras)})...")
+        # print(f"line detections (rdet_rf1) ({len(ras)})...")
+        # #todo: turn this next loop into a multithread call
+        # ct = 0
+        # for multi, ra, dec in zip(multis, ras, decs):
+        #     ct +=1
+        #     print(f"{ct}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ")#,end="")
+        #     cmd = f"rf1 {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 104\n"
+        #     system_command(cfg,cmd)
+        #
+        #     # check the output exists cal_out/20240730v009_514_103_019_cal.fits
+        #
+        #     #todo: assume good for now ... need to check
+        #     #print("done (todo: check output files)")
+        #     #check that .list, .mc, .spec exist
+        #     #20240730v009_025_067_032.list
+
+        print(f"line detections ***MULTITHREADED*** (rdet_rf1) ({len(ras)})...")
+        mp_rf1(cfg,multis, ras, decs,num_procs=10)
+
+        #now - check them all (this can be serial, it is fast)
         ct = 0
         for multi, ra, dec in zip(multis, ras, decs):
             ct +=1
-            print(f"{ct}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ",end="")
-            cmd = f"rf1 {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 104\n"
-            system_command(cfg,cmd)
-
-            # check the output exists cal_out/20240730v009_514_103_019_cal.fits
-
-            #todo: assume good for now ... need to check
-            #print("done (todo: check output files)")
-            #check that .list, .mc, .spec exist
-            #20240730v009_025_067_032.list
-
+            print(f"{ct}) checking  {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ", end="")
             output_found = np.array([0,0,0])
             for i,ext in enumerate(output_extensions):
                 outfn = f"{cfg.datevshot}_{multi[6:]}{ext}"
@@ -2178,12 +2299,13 @@ def rdet_rf1(cfg):
 
             if np.count_nonzero(output_found) != 3:
                 #something failed, we will want to re-run these once
+                cmd = f"rf1 {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 104\n"
                 failed_list.append(cmd)
                 print(f"FAIL. May re-run at the end.")
             else:
                 print(f"pass")
 
-
+        #let any that failed re-run as serial to keep it simple
         if len(failed_list) > 0:
             if len(failed_list) < len(ras):
                 print(f"{len(failed_list)} failed. Can be transient issues, so will re-run ...")
