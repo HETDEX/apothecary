@@ -2573,8 +2573,11 @@ def amp_stats(cfg,shot_h5_fqfn=None):
             print(f"Adding AmpStats table to  {shot_h5_fqfn} ...")
             h5 = tables.open_file(shot_h5_fqfn,mode="a")
 
-            #need to update the shot_dict with the results from stats_qc
-            AmpStats.stats_update_shot(h5,shot_dict=None,shot_dict_tab=t)
+            try:
+                #need to update the shot_dict with the results from stats_qc
+                AmpStats.stats_update_shot(h5,shot_dict=None,shot_dict_tab=t)
+            except:
+                print(f"Unable to update amp stats. Exception:",traceback.format_exc())
 
             h5.close()
 
