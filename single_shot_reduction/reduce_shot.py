@@ -228,12 +228,13 @@ if "-help" in args:
     
     switches (all optional):
     --clean <integer> : -5 to 5; 0 performs no cleanup (e.g. for full debugging), 
-                      negatives do the same as positives except they force the clean up immediately and as the only action
+                      negatives do the same as positives except they force the clean-up immediately and as the only action
                       1 = [default] basic cleaning of scripts and non-informative intermediate files
                       2 = removes additional intermediate files, and most debugging files, vdrp, etc
                       3 = removes logging information, analysis, match_pngs, etc
                       4 = removes the .mc, .spec, .list, etc files 
                       5 = removes EVERYTHING except the shot h5 file
+            !!! Notice: elixer content is only removed with (-1) to (-5) or 5 as it is a post-run manual SLURM queue
                       
     --exp <integer> : will operate on only the specified exposure (e.g. in a multi-exposure observation, can select
                       exactly one to reduce). If not present or set to (0), will use all exposures for the observation. 
@@ -241,11 +242,11 @@ if "-help" in args:
     --help : display this help text and exit
              
     --overwrite : removes the shot working directory completely and (re)starts fresh. 
-                  !!! Notice: --resume has priority over --overwrite
+              !!! Notice: --resume has priority over --overwrite
     
     --resume : (re)starts roughly at the last completed step (see sciXXXX/progress.dat)
-               !!! Notice: This does NOT re-run steps that completed with failures, it only re-runs incomplete steps.
-               !!! Notice: --resume has priority over --overwrite
+           !!! Notice: This does NOT re-run steps that completed with failures, it only re-runs incomplete steps.
+           !!! Notice: --resume has priority over --overwrite
                
     --update : removes and re-fetches the local_script_depo prior to running
                on a --resume, also updates the scripts already in the shot working directory
@@ -555,8 +556,10 @@ def post_clean(cfg):
 
             ##################################
             # ELiXer
+            # can only clean this later as a negative clean value
+            # since elixer is a manually queued slurm AFTER a run
             ##################################
-            if safe_cd(cfg.cwd):
+            if cfg.clean_only and safe_cd(cfg.cwd):
                 #elixer basic clean .. this leaves the top logs and the h5 files and all_pngs
                 system_command(cfg, f"rm -rf ./elixer/line/dispatch_*")
                 system_command(cfg, f"rm -rf ./elixer/cont/dispatch_*")
@@ -570,7 +573,6 @@ def post_clean(cfg):
                 system_command(cfg, f"rm ./elixer/cont/elixer.slurm")
 
 
-
         if cfg.clean >= 3:  # still more aggressive
             #removes the last of the build analysis stuff and logs
             if safe_cd(cfg.cwd):
@@ -578,11 +580,18 @@ def post_clean(cfg):
                 system_command(cfg, f"rm -rf analysis")
                 system_command(cfg, f"rm -rf match_pngs")
                 system_command(cfg, "rm *.log")
-                system_command(cfg, "rm elixer/*.log")
-                system_command(cfg, "rm elixer/*.dets")
-                system_command(cfg, "rm elixer/elixer_cmd.txt")
-                system_command(cfg, "rm elixer/line/*.log")
-                system_command(cfg, "rm elixer/cont/*.log")
+
+                ##################################
+                # ELiXer
+                # can only clean this later as a negative clean value
+                # since elixer is a manually queued slurm AFTER a run
+                ##################################
+                if cfg.clean_only:
+                    system_command(cfg, "rm elixer/*.log")
+                    system_command(cfg, "rm elixer/*.dets")
+                    system_command(cfg, "rm elixer/elixer_cmd.txt")
+                    system_command(cfg, "rm elixer/line/*.log")
+                    system_command(cfg, "rm elixer/cont/*.log")
 
 
         if cfg.clean >= 4:  # still more aggressive
@@ -595,7 +604,8 @@ def post_clean(cfg):
 
         if cfg.clean >= 5:  # ONLY keep the shot
             if safe_cd(cfg.cwd):
-                system_command(cfg, f"rm -rf elixer")
+                system_command(cfg, f"rm -rf elixer") #NOTE: here we can go ahead and remove since it is the top dir
+                                                      #and does not matter if elixer has executed
                 system_command(cfg, f"rm diagnose_classifications.tab")
                 system_command(cfg, f"rm {cfg.datevshot}_*")
 
@@ -2437,9 +2447,18 @@ def build_shot_h5(cfg):
         #detect/20240730v009
         if not os.path.exists(f"{cfg.cwd}/detect/{cfg.datevshot}/fwhm.detail"):
             system_command(cfg,f"mv {cfg.cwd}/detect/{cfg.datevshot}/fwhm.all {cfg.cwd}/detect/{cfg.datevshot}/fwhm.detail")
-        fwhm, err, ns = np.loadtxt(f"{cfg.cwd}/detect/{cfg.datevshot}/fwhm.detail",unpack=True,usecols=[0,1,2],max_rows=1,dtype=float)
-        with open(f"{cfg.cwd}/detect/{cfg.datevshot}/fwhm.all","w") as f:
-            f.write(f"{cfg.datevshot} {fwhm} {err} {int(ns)}\n")
+        #only reads the first row
+        fwhm, err, ns = np.loadtxt(f"{cfg.cwd}/detect/{cfg.datevshot}/fwhm.detail",unpack=True,usecols=[0,1,2],
+                                   max_rows=1,dtype=float)
+        try:
+            with open(f"{cfg.cwd}/detect/{cfg.datevshot}/fwhm.all","w") as f:
+                f.write(f"{cfg.datevshot} {fwhm} {err} {int(ns)}\n")
+        except:
+            print(f"Fatal. Could not build fwhm.all file from fwhm.detail. fhwm, err, ns = {fwhm} {err} {ns}.")
+            print(traceback.format_exc())
+            rc = -1
+            print(f"Could not build hdf5 shot file for  {cfg.datevshot}")
+            return rc
 
 
         cmd = f"python3 {hetdex_api_path}/h5tools/create_cal_hdf5.py"
@@ -2555,8 +2574,9 @@ def amp_stats(cfg,shot_h5_fqfn=None):
             h5 = tables.open_file(shot_h5_fqfn,mode="a")
 
             #need to update the shot_dict with the results from stats_qc
-
             AmpStats.stats_update_shot(h5,shot_dict=None,shot_dict_tab=t)
+
+            h5.close()
 
             del t
 
