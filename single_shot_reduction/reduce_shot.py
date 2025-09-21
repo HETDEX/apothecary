@@ -333,7 +333,6 @@ def safe_cd(path):
     this fails for ".." for example
     so is only useful, in its current form for non wildcard or special paths
 
-    :param cfg:
     :param path:
     :return:
     """
@@ -2311,26 +2310,25 @@ def rdet_rf1(cfg):
         #let any that failed re-run as serial to keep it simple
         if len(failed_list) > 0:
             if len(failed_list) < len(ras):
-                print(f"{base_str} {len(failed_list)} failed. Can be transient issues, so will re-run ...")
+                #print(f"{base_str} {len(failed_list)} failed. Can be transient issues, so will re-run ...")
+                print(f"{cfg.datevshot} (rdet_rf1) : re-run failed IFUs ...")
                 for ct,cmd in enumerate(failed_list):
-                    print(f"{ct} {cmd.split()[1]} {cmd.split()[2]} {cmd.split()[6]} ...",end="")
+                    print(f"{cfg.datevshot} (rdet_rf1) : {ct} {cmd.split()[1]} {cmd.split()[2]} {cmd.split()[6]} ...",end="")
                     system_command(cfg, cmd)
 
                     output_found = np.array([0, 0, 0])
                     for i, ext in enumerate(output_extensions):
-
                         outfn = f"{cfg.datevshot}_{cmd.split()[6]}{ext}"
-
                         if os.path.exists(os.path.join("detect_out/", outfn)):
                             output_found[i] = 1
 
                     if np.count_nonzero(output_found) != 3:
                         # something failed, we will want to re-run these once
                         #failed_list.append(cmd)
-                        print(f"{base_str} FAIL. Second attempt. No more retries.")
+                        print(f" FAIL. Second attempt. No more retries.")
                         rc = 1 #some failures, but not all
                     else:
-                        print(f"{base_str} pass")
+                        print(f" pass")
 
 
             else:
