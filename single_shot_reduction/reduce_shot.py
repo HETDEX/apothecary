@@ -2034,7 +2034,6 @@ def run_rfft(cfg):
         rc = -1
         print(f"failed to get IFU centers:  {cfg.datevshot}")
 
-
     return rc
 
 
@@ -2050,12 +2049,12 @@ def mp_rcal_worker(out_list,cfg,set_idx,indicies,multis, ras, decs):
 
     print(f"mp_rcal_worker serial for: {multis}")
     for multi, ra, dec, ix in zip(multis, ras, decs,indicies):
-        print(f"{set_idx}-{ix}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ")  # ,end="")
+        print(f"{cfg.datevshot} (run_rcal) {set_idx}-{ix}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ")  # ,end="")
         cmd = f"rcal_all {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 106"
         system_command(cfg, cmd)
 
 
-def mp_rcal(cfg,multis, ras, decs,num_procs=10):
+def mp_rcal(cfg,multis, ras, decs,num_procs=6):
     """
 
     these are running basically blind ... the output is to files and I only need to know that it is done,
@@ -2067,7 +2066,7 @@ def mp_rcal(cfg,multis, ras, decs,num_procs=10):
     :return:
     """
 
-    print(f"Top of mp_rcal: len(multis) = {len(multis)}")
+    #print(f"Top of mp_rcal: len(multis) = {len(multis)}")
 
     with multiprocessing.Manager() as manager:
         mgr_list = manager.list()
@@ -2075,7 +2074,7 @@ def mp_rcal(cfg,multis, ras, decs,num_procs=10):
         processes = []
 
         for i in range(num_procs):
-            print(f"Spinning up mp_rcal i={i},  len(multis) = {len(multis[idx[i]])}, idx[i] = {idx[i]}")
+            print(f"{cfg.datevshot} (run_rcal): Spinning up mp_rcal i={i},  len(multis) = {len(multis[idx[i]])}, idx[i] = {idx[i]}")
             process = multiprocessing.Process(target=mp_rcal_worker,
                                                args=(mgr_list,cfg,i,idx[i],multis[idx[i]],ras[idx[i]],decs[idx[i]]))
 
@@ -2084,10 +2083,10 @@ def mp_rcal(cfg,multis, ras, decs,num_procs=10):
 
         # Wait for processes to complete
         for process in processes:
-            print(f"Joining {process}")
+            print(f"{cfg.datevshot} (run_rcal): Joining {process}")
             process.join()
 
-        print("mp_rcal all done")
+        print(f"{cfg.datevshot} (run_rcal): mp_rcal all done")
         #again, don't care about the results here, just need them done
 
 def run_rcal(cfg):
@@ -2124,15 +2123,16 @@ def run_rcal(cfg):
         #     print(f"{ct}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ",end="")
         #     system_command(cfg,f"rcal_all {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 106")
 
-        print(f"run_rcal ***MULTITHREADED*** ({len(ras)})...")
-        mp_rcal(cfg, multis, ras, decs, num_procs=10)
+        #print(f"run_rcal ***MULTITHREADED*** ({len(ras)})...")
+        mp_rcal(cfg, multis, ras, decs, num_procs=6)
 
         #now check them all
         ct = 0
         for multi, ra, dec in zip(multis, ras, decs):
             ct += 1
             #check the output exists cal_out/20240730v009_514_103_019_cal.fits
-            print(f"{ct}) checking {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ", end="")
+            base_str = f"{ct}) checking {multi[6:]}  {ra:0.7f} {dec:0.7f} ... "
+            #print(f"{ct}) checking {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ", end="")
             outfn = f"{cfg.datevshot}_{multi[6:]}_cal.fits"
             if os.path.exists(os.path.join("cal_out/", outfn)):
                 #check the contents
@@ -2141,7 +2141,7 @@ def run_rcal(cfg):
                     #the 5 HUDs:  [0] calib, [1] calibe, [2] calib_c, [3] calibe_c, [4] fullsky
                     #data is (usuall) 1344x1036 ... 112 fibers x 4 amps x 3 dithers by 1036 rectified wavelength bins
                     if len(hdu) != 5:
-                        print(f"[FAIL]: bad hdu length. got {len(hdu)}, expected 5")
+                        print(f"{base_str} [FAIL]: bad hdu length. got {len(hdu)}, expected 5")
                         failed_rcal_list.append(outfn)
                     else:
                         all_zero_list = []
@@ -2152,35 +2152,35 @@ def run_rcal(cfg):
                                 all_zero_list.append(i)
 
                         if len(all_zero_list) > 0:
-                            print(f"[FAIL]: all zeroes for HDU{all_zero_list}")
+                            print(f"{base_str} [FAIL]: all zeroes for HDU{all_zero_list}")
                             failed_rcal_list.append(outfn)
                         else:
-                            print("[Pass]")
+                            print("{base_str}  [Pass]")
                             passed_rcal_list.append(outfn)
                 except:
                     print(traceback.format_exc())
-                    print("[FAIL]. Exception!")
+                    print(f"{base_str}  [FAIL]. Exception!")
                     failed_rcal_list.append(outfn)
 
             else:
-                print("[FAIL]: no cal_out")
+                print(f"{base_str}  [FAIL]: no cal_out")
                 failed_rcal_list.append(outfn)
 
         if len(passed_rcal_list) == len(ras):
             rc = 0
-            print("All Pass")
+            print(f"{cfg.datevshot} (run_rcal) All Pass")
         elif len(failed_rcal_list) == len(ras):  # all failed
             rc = -1
-            print("ALL FAIL")
+            print(f"{cfg.datevshot} (run_rcal) ALL FAIL")
         else:
             rc = 1
-            print(f"Mixed results of {len(ras)}: {len(passed_rcal_list)} Pass, {len(failed_rcal_list)} FAIL")
+            print(f"{cfg.datevshot} (run_rcal) Mixed results of {len(ras)}: {len(passed_rcal_list)} Pass, {len(failed_rcal_list)} FAIL")
 
 
     except:
         print(traceback.format_exc())
         rc = -1
-        print(f"Fatal exception in run_rcal:  {cfg.datevshot}")
+        print(f"{cfg.datevshot} (run_rcal): Fatal exception!")
 
 
 
@@ -2198,12 +2198,12 @@ def mp_rf1_worker(out_list,cfg,set_idx,indicies,multis, ras, decs):
 
     print(f"mp_rf1_worker serial for: {multis}")
     for multi, ra, dec, ix in zip(multis, ras, decs,indicies):
-        print(f"{set_idx}-{ix}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ")  # ,end="")
+        print(f"{cfg.datevshot} (mp_rf1) : {set_idx}-{ix}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ")  # ,end="")
         cmd = f"rf1 {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 104\n"
         system_command(cfg, cmd)
 
 
-def mp_rf1(cfg,multis, ras, decs,num_procs=10):
+def mp_rf1(cfg,multis, ras, decs,num_procs=4):
     """
 
     these are running basically blind ... the output is to files and I only need to know that it is done,
@@ -2220,7 +2220,7 @@ def mp_rf1(cfg,multis, ras, decs,num_procs=10):
     #num_jobs = np.count_nonzero(len(multis))
     #num_multi_per_job = int(np.ceil(num_jobs / num_threads))  #min(max_threads, num_jobs // nominal_jobs_per_process)
 
-    print(f"Top of mp_rf1: len(multis) = {len(multis)}")
+    #print(f"Top of mp_rf1: len(multis) = {len(multis)}")
 
     with multiprocessing.Manager() as manager:
         mgr_list = manager.list()
@@ -2228,7 +2228,7 @@ def mp_rf1(cfg,multis, ras, decs,num_procs=10):
         processes = []
 
         for i in range(num_procs):
-            print(f"Spinning up rf1 i={i},  len(multis) = {len(multis[idx[i]])}, idx[i] = {idx[i]}")
+            print(f"{cfg.datevshot} (mp_rf1) : Spinning up rf1 i={i},  len(multis) = {len(multis[idx[i]])}, idx[i] = {idx[i]}")
             process = multiprocessing.Process(target=mp_rf1_worker,
                                                args=(mgr_list,cfg,i,idx[i],multis[idx[i]],ras[idx[i]],decs[idx[i]]))
 
@@ -2237,10 +2237,10 @@ def mp_rf1(cfg,multis, ras, decs,num_procs=10):
 
         # Wait for processes to complete
         for process in processes:
-            print(f"Joining {process}")
+            print(f"{cfg.datevshot} (mp_rf1) : Joining {process}")
             process.join()
 
-        print("rdet_rf1 all done")
+        print(f"{cfg.datevshot} (mp_rf1) : rdet_rf1 all done")
         #again, don't care about the results here, just need them done
 
 def rdet_rf1(cfg):
@@ -2283,13 +2283,14 @@ def rdet_rf1(cfg):
         #     #20240730v009_025_067_032.list
 
         print(f"line detections ***MULTITHREADED*** (rdet_rf1) ({len(ras)})...")
-        mp_rf1(cfg,multis, ras, decs,num_procs=10)
+        mp_rf1(cfg,multis, ras, decs)#,num_procs=6)
 
         #now - check them all (this can be serial, it is fast)
         ct = 0
         for multi, ra, dec in zip(multis, ras, decs):
             ct +=1
-            print(f"{ct}) checking  {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ", end="")
+            base_str = f"{ct}) checking [{cfg.datevshot}] {multi[6:]}  {ra:0.7f} {dec:0.7f} ... "
+            #print(f"{ct}) checking [{cfg.datevshot}] {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ", end="")
             output_found = np.array([0,0,0])
             for i,ext in enumerate(output_extensions):
                 outfn = f"{cfg.datevshot}_{multi[6:]}{ext}"
@@ -2301,14 +2302,14 @@ def rdet_rf1(cfg):
                 #something failed, we will want to re-run these once
                 cmd = f"rf1 {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 104\n"
                 failed_list.append(cmd)
-                print(f"FAIL. May re-run at the end.")
+                print(f"{base_str} FAIL. May re-run at the end.")
             else:
-                print(f"pass")
+                print(f"{base_str} pass")
 
         #let any that failed re-run as serial to keep it simple
         if len(failed_list) > 0:
             if len(failed_list) < len(ras):
-                print(f"{len(failed_list)} failed. Can be transient issues, so will re-run ...")
+                print(f"{base_str} {len(failed_list)} failed. Can be transient issues, so will re-run ...")
                 for ct,cmd in enumerate(failed_list):
                     print(f"{ct} {cmd.split()[1]} {cmd.split()[2]} {cmd.split()[6]} ...",end="")
                     system_command(cfg, cmd)
@@ -2324,10 +2325,10 @@ def rdet_rf1(cfg):
                     if np.count_nonzero(output_found) != 3:
                         # something failed, we will want to re-run these once
                         #failed_list.append(cmd)
-                        print(f"FAIL. Second attempt. No more retries.")
+                        print(f"{base_str} FAIL. Second attempt. No more retries.")
                         rc = 1 #some failures, but not all
                     else:
-                        print(f"pass")
+                        print(f"{base_str} pass")
 
 
             else:
@@ -2337,7 +2338,7 @@ def rdet_rf1(cfg):
     except:
         print(traceback.format_exc())
         rc = -1
-        print(f"Fatal exception in rdet_rf1:  {cfg.datevshot}")
+        print(f"{cfg.datevshot} (rf1) : Fatal exception in rdet_rf1!")
 
     return rc
 
