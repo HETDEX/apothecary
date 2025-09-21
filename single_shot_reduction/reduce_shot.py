@@ -74,6 +74,8 @@ LastKnownFplane = "fp20240731"
 ElixerSnrThresh = 4.5 #do not run elixer on line sources where the S/N < 4.5
 GuiderFWHM_ALL = True #if True and using the GUIDER FWHM, use all within the observation timeframe
                       #if False, just use the two nearest in time to the end of the observation
+NumProcs_mp_rcal = 6 #flux calibration
+NumProcs_mp_rf1 = 4 #line detections, 4 is about right (on averaged) to avoid memory issues on lonestar6
 
 ScriptRepo = "/work/03261/polonius/hetdex/single_shot"
 LocalScriptRepo = "./local_script_repo" #useful if running multiple single shots ... can copy remotely once
@@ -2054,7 +2056,7 @@ def mp_rcal_worker(out_list,cfg,set_idx,indicies,multis, ras, decs):
         system_command(cfg, cmd)
 
 
-def mp_rcal(cfg,multis, ras, decs,num_procs=6):
+def mp_rcal(cfg,multis, ras, decs,num_procs=NumProcs_mp_rcal):
     """
 
     these are running basically blind ... the output is to files and I only need to know that it is done,
@@ -2124,7 +2126,7 @@ def run_rcal(cfg):
         #     system_command(cfg,f"rcal_all {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 106")
 
         #print(f"run_rcal ***MULTITHREADED*** ({len(ras)})...")
-        mp_rcal(cfg, multis, ras, decs, num_procs=6)
+        mp_rcal(cfg, multis, ras, decs)#, num_procs=6)
 
         #now check them all
         ct = 0
@@ -2203,7 +2205,7 @@ def mp_rf1_worker(out_list,cfg,set_idx,indicies,multis, ras, decs):
         system_command(cfg, cmd)
 
 
-def mp_rf1(cfg,multis, ras, decs,num_procs=4):
+def mp_rf1(cfg,multis, ras, decs,num_procs=NumProcs_mp_rf1):
     """
 
     these are running basically blind ... the output is to files and I only need to know that it is done,
