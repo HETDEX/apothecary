@@ -385,13 +385,23 @@ def post_clean(cfg):
 
     try:
         if cfg.clean <=0:
-            print("No -clean")
+            print(f"[{cfg.datevshot}] No -clean")
             return
+        else:
+            print(f"[{cfg.datevshot}] --clean {cfg.clean}")
 
 
-        if not safe_cd(os.path.join(cfg.cwd,f"sci{cfg.datevshot}")):
-            print("Could not initiate --clean")
-            return
+        if cfg.clean_only:  #this is at the top and cfg.cwd has NOT been set to cfg.datevshot
+            if not safe_cd(os.path.join(cfg.cwd,f"sci{cfg.datevshot}")):
+                print(f"[{cfg.datevshot}] Could not initiate --clean")
+                return
+            else:
+                #we did successfully jump to sciXXXX direcotry so update to that for the remainder
+                cfg.cwd = os.getcwd()
+        else:
+            if not safe_cd(cfg.cwd):
+                print(f"[{cfg.datevshot}] Could not initiate --clean")
+                return
 
         #os.chdir(os.path.join(cfg.cwd,f"sci{cfg.datevshot}"))
         cfg.cwd = os.getcwd()  # now under the sci<shot> directory
