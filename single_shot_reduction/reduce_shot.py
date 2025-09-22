@@ -31,6 +31,7 @@ import tarfile as tar
 import json
 from datetime import datetime, timedelta
 import multiprocessing
+import subprocess
 
 try:
     from filelock import FileLock
@@ -187,6 +188,7 @@ class Config:
 
     clean: int = 0 #post run clean level; 0 = do not clean
     clean_only: bool = False #if True, do nothing except for -clean
+    simul : int = 0 #number of simultaneous shots being run (e.g. tasks per node), 0 is unset
     update_local_repo: bool = False
     overwrite: bool = False
     resume: bool = False
@@ -276,6 +278,22 @@ if "-clean" in args:
 else:
     cfg.clean = DefaultClean #usually this is level 1
 
+
+if "-simul" in args:
+    i = args.index("-simul")
+    try:
+        cfg.simul = int(args[i + 1])
+        if cfg.simul < 0:
+            print(f"Invalid -simul specified")
+            exit(-1)
+    except:
+        print(f"Invalid -simul specified")
+        exit(-1)
+
+    del args[i + 1]  # args.pop(0) #remove THIS file
+    args.remove("-simul")
+else:
+    cfg.simul = 0  # usually this is level 1
 
 if "-update" in args:
     cfg.update_local_repo = True
@@ -739,6 +757,32 @@ def Quit(cfg,rc,msg=None):
 
     exit(rc)
 
+
+def blocking_command(cfg,cmd):
+    """
+    wrapper to subprocess Popen
+    blocks and returns result
+
+    :param cfg:
+    :param cmd:
+    :return:
+    """
+
+    try:
+        rc = 0
+        #cmdlist = [cmd[0], cmd[1:]]
+        if EchoCmds:
+            print(f"subproc CMD: ({os.getcwd()}) > {cmd}")
+
+        rc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT).wait()
+
+        if EchoCmds:
+            print(f"subproc rc = {rc}: CMD = ({os.getcwd()}) > {cmd}")
+    except:
+        print(f"Exception! [{cfg.datevshot}] in blocking_command. cmd = {cmd}\n",traceback.format_exc())
+        rc = -1
+
+    return rc
 
 def system_command(cfg,cmd):
     """
@@ -2156,7 +2200,7 @@ def run_rcal(cfg):
                             print(f"{base_str} [FAIL]: all zeroes for HDU{all_zero_list}")
                             failed_rcal_list.append(outfn)
                         else:
-                            print("{base_str}  [Pass]")
+                            print(f"{base_str}  [Pass]")
                             passed_rcal_list.append(outfn)
                 except:
                     print(traceback.format_exc())
@@ -2201,6 +2245,7 @@ def mp_rf1_worker(out_list,cfg,set_idx,indicies,multis, ras, decs):
     for multi, ra, dec, ix in zip(multis, ras, decs,indicies):
         print(f"{cfg.datevshot} (mp_rf1) : {set_idx}-{ix}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ")  # ,end="")
         cmd = f"rf1 {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 104\n"
+        #rc = blocking_command(cfg,cmd)
         system_command(cfg, cmd)
 
 
@@ -3705,6 +3750,11 @@ cfg.numexp, cfg.gettar_fn = num_exposures_in_shot(cfg.shotid)
 
 if cfg.numexp <= 0:
     Quit(cfg, -1, f"Could not find shot {cfg.datevshot}")
+
+
+if cfg.simul == 1:
+    NumProcs_mp_rcal = 10
+    NumProcs_mp_rf1 = 10
 
 if cfg.exp <= 0:
     print(f"Working on {cfg.datevshot} with {cfg.numexp} exposure(s) ...")
