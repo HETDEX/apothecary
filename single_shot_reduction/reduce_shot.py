@@ -75,15 +75,29 @@ LastKnownFplane = "fp20240731"
 ElixerSnrThresh = 4.5 #do not run elixer on line sources where the S/N < 4.5
 GuiderFWHM_ALL = True #if True and using the GUIDER FWHM, use all within the observation timeframe
                       #if False, just use the two nearest in time to the end of the observation
+
+#if we know the number of active shots, use these limits / # of active shots
+MaxTotalProcs_mp_rcal = 60 #flux calibration
+MaxTotalProcs_mp_rf1 = 40 #line detections, 4 is about right (on averaged) to avoid memory issues on lonestar6
+
+#10 seems to be the max for a vm-small
+MaxPerShotProcs_mp_rcal = 10 #even if more Total processes are available, limit to this for any given shot
+MaxPerShotProcs_mp_rf1 = 10  #even if more Total processes are available, limit to this for any given shot
+
+#with no information, use these limite
 NumProcs_mp_rcal = 6 #flux calibration
 NumProcs_mp_rf1 = 4 #line detections, 4 is about right (on averaged) to avoid memory issues on lonestar6
+
 
 ScriptRepo = "/work/03261/polonius/hetdex/single_shot"
 LocalScriptRepo = "./local_script_repo" #useful if running multiple single shots ... can copy remotely once
                                         #then copy locally from here for each shot
                                         #set to None if you do NOT want to use a local script dir cache
                                         #  and force a copy from the main repo each time
-Lock_sem_fn = "lsr.lock"
+
+Lock_mutex_fn = "lsr.lock"  #all instaces undir this directory share this
+Lock_tmp_mutex_fn = "tmp.lock" #all instaces on one node (common /tmp) share this
+Node_basedir = "/tmp/hetssr"
 WorkDirRoot = "./"
 #user specific
 red1path = None # if None, will use the local (cwd) as the basepath, otherwise user can edit and specify one here
@@ -188,7 +202,7 @@ class Config:
 
     clean: int = 0 #post run clean level; 0 = do not clean
     clean_only: bool = False #if True, do nothing except for -clean
-    simul : int = 0 #number of simultaneous shots being run (e.g. tasks per node), 0 is unset
+    #simul : int = 0 #number of simultaneous shots being run (e.g. tasks per node), 0 is unset
     update_local_repo: bool = False
     overwrite: bool = False
     resume: bool = False
@@ -279,21 +293,21 @@ else:
     cfg.clean = DefaultClean #usually this is level 1
 
 
-if "-simul" in args:
-    i = args.index("-simul")
-    try:
-        cfg.simul = int(args[i + 1])
-        if cfg.simul < 0:
-            print(f"Invalid -simul specified")
-            exit(-1)
-    except:
-        print(f"Invalid -simul specified")
-        exit(-1)
-
-    del args[i + 1]  # args.pop(0) #remove THIS file
-    args.remove("-simul")
-else:
-    cfg.simul = 0  # usually this is level 1
+# if "-simul" in args:
+#     i = args.index("-simul")
+#     try:
+#         cfg.simul = int(args[i + 1])
+#         if cfg.simul < 0:
+#             print(f"Invalid -simul specified")
+#             exit(-1)
+#     except:
+#         print(f"Invalid -simul specified")
+#         exit(-1)
+#
+#     del args[i + 1]  # args.pop(0) #remove THIS file
+#     args.remove("-simul")
+# else:
+#     cfg.simul = 0  # usually this is level 1
 
 if "-update" in args:
     cfg.update_local_repo = True
@@ -384,6 +398,11 @@ def post_clean(cfg):
     """
 
     try:
+
+        #always try to clean up /tmp
+        node_clean(cfg)
+
+
         if cfg.clean <=0:
             print(f"[{cfg.datevshot}] No -clean")
             return
@@ -1340,7 +1359,7 @@ def initial_setup(cfg):
 
         if LocalScriptRepo is not None:
             #need to see if can get the file lock in case another instance is copying
-            lock = FileLock(Lock_sem_fn)
+            lock = FileLock(Lock_mutex_fn)
             with lock:
                 if cfg.update_local_repo:
                     print("Updating local repo ...")
@@ -1365,7 +1384,7 @@ def initial_setup(cfg):
     else:
         if LocalScriptRepo is not None:
             fatal_rtn = False
-            lock = FileLock(Lock_sem_fn)
+            lock = FileLock(Lock_mutex_fn)
             with lock:
 
                 if cfg.update_local_repo:
@@ -1501,6 +1520,72 @@ def initial_setup(cfg):
     #end if not resume
 
     return 0
+
+
+def node_setup(cfg):
+    """
+
+    extra stuff shared for datevshots on same node
+
+    :param cfg:
+    :return:
+    """
+
+    try:
+        lock = FileLock(Lock_tmp_mutex_fn)
+        with lock:
+            #create a sync directory and file to hold list of datevshot being used
+            #a bit later this will then be the count of simulataneous datevshots and used to tune the num of processes
+
+            os.makedirs(Node_basedir, exist_ok=True)
+            with open(os.path.join(Node_basedir,f"{cfg.datevshot}.sync"), "w") as f:
+                f.write(f"BEGIN {str(datetime.now())}\n")
+
+        # lock auto releases
+    except:
+        print(f"Exception! in node_setup()",traceback.format_exc())
+
+
+def node_clean(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+
+    try:
+        lock = FileLock(Lock_tmp_mutex_fn)
+        with lock:
+            #clean up my sync
+            try:
+                os.remove(os.path.join(Node_basedir,f"{cfg.datevshot}.sync"))
+            except:
+                pass
+
+        # lock auto releases
+    except:
+        print(f"Exception! in node_clean()",traceback.format_exc())
+
+
+def node_active_ct(cfg):
+    """
+    return how many datevshots are active, based on .sync files
+    :param cfg:
+    :return:
+    """
+
+    try:
+        ct = -1
+        lock = FileLock(Lock_tmp_mutex_fn)
+        with lock:
+            fns = glob.glob(os.path.join(Node_basedir,"*.sync"))
+            ct = len(fns)
+            print(f"[{cfg.datevshot}] checking active shot count for shared /tmp: {ct}")
+        #lock auto releases
+    except:
+        print(f"Exception! in node_active_ct()", traceback.format_exc())
+
+    return ct
 
 def num_exposures_in_shot(shotid):
     """
@@ -2123,6 +2208,14 @@ def mp_rcal(cfg,multis, ras, decs,num_procs=NumProcs_mp_rcal):
 
     #print(f"Top of mp_rcal: len(multis) = {len(multis)}")
 
+    #tune num procs
+    active_shots = node_active_ct(cfg)
+    if active_shots > 0:
+        num_procs = int(np.floor(MaxTotalProcs_mp_rcal / active_shots))
+        num_procs = min(num_procs,MaxPerShotProcs_mp_rcal)
+
+    print(f"[{cfg.datevshot}] flux calibration  ***MULTITHREADED*** (run_rcal) ({len(ras)}), num_procs = {num_procs}...")
+
     with multiprocessing.Manager() as manager:
         mgr_list = manager.list()
         idx = np.array_split(np.arange(len(multis)),num_procs)
@@ -2237,8 +2330,6 @@ def run_rcal(cfg):
         rc = -1
         print(f"{cfg.datevshot} (run_rcal): Fatal exception!",traceback.format_exc())
 
-
-
     return rc
 
 
@@ -2277,6 +2368,14 @@ def mp_rf1(cfg,multis, ras, decs,num_procs=NumProcs_mp_rf1):
     #num_multi_per_job = int(np.ceil(num_jobs / num_threads))  #min(max_threads, num_jobs // nominal_jobs_per_process)
 
     #print(f"Top of mp_rf1: len(multis) = {len(multis)}")
+
+    #tune num procs
+    active_shots = node_active_ct(cfg)
+    if active_shots > 0:
+        num_procs = int(np.floor(MaxTotalProcs_mp_rf1 / active_shots))
+        num_procs = min(num_procs, MaxPerShotProcs_mp_rf1)
+
+    print(f"[{cfg.datevshot}] line detections ***MULTITHREADED*** (rdet_rf1) ({len(ras)}), using num_procs = {num_procs}...")
 
     with multiprocessing.Manager() as manager:
         mgr_list = manager.list()
@@ -2338,7 +2437,7 @@ def rdet_rf1(cfg):
         #     #check that .list, .mc, .spec exist
         #     #20240730v009_025_067_032.list
 
-        print(f"[{cfg.datevshot}] line detections ***MULTITHREADED*** (rdet_rf1) ({len(ras)})...")
+        #print(f"[{cfg.datevshot}] line detections ***MULTITHREADED*** (rdet_rf1) ({len(ras)})")#, num_procs = {NumProcs_mp_rf1}...")
         mp_rf1(cfg,multis, ras, decs)#,num_procs=6)
 
         #now - check them all (this can be serial, it is fast)
@@ -2404,14 +2503,16 @@ def rgetmax(cfg):
     """
     continuum detections
 
+   the datevsshot/cs/rgetmax script changes directories and runs under /tmp/maxflux<datevshot>
+      each exp re-uses the same directory
+      then all exps are rolled up
+
     :param cfg:
     :return:
     """
 
     try:
-
-
-        failed_list = []
+        #failed_list = []
         #passed_list = []
         output_extensions = [".list", ".mc", ".spec"]
 
@@ -2685,7 +2786,7 @@ def build_shot_h5(cfg):
         #here
         shot_link_dir = os.path.join(cfg.cwd_orig, f"shots")
         if not os.path.exists(shot_link_dir):
-            lock = FileLock(Lock_sem_fn)
+            lock = FileLock(Lock_mutex_fn)
             with lock:
                 Path(shot_link_dir).mkdir(parents=True, exist_ok=True)
 
@@ -3762,9 +3863,9 @@ if cfg.numexp <= 0:
     Quit(cfg, -1, f"Could not find shot {cfg.datevshot}")
 
 
-if cfg.simul == 1:
-    NumProcs_mp_rcal = 10
-    NumProcs_mp_rf1 = 10
+# if cfg.simul == 1:
+#     NumProcs_mp_rcal = 10
+#     NumProcs_mp_rf1 = 10
 
 if cfg.exp <= 0:
     print(f"Working on {cfg.datevshot} with {cfg.numexp} exposure(s) ...")
@@ -3796,6 +3897,8 @@ rc = initial_setup(cfg)
 
 if rc < 0:
     Quit(cfg,rc,"Could not complete initial setup.")
+
+rc = node_setup(cfg)
 
 if cfg.numexp < 3:
     print(f"Fewer than 3 exposures (assume dithers). Checking guider for seeing FWHM...")
