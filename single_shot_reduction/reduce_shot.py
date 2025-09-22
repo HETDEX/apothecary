@@ -3507,8 +3507,12 @@ def diagnose_output_to_table(cfg):
             "classification_001.fits"
             ]
 
-        N = fits.open(filenames[0])[2].shape[0] + fits.open(filenames[1])[2].shape[0]
-        t = fits.open(filenames[0])[6].data
+        try:
+            N = fits.open(filenames[0])[2].shape[0] + fits.open(filenames[1])[2].shape[0]
+            t = fits.open(filenames[0])[6].data
+        except:
+            print(f"Error! {cfg.datevshot} diagnose_output_to_table : cannot read {filenames[0]}")
+            return -1
 
         detectid, RA, Dec, shotid, gmag, rmag = [[t[name][0]] * N for name in
                                                  ['detectid', 'RA', 'Dec', 'shotid', 'gmag', 'rmag']]
@@ -3614,44 +3618,59 @@ def prep_elixer(cfg):
         else:
             bad_amps_list = []
 
+
+        make_lines = True
         tab = Table.read(f"{cfg.datevshot}_line_sourcecat.tab",format="ascii")
-        sel = np.array([x['multiframe'] not in bad_amps_list for x in tab])
-        print(f"Excluding {len(sel)-np.count_nonzero(sel)} / {len(sel)} line detections as residing on bad amps.")
-        line_dets = list(tab['detectid'][sel])
-        np.savetxt(os.path.join(elixdir, "line.dets"), line_dets, fmt="%d")
-        del tab
+        if len(tab) == 0:
+            print(f"Error! {cfg.datevshot} no line sources recorded. ")
+            make_lines = False
+        else:
+            sel = np.array([x['multiframe'] not in bad_amps_list for x in tab])
+            print(f"Excluding {len(sel)-np.count_nonzero(sel)} / {len(sel)} line detections as residing on bad amps.")
+            line_dets = list(tab['detectid'][sel])
+            np.savetxt(os.path.join(elixdir, "line.dets"), line_dets, fmt="%d")
+            del tab
 
+        make_conts = True
         tab = Table.read(f"{cfg.datevshot}_cont_sourcecat.tab",format="ascii")
-        sel = np.array([x['multiframe'] not in bad_amps_list for x in tab])
-        print(f"Excluding {len(sel) - np.count_nonzero(sel)} / {len(sel)} continuum detections as residing on bad amps.")
-        cont_dets = list(tab['detectid'][sel])
-        np.savetxt(os.path.join(elixdir, "cont.dets"), cont_dets, fmt="%d")
-        del tab
+        if len(tab) == 0:
+            print(f"Error! {cfg.datevshot} no continuum sources recorded. ")
+            make_conts = False
+        else:
+            sel = np.array([x['multiframe'] not in bad_amps_list for x in tab])
+            print(f"Excluding {len(sel) - np.count_nonzero(sel)} / {len(sel)} continuum detections as residing on bad amps.")
+            cont_dets = list(tab['detectid'][sel])
+            np.savetxt(os.path.join(elixdir, "cont.dets"), cont_dets, fmt="%d")
+            del tab
 
-        shot_h5 = os.path.join(cfg.cwd,f"{cfg.datevshot}.h5")
-        line_h5 = os.path.join(cfg.cwd,f"{cfg.datevshot}_line.h5")
-        cont_h5 = os.path.join(cfg.cwd, f"{cfg.datevshot}_cont.h5")
-        diagnose_tab = os.path.join(cfg.cwd,f"diagnose_classifications.tab")
+        if make_lines or make_conts:
+            shot_h5 = os.path.join(cfg.cwd,f"{cfg.datevshot}.h5")
+            line_h5 = os.path.join(cfg.cwd,f"{cfg.datevshot}_line.h5")
+            cont_h5 = os.path.join(cfg.cwd, f"{cfg.datevshot}_cont.h5")
+            diagnose_tab = os.path.join(cfg.cwd,f"diagnose_classifications.tab")
 
-        which_elixer = f"python {elixer_path}/selixer.py" #"selixer.test "
-        elixer_base_cmd = f" -f --slurm 0 --nodes 1 --log info --shot_h5 {shot_h5} --diagnose {diagnose_tab} " \
-                          f" --png --error 3.0 --neighborhood 10.0 --post_merge 2 "
-        elixer_line_cmd = f" --name line --dets line.dets  --hdf5 {line_h5} "
-        elixer_cont_cmd = f" --name cont --continuum --dets cont.dets  --hdf5 {cont_h5} "
+            which_elixer = f"python {elixer_path}/selixer.py" #"selixer.test "
+            elixer_base_cmd = f" -f --slurm 0 --nodes 1 --log info --shot_h5 {shot_h5} --diagnose {diagnose_tab} " \
+                              f" --png --error 3.0 --neighborhood 10.0 --post_merge 2 "
+            elixer_line_cmd = f" --name line --dets line.dets  --hdf5 {line_h5} "
+            elixer_cont_cmd = f" --name cont --continuum --dets cont.dets  --hdf5 {cont_h5} "
 
-        with open(os.path.join(elixdir,"elixer_cmd.txt"),"w") as f:
-            f.write(f"{which_elixer} {elixer_base_cmd} {elixer_line_cmd} \n")
-            f.write(f"{which_elixer} {elixer_base_cmd} {elixer_cont_cmd} \n")
+            with open(os.path.join(elixdir,"elixer_cmd.txt"),"w") as f:
+                if make_lines:
+                    f.write(f"{which_elixer} {elixer_base_cmd} {elixer_line_cmd} \n")
+                if make_conts:
+                    f.write(f"{which_elixer} {elixer_base_cmd} {elixer_cont_cmd} \n")
 
-        print("Preparing ELiXer SLURMS ... ")
-        os.chdir(elixdir)
-        system_command(cfg,"source elixer_cmd.txt")
+            print("Preparing ELiXer SLURMS ... ")
+            os.chdir(elixdir)
+            system_command(cfg,"source elixer_cmd.txt")
 
-        print("Default ELiXer SLURMS prepared. However, you may edit ./elixer/elixer_cmd.txt re-run if needed.")
-        print("To re-run, remove the ./elixer/line and ./elixer/cont directories then 'source' the edited 'elixer_cmd.txt' file."
-              " It will set up, but not queue, two SLURM jobs (line and cont).")
-        print("You may then edit ./elixer/line/elixer.slurm and ./elixer/cont/elixer.slurm if needed and sbatch when ready.")
-
+            print("Default ELiXer SLURMS prepared. However, you may edit ./elixer/elixer_cmd.txt re-run if needed.")
+            print("To re-run, remove the ./elixer/line and ./elixer/cont directories then 'source' the edited 'elixer_cmd.txt' file."
+                  " It will set up, but not queue, two SLURM jobs (line and cont).")
+            print("You may then edit ./elixer/line/elixer.slurm and ./elixer/cont/elixer.slurm if needed and sbatch when ready.")
+        else:
+            print(f"{cfg.datevshot} prep_elixer: no sources ")
 
     except:
         print(traceback.format_exc())
