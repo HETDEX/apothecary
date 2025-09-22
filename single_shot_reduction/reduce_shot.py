@@ -2187,9 +2187,9 @@ def mp_rcal_worker(out_list,cfg,set_idx,indicies,multis, ras, decs):
     :return:
     """
 
-    print(f"mp_rcal_worker serial for: {multis}")
+    print(f"[{cfg.datevshot}] idx[{set_idx}] mp_rcal_worker serial for: {multis}",flush=True)
     for multi, ra, dec, ix in zip(multis, ras, decs,indicies):
-        print(f"[{cfg.datevshot}] (run_rcal) {set_idx}-{ix}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ")  # ,end="")
+        print(f"[{cfg.datevshot}] (run_rcal) {set_idx}-{ix}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ",flush=True)  # ,end="")
         cmd = f"rcal_all {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 106"
         system_command(cfg, cmd)
 
@@ -2212,7 +2212,7 @@ def mp_rcal(cfg,multis, ras, decs,num_procs=NumProcs_mp_rcal):
     active_shots = node_active_ct(cfg)
     if active_shots > 0:
         num_procs = int(np.floor(MaxTotalProcs_mp_rcal / active_shots))
-        num_procs = min(num_procs,MaxPerShotProcs_mp_rcal)
+        num_procs = max(1,min(num_procs,MaxPerShotProcs_mp_rcal)) #always at least one
 
     print(f"[{cfg.datevshot}] flux calibration  ***MULTITHREADED*** (run_rcal) ({len(ras)}), num_procs = {num_procs}...")
 
@@ -2342,9 +2342,9 @@ def mp_rf1_worker(out_list,cfg,set_idx,indicies,multis, ras, decs):
     :return:
     """
 
-    print(f"mp_rf1_worker serial for: {multis}")
+    print(f"[{cfg.datevshot}] idx[{set_idx}] mp_rf1_worker serial for: {multis}",flush=True)
     for multi, ra, dec, ix in zip(multis, ras, decs,indicies):
-        print(f"[{cfg.datevshot}] (mp_rf1) : {set_idx}-{ix}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ")  # ,end="")
+        print(f"[{cfg.datevshot}] (mp_rf1) : {set_idx}-{ix}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ",flush=True)  # ,end="")
         cmd = f"rf1 {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 104\n"
         #rc = blocking_command(cfg,cmd)
         system_command(cfg, cmd)
@@ -2373,7 +2373,7 @@ def mp_rf1(cfg,multis, ras, decs,num_procs=NumProcs_mp_rf1):
     active_shots = node_active_ct(cfg)
     if active_shots > 0:
         num_procs = int(np.floor(MaxTotalProcs_mp_rf1 / active_shots))
-        num_procs = min(num_procs, MaxPerShotProcs_mp_rf1)
+        num_procs = max(1,min(num_procs, MaxPerShotProcs_mp_rf1))
 
     print(f"[{cfg.datevshot}] line detections ***MULTITHREADED*** (rdet_rf1) ({len(ras)}), using num_procs = {num_procs}...")
 
