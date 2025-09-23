@@ -95,9 +95,9 @@ LocalScriptRepo = "./local_script_repo" #useful if running multiple single shots
                                         #set to None if you do NOT want to use a local script dir cache
                                         #  and force a copy from the main repo each time
 
-Lock_mutex_fn = "lsr.lock"  #all instaces undir this directory share this
-Lock_tmp_mutex_fn = "tmp.lock" #all instaces on one node (common /tmp) share this
+Lock_mutex_fn = "lsr.lock"  #all instaces under this directory share this
 Node_basedir = "/tmp/hetssr"
+Lock_tmp_mutex_fn = "/tmp/tmp_hetssr.mutex" #all instaces on one node (common /tmp) share this
 WorkDirRoot = "./"
 #user specific
 red1path = None # if None, will use the local (cwd) as the basepath, otherwise user can edit and specify one here
@@ -459,7 +459,7 @@ def post_clean(cfg):
         #defpending on the status of the run, some of these paths may not exist
         if cfg.clean >= 1:
             #top scripts
-            flist = ["lsr.lock", "make_good_shots","make_hdrX.use","rback1","rback1_s","rback_field",
+            flist = ["make_good_shots","make_hdrX.use","rback1","rback1_s","rback_field",
                     "rback_fix","rbacks","rbfits","rbfits0","rbfits_fix","rbfits_s","rerun","rerun2","rfield",
                     "rfield.single","rfixspec","rimarb", "rsetdate","rsetdate0", "rtaras", "rtaremc",
                     "run0s", "run1s", "run2s", "runtar", "runtar0.slurm", "runtarm.defunct", "sun_use.dat",
@@ -1404,7 +1404,7 @@ def initial_setup(cfg):
 
         if LocalScriptRepo is not None:
             #need to see if can get the file lock in case another instance is copying
-            lock = FileLock(Lock_mutex_fn)
+            lock = FileLock(Lock_mutex_fn) #we are in the top directory (not sciXXXX)
             with lock:
                 if cfg.update_local_repo:
                     print("Updating local repo ...")
@@ -1429,7 +1429,7 @@ def initial_setup(cfg):
     else:
         if LocalScriptRepo is not None:
             fatal_rtn = False
-            lock = FileLock(Lock_mutex_fn)
+            lock = FileLock(Lock_mutex_fn) #we are in the top directory (not sciXXXX)
             with lock:
 
                 if cfg.update_local_repo:
@@ -2832,7 +2832,7 @@ def build_shot_h5(cfg):
         #here
         shot_link_dir = os.path.join(cfg.cwd_orig, f"shots")
         if not os.path.exists(shot_link_dir):
-            lock = FileLock(Lock_mutex_fn)
+            lock = FileLock(os.path.join(cfg.cwd_orig,Lock_mutex_fn)) #need to specify the top directory lock file
             with lock:
                 Path(shot_link_dir).mkdir(parents=True, exist_ok=True)
 
