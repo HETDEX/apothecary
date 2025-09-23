@@ -1,0 +1,56 @@
+for fn in "$@"
+do
+  echo " ============ "
+  echo "$fn"
+#  echo "error:"
+# want to exclude the elixer command line "--error" parameter
+  grep -v "\-\-error" "$fn" | grep -i -n "error" 
+#  grep -i -n "error" "$fn"
+
+#  echo "trace:"
+  grep -i -n "traceback" "$fn"
+  grep -i -n "backtrace" "$fn"
+  grep -i -n "!!! bad !!!" "$fn"
+  grep -n "!!! WARNING !!!" "$fn"
+
+#  echo "segment:"
+  grep -i -n "segment" "$fn"
+
+
+#  echo "memory:"
+  grep -i -n "memory" "$fn"
+  grep  -n "FATAL" "$fn"
+  echo " ============ "
+  echo " "
+
+
+  echo "===== counts ====="
+#  out=$( grep -i -n "error" "$fn"  | wc | awk '{print $1}')
+  out=$(grep -v "\-\-error" "$fn" | grep -i -n "error"  | wc | awk '{print $1}')
+  echo "      error: $out"
+
+  out=$(grep -i -n "traceback" "$fn" | wc | awk '{print $1}')
+  echo "  traceback: $out"
+
+  out=$(grep -i -n "backtrace" "$fn" | wc | awk '{print $1}')
+  echo "  backtrace: $out"
+
+  out=$(grep -i -n "!!! bad !!!" "$fn" | wc | awk '{print $1}')
+  echo "!!! bad !!!: $out"
+
+  out=$(grep  -n "!!! WARNING !!!" "$fn" | wc | awk '{print $1}')
+  echo "WARNING: $out"
+
+  out=$(grep -i -n "segment" "$fn" | wc | awk '{print $1}')
+  echo "  seg fault: $out"
+
+  out=$(grep -i -n "memory" "$fn" | wc | awk '{print $1}')
+  echo "     memory: $out"
+
+  out=$(grep -n "FATAL" "$fn" | wc | awk '{print $1}')
+  echo "     FATAL: $out"
+
+
+
+done
+
