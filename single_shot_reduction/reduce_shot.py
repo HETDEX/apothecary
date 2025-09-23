@@ -754,7 +754,7 @@ def progress_init(cfg):
 
     return dtprog
 
-def Quit(cfg,rc,msg=None):
+def Quit(cfg,rc,msg=None,write_status=True):
     """
 
     :param cfg:
@@ -783,6 +783,18 @@ def Quit(cfg,rc,msg=None):
         #    print(f"({rc})", msg)
         #else:
         #    print(f"({rc})")
+
+    try:
+        if write_status and safe_cd(cfg.cwd):
+            if rc < 0:
+                with open("status.fail","w") as f:
+                    f.write(f"[{cfg.datevshot}] ({rc}) {msg}")
+            else:
+                with open("status.pass","w") as f:
+                    f.write(f"[{cfg.datevshot}] ({rc}) {msg}")
+    except:
+        pass
+
 
     exit(rc)
 
@@ -3851,16 +3863,16 @@ def prep_elixer(cfg):
 if cfg.clean_only:
     print(f"[{cfg.datevshot}] Performing only the CLEAN, level : {cfg.clean} ...")
     post_clean(cfg)
-    Quit(cfg,0,"Clean complete. Exiting")
+    Quit(cfg,0,"Clean complete. Exiting",write_status=False)
 
 rc = precheck(cfg)
 if rc < 0:
-    Quit(cfg,rc,"Precheck failed. Reduction cannot run.")
+    Quit(cfg,rc,"Precheck failed. Reduction cannot run.",write_status=False)
 
 cfg.numexp, cfg.gettar_fn = num_exposures_in_shot(cfg.shotid)
 
 if cfg.numexp <= 0:
-    Quit(cfg, -1, f"Could not find shot {cfg.datevshot}")
+    Quit(cfg, -1, f"Could not find shot {cfg.datevshot}",write_status=False)
 
 
 # if cfg.simul == 1:
@@ -3891,12 +3903,12 @@ else:
                 print(f"WARNING! {cfg.datevshot} appears to be an original HETDEX observation.")
                 print(f"         Attempting to use only one exposure may not generate the expected results.")
     else:
-        Quit(cfg, -1, f"Invalid exposure. Requesting exp #{cfg.exp} but {cfg.datevshot} has only {cfg.numexp}")
+        Quit(cfg, -1, f"Invalid exposure. Requesting exp #{cfg.exp} but {cfg.datevshot} has only {cfg.numexp}",write_status=False)
 
 rc = initial_setup(cfg)
 
 if rc < 0:
-    Quit(cfg,rc,"Could not complete initial setup.")
+    Quit(cfg,rc,"Could not complete initial setup.",write_status=False)
 
 rc = node_setup(cfg)
 
