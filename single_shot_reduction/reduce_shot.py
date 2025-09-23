@@ -276,6 +276,12 @@ if "-help" in args:
 
     exit(0)
 
+queue_elixer = False
+if "-queue_elixer" in args:
+    print("Hidden switch : queueing elixer slurm jobs that match datevshot ...")
+    args.remove("-queue_elixer")
+    queue_elixer = True
+
 if "-clean" in args:
     i = args.index("-clean")
     try:
@@ -339,24 +345,24 @@ if len(args) != 1:
     print(f"exititing....")
     exit(-1)
 else:
-    try:
-        #might have 'v' or 'd' or 's' as the separator between date and shot number
-        cfg.shotid = int(args[0].replace("v","").replace("s","").replace("d",""))
-    except:
-        pass
+    if not queue_elixer:
+        try:
+            #might have 'v' or 'd' or 's' as the separator between date and shot number
+            cfg.shotid = int(args[0].replace("v","").replace("s","").replace("d",""))
+        except:
+            pass
 
-    if not (20170101000 < cfg.shotid < FutureShotDateLimit):
-        print(f"Fatal: Invalid shotid: {args[0]}")
-        exit(-1)
+        if not (20170101000 < cfg.shotid < FutureShotDateLimit):
+            print(f"Fatal: Invalid shotid: {args[0]}")
+            exit(-1)
 
-    cfg.datevshot = str(cfg.shotid)[0:8] + "v" + str(cfg.shotid)[8:]
-
-
+        cfg.datevshot = str(cfg.shotid)[0:8] + "v" + str(cfg.shotid)[8:]
+    else:
+        cfg.datevshot = args[0] #as is ... wildcards and all
 
 ########################################################################
 # worker functions
 ########################################################################
-
 
 def safe_cd(path):
     """
@@ -380,6 +386,33 @@ def safe_cd(path):
             return False
     except:
         return False
+
+
+def run_queue_elixer(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+
+    cwd = os.getcwd()
+    fns = glob.glob(f"sci{cfg.datevshot}")
+    #print(fns)
+    for fn in fns:
+        try:
+            for dettype in ["line","cont"]:
+                slurm_path = os.path.join(fn, f"elixer/{dettype}")
+                if safe_cd(slurm_path):
+                    if os.path.exists("elixer.slurm"):
+                        cmd = f"cd {slurm_path} ; sbatch elixer.slurm ; cd {cwd}"
+                        #print(cmd)
+                        system_command(cfg,cmd)
+
+                    os.chdir(cwd)
+        except:
+            print(traceback.format_exc())
+
+    os.chdir(cwd)
 
 def post_clean(cfg):
     """
@@ -1355,14 +1388,15 @@ def initial_setup(cfg):
     resume = False #notice: cfg.resume MAY be true and this can still be false if the directory does not already exist
     if os.path.exists(workdir):
         if cfg.resume:
-            print(f"Resuming. Leave directory intact: {workdir}")
+            print(f"[{cfg.datevshot}] Resuming. Leave directory intact: {workdir}")
             resume = True
         elif cfg.overwrite:
-            print(f"Overwriting directory {workdir} ... ")
+            print(f"[{cfg.datevshot}] Overwriting directory {workdir} ... ")
             shutil.rmtree(workdir)
         else:
-            print(f"Shot directory already exists here! {workdir}")
-            print(f"Please include --resume or --overwrite to make intention clear.")
+            print(f"[{cfg.datevshot}] Shot directory already exists here! {workdir}")
+            print(f"[{cfg.datevshot}] Please include --resume or --overwrite to make intention clear.")
+            print(f"[{cfg.datevshot}] Or is this a repeated SLURM task?")
             return -1
 
     if not resume:
@@ -1569,6 +1603,7 @@ def node_clean(cfg):
         with lock:
             #clean up my sync
             try:
+                #this might have already been removed (e.g. if post_clean() ran successfully)
                 os.remove(os.path.join(Node_basedir,f"{cfg.datevshot}.sync"))
             except:
                 pass
@@ -3858,6 +3893,10 @@ def prep_elixer(cfg):
 ###########
 # setup
 ###########
+
+if queue_elixer:
+    run_queue_elixer(cfg)
+    exit(0)
 
 if cfg.clean_only:
     print(f"[{cfg.datevshot}] Performing only the CLEAN, level : {cfg.clean} ...")
