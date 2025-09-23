@@ -39,7 +39,7 @@ do
   echo "!!! bad !!!: $out"
 
   out=$(grep  -n "!!! WARNING !!!" "$fn" | wc | awk '{print $1}')
-  echo "WARNING: $out"
+  echo "    WARNING: $out"
 
   out=$(grep -i -n "segment" "$fn" | wc | awk '{print $1}')
   echo "  seg fault: $out"
@@ -48,7 +48,7 @@ do
   echo "     memory: $out"
 
   out=$(grep -n "FATAL" "$fn" | wc | awk '{print $1}')
-  echo "     FATAL: $out"
+  echo "      FATAL: $out"
 
 
 
