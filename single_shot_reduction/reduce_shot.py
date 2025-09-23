@@ -1457,6 +1457,16 @@ def initial_setup(cfg):
     cfg.cwd = os.getcwd() #now under the sci<shot> directory
 
 
+    #check for virus.tar files
+    virustar = f"{cfg.datevshot[0:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar"
+    virus_paths = [HET_by_date,os.path.join(cfg.cwd_orig,"het_raw")]
+    if not os.path.exists(os.path.join(virus_paths[0],virustar)):
+        if not os.path.exists(os.path.join(virus_paths[1],virustar)):
+            print(f"[{cfg.datevshot}] FATAL. Could not locate {virustar} under {virus_paths}")
+            print(f"[{cfg.datevshot}] You may need to first copy and extract "
+                  f"/corral/utexas/Hobby-Eberly-Telesco/het_raw/<date>.tar to your local het_raw directory")
+            return -1
+
     if not resume or cfg.update_local_repo:
         print(f"Copying source code to working directory {cfg.cwd}...")
         ## if ANY of this fails it is fatal
