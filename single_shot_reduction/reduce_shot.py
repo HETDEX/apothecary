@@ -398,10 +398,8 @@ def post_clean(cfg):
     """
 
     try:
-
         #always try to clean up /tmp
         node_clean(cfg)
-
 
         if cfg.clean <=0:
             print(f"[{cfg.datevshot}] No -clean")
@@ -795,6 +793,7 @@ def Quit(cfg,rc,msg=None,write_status=True):
     except:
         pass
 
+    node_clean(cfg)
 
     exit(rc)
 
