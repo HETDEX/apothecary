@@ -1468,7 +1468,7 @@ def initial_setup(cfg):
         if os.path.exists(os.path.join(karlfplane, f"fp{cfg.datevshot[0:8]}")):
             shutil.copy2(os.path.join(karlfplane, f"fp{cfg.datevshot[0:8]}"), os.path.join(cfg.cwd,"vdrp/fplane"))
         else:
-            print(f"!!! WARNING !!! fplane file (fp{cfg.datevshot[0:8]}) not found. Using last known ({LastKnownFplane}) instead !!!")
+            print(f"{[cfg.datevshot]} !Warning! fplane file (fp{cfg.datevshot[0:8]}) not found. Using last known ({LastKnownFplane}) instead. ")
             shutil.copy2(os.path.join(karlfplane, f"{LastKnownFplane}"), os.path.join(cfg.cwd, f"vdrp/fplane/fp{cfg.datevshot[0:8]}"))
 
         #fix paths in the . cfg files
@@ -3884,6 +3884,7 @@ if cfg.exp <= 0:
     if cfg.numexp == 1 or cfg.numexp == 3: #okay
         pass
     else:
+        #print(f"[{cfg.datevshot}] !!! bad !!! Unusual number of exposures ({cfg.numexp}).")
         print(f"********************************************************************************************")
         print(f"!!! WARNING !!! Unusual number of exposures ({cfg.numexp}) !!! Reduction may be problematic.")
         print(f"                You may want to consider reducing each exposure individually. ")
