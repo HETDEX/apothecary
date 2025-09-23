@@ -463,7 +463,7 @@ def post_clean(cfg):
                     "rback_fix","rbacks","rbfits","rbfits0","rbfits_fix","rbfits_s","rerun","rerun2","rfield",
                     "rfield.single","rfixspec","rimarb", "rsetdate","rsetdate0", "rtaras", "rtaremc",
                     "run0s", "run1s", "run2s", "runtar", "runtar0.slurm", "runtarm.defunct", "sun_use.dat",
-                     "ifustat_20250828011.tab"]
+                     "ifustat_20*.tab"]
             for fn in flist:
                 system_command(cfg,f"rm {fn}")
 
@@ -589,7 +589,8 @@ def post_clean(cfg):
             ####################################
             if safe_cd(cfg.cwd):
                 system_command(cfg,"rm -rf ./Diagnose")
-                flist = ["classification_000.fits","classification_001.fits","diagnose_spectra_cont.fits","diagnose_spectra_line.fits"]
+                flist = ["classification_000.fits","classification_001.fits","diagnose_spectra_cont.fits",
+                         "diagnose_spectra_line.fits"]
                 for fn in flist:
                     system_command(cfg,f"rm {fn}")
 
