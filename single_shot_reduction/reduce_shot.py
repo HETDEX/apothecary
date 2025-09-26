@@ -2983,6 +2983,8 @@ def add_fiber_mask(cfg,shot_h5_fqfn=None):
         rc = -1
         print(f"[{cfg.datevshot}] Could add fiber masking to shot h5.", traceback.format_exc())
 
+    return rc
+
 def shot_analyisis(cfg):
     """
 
