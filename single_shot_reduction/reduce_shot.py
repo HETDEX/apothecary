@@ -2535,7 +2535,7 @@ def rdet_rf1(cfg):
         if len(failed_list) > 0:
             if len(failed_list) < len(ras):
                 #print(f"{base_str} {len(failed_list)} failed. Can be transient issues, so will re-run ...")
-                print(f"{cfg.datevshot} (rdet_rf1) : re-run failed IFUs ...")
+                print(f"{cfg.datevshot} (rdet_rf1) : serially re-run {len(failed_list)} failed IFUs ...")
                 for ct,cmd in enumerate(failed_list):
                     print(f"{cfg.datevshot} (rdet_rf1) : {ct} {cmd.split()[1]} {cmd.split()[2]} {cmd.split()[6]} ...",end="")
                     system_command(cfg, cmd)
@@ -2945,6 +2945,43 @@ def amp_stats(cfg,shot_h5_fqfn=None):
     return rc
 
 
+
+def add_fiber_mask(cfg,shot_h5_fqfn=None):
+    """
+
+    :param cfg:
+    :return:
+    """
+
+    try:
+        rc = 0
+        if shot_h5_fqfn is None:
+            shot_h5_fqfn = os.path.join(cfg.cwd,f"{cfg.datevshot}.h5")
+
+        print(f"[{cfg.datevshot}] Adding fiber masking (CalfibDQ) to: {shot_h5_fqfn} ... ")
+
+        cmd = f"python3 {hetdex_api_path}/h5tools/create_fiber_mask_hdf5.py"
+        cmd += f" --shot_h5  {shot_h5_fqfn}"
+
+        system_command(cfg, cmd)
+
+        #test:
+        try:
+            h5 = tables.open_file(shot_h5_fqfn,mode="r")
+            if h5.__contains__("/CalfibDQ"):
+                #success
+                print(f"[{cfg.datevshot}] Pass. Successfully added CalfibDQ.")
+            else:
+                print(f"[{cfg.datevshot}] FAIL! Failed to add CalfibDQ.")
+                rc = -1
+            h5.close()
+
+        except:
+            rc = -1
+            print(f"[{cfg.datevshot}] Could add fiber masking to shot h5.", traceback.format_exc())
+    except:
+        rc = -1
+        print(f"[{cfg.datevshot}] Could add fiber masking to shot h5.", traceback.format_exc())
 
 def shot_analyisis(cfg):
     """
@@ -4170,7 +4207,11 @@ if s04_make_shot and not dtprog["s04_make_shot"]:
     if s04e_amp_stats and not dtprog["s04e_amp_stats"]:
         rc = amp_stats(cfg)
         if rc < 0:
-            print("Non-fatal. Could not compute amp stats from shot h5 file. Will continue anyway with catalog creation.")
+            print(f"[{cfg.datevshot}] Non-fatal. Could not compute amp stats from shot h5 file. Will continue anyway with catalog creation.")
+
+        rc = add_fiber_mask(cfg)
+        if rc < 0:
+            print(f"[{cfg.datevshot}] Non-fatal. Could not update shot h5 file with fiber level masking. Will continue anyway with catalog creation.")
         progress_update(cfg,dtprog, "s04e_amp_stats")
 
     #basic shot analysis (mostly images for review)
