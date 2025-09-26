@@ -4041,7 +4041,7 @@ if cfg.numexp < 3:
 #cfg.orig_stdout = sys.stdout
 #cfg.orig_stderr = sys.stderr
 cfg.file_stdout = open(f"{cfg.datevshot}.log","a")
-print(f"Logging redirected to: {cfg.cwd}/{cfg.file_stdout.name}")
+print(f"[{cfg.datevshot}] Logging redirected to: {cfg.cwd}/{cfg.file_stdout.name}")
 #sys.stderr = cfg.file_stdout
 #sys.stdout = cfg.file_stdout
 
@@ -4064,7 +4064,7 @@ if s01_run1s and not dtprog["s01_run1s"]:
 
     progress_update(cfg,dtprog,"s01_run1s")
 else:
-    print("Skipping run1s")
+    print(f"[{cfg.datevshot}] Skipping run1s")
 
 ###########
 # step2
@@ -4082,7 +4082,7 @@ if s02_vdrp and not dtprog["s02_vdrp"]:
     progress_update(cfg,dtprog, "s02_vdrp")
 
 else:
-    print("Skipping vdrp")
+    print(f"[{cfg.datevshot}] Skipping vdrp")
 
 
 
@@ -4117,11 +4117,11 @@ if s03_fluxcal and not dtprog["s03_fluxcal"]:
 
 
     for star_cat in star_cat_list:
-        print(f"flux calibration: {star_cat}")
+        print(f"[{cfg.datevshot}] flux calibration: {star_cat}")
         run_fluxcalibration(cfg,star_cat)
 
         if check_fluxcalibration(cfg) < 0:
-            print(f"flux calibration: {star_cat} failed. Trying next ... ")
+            print(f"[{cfg.datevshot}] flux calibration: {star_cat} failed. Trying next ... ")
         else:
             break #this one was good
 
@@ -4144,17 +4144,17 @@ if s03_fluxcal and not dtprog["s03_fluxcal"]:
             out = np.loadtxt(fwhm_fn) #should just be a single line
 
             #have to write out as file since not all floats
-            print(f"Updating measured seeing FWHM {out[0]} with guider reported FWHM {cfg.guider_fwhm}")
+            print(f"[{cfg.datevshot}] Updating measured seeing FWHM {out[0]} with guider reported FWHM {cfg.guider_fwhm}")
             with open(fwhm_fn,"w") as f:
                 f.write(f"{cfg.guider_fwhm}\t{out[1]}\t{int(out[2])}\n")
 
         except:
-            print(f"Could not update fwhm.out with guider.fwhm")
+            print(f"[{cfg.datevshot}] Could not update fwhm.out with guider.fwhm")
             print(traceback.format_exc())
 
     progress_update(cfg,dtprog,"s03_fluxcal")
 else:
-    print("Skipping flux calibration")
+    print(f"[{cfg.datevshot}] Skipping flux calibration")
 
 
 ###########
@@ -4166,22 +4166,22 @@ else:
 if s04_make_shot and not dtprog["s04_make_shot"]:
 
     if s04a_get_ifucens and not dtprog["s04a_get_ifucens"]:
-        print("Getting IFU centers ...")
+        print(f"[{cfg.datevshot}] Getting IFU centers ...")
         if run_make_ifucen(cfg) != 0:
             Quit(cfg,-1,"FATAL. Failed to get IFU centers.")
         else:
             progress_update(cfg,dtprog, "s04a_get_ifucens")
     else:
-        print("Skipping IFU centers ...")
+        print(f"[{cfg.datevshot}] Skipping IFU centers ...")
 
     if s04b_rfft and not dtprog["s04b_rfft"]:
-        print("Running rfft (this may take a while) ...")
+        print(f"[{cfg.datevshot}] Running rfft (this may take a while) ...")
         if run_rfft(cfg) != 0:
             Quit(cfg, -1, "FATAL. rfft fail. One or more expected outputs failed.")
         else:
             progress_update(cfg,dtprog, "s04b_rfft")
     else:
-        print("Skipping rfft")
+        print(f"[{cfg.datevshot}] Skipping rfft")
 
     if s04c_rcal_all and not dtprog["s04c_rcal_all"]:
         print("Running rcal_all ...")
@@ -4189,13 +4189,13 @@ if s04_make_shot and not dtprog["s04_make_shot"]:
         if rc < 0:
             Quit(cfg, -1, "FATAL. rcal_all fail.")
         elif rc > 0:
-            print("rcal_all: Limited success. Non-fatal. Will continue")
+            print(f"[{cfg.datevshot}] rcal_all: Limited success. Non-fatal. Will continue")
 
         progress_update(cfg,dtprog, "s04c_rcal_all")
         #else keep going
 
     else:
-        print("Skipping rcal_all")
+        print(f"[{cfg.datevshot}] Skipping rcal_all")
 
     if s04d_shot_h5 and not dtprog["s04d_shot_h5"]:
         rc = build_shot_h5(cfg)
@@ -4218,13 +4218,13 @@ if s04_make_shot and not dtprog["s04_make_shot"]:
     if s04f_analysis and not dtprog["s04f_analysis"]:
         rc = shot_analyisis(cfg)
         if rc < 0:
-            print("Non-fatal. Could not complete basic shot analysis output.")
+            print(f"[{cfg.datevshot}]Non-fatal. Could not complete basic shot analysis output.")
         progress_update(cfg,dtprog, "s04f_analysis")
 
     if dtprog["s04a_get_ifucens"] and dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] and dtprog["s04e_amp_stats"]:
         progress_update(cfg,dtprog, "s04_make_shot")
 else:
-    print("Skipping sky subtraction")
+    print(f"[{cfg.datevshot}] Skipping sky subtraction")
 
 
 ###########
@@ -4361,13 +4361,13 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
                         #np.savetxt('elixer_line.dets',line_tab['detectid'][esel],fmt="%d")
 
                     else:
-                        print("Notice! (1) Could not combine lines detections by FoF or no lines qualified to cluster.")
+                        print(f"[{cfg.datevshot}] Notice! (1) Could not combine lines detections by FoF or no lines qualified to cluster.")
                 else:
-                    print("Notice! (2) Could not combine lines detections by FoF or no lines qualified to cluster.")
+                    print(f"[{cfg.datevshot}] Notice! (2) Could not combine lines detections by FoF or no lines qualified to cluster.")
             else:
-                print("Error! Could not combine lines detections. Lines table not found.")
+                print(f"[{cfg.datevshot}] Error! Could not combine lines detections. Lines table not found.")
         except:
-            print("Error! Could not combine lines detections by FoF.")
+            print(f"[{cfg.datevshot}] Error! Could not combine lines detections by FoF.")
             print(traceback.format_exc())
 
         try:
@@ -4382,7 +4382,7 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
             if cont_tab is not None:
                 tname = f"{cfg.datevshot}_cont_sourcecat.tab"
                 cont_tab.write(tname, format="ascii", overwrite=True)
-                print(f"Initial continuum source table: {os.getcwd()}/{tname}")
+                print(f"[{cfg.datevshot}] Initial continuum source table: {os.getcwd()}/{tname}")
 
                 fof_3d_cont_tab = make_3d_friend_table_for_shot(cont_tab, dsky_3D=6.0, dwave=4.0)
                 if fof_3d_cont_tab is not None:
@@ -4409,7 +4409,7 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
                                     continue #this is okay, this has no group, so stands on its own
                                 else:
                                     #print(f"Error! Unexpected matches ({np.count_nonzero(sel)}) for {cont_tab['cont_detectid'][i]}")
-                                    print(f"Error! Unexpected matches ({np.count_nonzero(sel)}) for {cont_tab['detectid'][i]}")
+                                    print(f"[{cfg.datevshot}] Error! Unexpected matches ({np.count_nonzero(sel)}) for {cont_tab['detectid'][i]}")
                                     continue
                             except:
                                 print(traceback.format_exc())
@@ -4434,7 +4434,7 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
                         # cont_tab.write(tname, format="fits", overwrite=True)
                         tname = f"{cfg.datevshot}_cont_sourcecat.tab"
                         cont_tab.write(tname, format="ascii", overwrite=True)
-                        print(f"Updated continuum source table: {os.getcwd()}/{tname}")
+                        print(f"[{cfg.datevshot}] Updated continuum source table: {os.getcwd()}/{tname}")
                         #lastly sub select based on some minimum contflux ??
 
                         #now done elsewhere
@@ -4443,13 +4443,13 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
 
 
                     else:
-                        print("Notice! (1) Could not combine continuum detections by FoF or no continuum sources qualified to cluster.")
+                        print(f"[{cfg.datevshot}] Notice! (1) Could not combine continuum detections by FoF or no continuum sources qualified to cluster.")
                 else:
-                    print("Notice! (2) Could not combine continuum detections by FoF or no continuum sources qualified to cluster.")
+                    print(f"[{cfg.datevshot}] Notice! (2) Could not combine continuum detections by FoF or no continuum sources qualified to cluster.")
             else:
-                print("Error! Could not combine continuum detections. Continuum table not found.")
+                print(f"[{cfg.datevshot}] Error! Could not combine continuum detections. Continuum table not found.")
         except:
-            print("Error! Could not combine continuum detections by FoF.")
+            print(f"[{cfg.datevshot}] Error! Could not combine continuum detections by FoF.")
             print(traceback.format_exc())
 
     progress_update(cfg,dtprog, "s06b_fof")
@@ -4469,11 +4469,11 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
         rc = diagnose(cfg)
 
         if rc != 0:
-            print("Diagnose: Limited success. Non-fatal. Will continue")
+            print(f"[{cfg.datevshot}] Diagnose: Limited success. Non-fatal. Will continue")
 
         rc = diagnose_output_to_table(cfg)
         if rc != 0:
-            print("Diagnose conversion: Limited success. Non-fatal. Will continue")
+            print(f"[{cfg.datevshot}] Diagnose conversion: Limited success. Non-fatal. Will continue")
 
         progress_update(cfg,dtprog, "s06c_diagnose")
 
