@@ -249,9 +249,13 @@ if "-help" in args:
     --clean <integer> : -5 to 5; 0 performs no cleanup (e.g. for full debugging), 
                       negatives do the same as positives except they force the clean-up immediately and as the only action
                       1 = [default] basic cleaning of scripts and non-informative intermediate files
+                          (--resume can still work if accompanied by --update)
                       2 = removes additional intermediate files, and most debugging files, vdrp, etc
+                          (--resume can still work if accompanied by --update)
                       3 = removes logging information, analysis, match_pngs, etc
+                          (--resume can still work if accompanied by --update)
                       4 = removes the .mc, .spec, .list, etc files 
+                          (!!! cannot use --resume at level 4 or after !!!) 
                       5 = removes EVERYTHING except the shot h5 file
             !!! Notice: elixer content is only removed with (-1) to (-5) or 5 as it is a post-run manual SLURM queue
                       
@@ -471,8 +475,9 @@ def post_clean(cfg):
 
             ############################
             #individual exposures
+            # no do not remove) at this level ... we need these still if we need to rebuild the h5 file
             ############################
-            system_command(cfg,f"rm -rf d{cfg.datevshot.replace('v','s')}exp*")
+            #system_command(cfg,f"rm -rf d{cfg.datevshot.replace('v','s')}exp*")
 
             #########################
             #vdrp
@@ -678,9 +683,17 @@ def post_clean(cfg):
         if cfg.clean >= 4:  # still more aggressive
             #removes the various original .mc, .spec, etc files
             #removed diagnose specific classifications
+            # can no longer use --resume
+
             if safe_cd(cfg.cwd):
+                ############################
+                # individual exposures
+                ############################
+                system_command(cfg, f"rm -rf d{cfg.datevshot.replace('v', 's')}exp*")
+
                 system_command(cfg, f"rm -rf alldet")
                 system_command(cfg, f"rm -rf cs")
+
 
 
         if cfg.clean >= 5:  # ONLY keep the shot
