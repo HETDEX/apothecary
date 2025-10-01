@@ -552,8 +552,8 @@ def post_clean(cfg):
 
             if safe_cd(os.path.join(cfg.cwd, "cs/spec")):
                 system_command(cfg, f"rm r*")
-                system_command(cfg, f"rm *.tar")
-                system_command(cfg, f"rm *.rcs")
+                #system_command(cfg, f"rm *.tar") #moved to higher level clean
+                #system_command(cfg, f"rm *.rcs")
 
 
 
@@ -639,6 +639,8 @@ def post_clean(cfg):
 
                 if safe_cd(os.path.join(cfg.cwd, "cs/spec")):
                     system_command(cfg, f"rm *.log")
+                    system_command(cfg, f"rm *.tar")
+                    system_command(cfg, f"rm *.rcs")
 
             ##################################
             # ELiXer
@@ -3427,6 +3429,40 @@ def shot_analyisis(cfg):
 # #end build_detection_tables
 
 
+def check_detid_counter(cfg,cont,nominal_max):
+    """
+
+    :param cfg:
+    :param cont: if True, check the continuum h5, else check the line h5 file
+    :return:
+    """
+
+    try:
+        if cont:
+            which = "cont"
+        else:
+            which = "line"
+
+        h5 = tables.open_file(f"{cfg.datevshot}_{which}.h5")
+        ids = h5.root.Detections.read(field="detectid")
+        maxid = np.max(ids)
+
+        if maxid > nominal_max:
+            rc = len(ids)
+        else:
+            rc = 0
+
+    except:
+        rc = -1
+        print(f"[{cfg.datevshot}] Exception in check_detid_counter()",traceback.format_exc())
+
+    try:
+        h5.close()
+    except:
+        pass
+
+    return rc
+
 def build_detection_hdf5(cfg):
     """
 
@@ -3441,32 +3477,73 @@ def build_detection_hdf5(cfg):
 
     try:
         rc = 0
-        detectid_base = np.int64(cfg.datevshot.replace('v', '', )) * np.int64(1e7) + 1000000
-        print(f"[{cfg.datevshot}] Building detections hdf5 ... ")
+        id_ct = -1
+        id_base = 5 #5 character counter (was 1e5 now the string version with 0's id_base + 1 long,
 
-        os.chdir(os.path.join(cfg.cwd))
+        while id_ct != 0:
+            #strip off the first 2 digits of the year and the 'v'
+            #leaves last 5 characters for a counter for the detectids in the shot
+            #note: 9xxxx is reserved for continuum sources
+            #detectid_base = np.int64(cfg.datevshot[2:].replace('v', '', )) * np.int64(1e5) # + 1000000
+            detectid_base = np.int64(cfg.datevshot[2:].replace('v', '', )) * np.int64(str(1).ljust(id_base+1,'0'))  # + 1000000
+            print(f"[{cfg.datevshot}] Building detections hdf5 ... ")
 
-        cmd = f"python3 {hetdex_api_path}/h5tools/create_detect_hdf5.py"
-        #cmd = f"python3 {cfg.cwd}/../create_detect_hdf5.py"
-        #cmd += f" --survey NA"
-        cmd += f" --detectid_base {detectid_base}"
-        cmd += f" --date {cfg.datevshot[0:8]}"
-        cmd += f" --observation \"{cfg.datevshot[-3:]}\""
-        cmd += f" -of \"{cfg.datevshot}_line.h5\""
-        cmd += f" --detect_path \"{cfg.cwd}/alldet/detect_out\""
+            os.chdir(os.path.join(cfg.cwd))
 
-        system_command(cfg, cmd)
+            cmd = f"python3 {hetdex_api_path}/h5tools/create_detect_hdf5.py"
+            #cmd = f"python3 {cfg.cwd}/../create_detect_hdf5.py"
+            #cmd += f" --survey NA"
+            cmd += f" --detectid_base {detectid_base}"
+            cmd += f" --date {cfg.datevshot[0:8]}"
+            cmd += f" --observation \"{cfg.datevshot[-3:]}\""
+            cmd += f" -of \"{cfg.datevshot}_line.h5\""
+            cmd += f" --detect_path \"{cfg.cwd}/alldet/detect_out\""
 
-        detectid_base = np.int64(cfg.datevshot.replace('v', '', )) * np.int64(1e7) + 9000000
-        cmd = f"python3 {hetdex_api_path}/h5tools/create_cont_hdf5.py"
-        #cmd = f"python3 {cfg.cwd}/../create_cont_hdf5.py"
-        cmd += f" --detectid_base {detectid_base}"
-        cmd += f" --date {cfg.datevshot[0:8]}"
-        cmd += f" --observation \"{cfg.datevshot[-3:]}\""
-        cmd += f" -of \"{cfg.datevshot}_cont.h5\""
-        cmd += f" --detect_path \"{cfg.cwd}/cs/spec\""
+            system_command(cfg, cmd)
 
-        system_command(cfg, cmd)
+
+            #sanity check the counter ... IF we exceed 10,000 detections, the counter fails
+            id_ct = check_detid_counter(cfg,cont=False,nominal_max= detectid_base + np.int64(str(8).ljust(id_base ,'9')))
+            if id_ct > 0:
+                #this is a problem and we need to re-run with a different base
+                print(f"[{cfg.datevshot}] More than expected ({id_ct}) number of line detections. Must reset counter and rebuild.")
+                id_base = len(str(id_ct)) + 1
+            elif id_ct < 0:
+                #this is an error
+                print(f"[{cfg.datevshot}] Error ({id_ct}) checking number of line detections. ")
+                id_ct = 0
+
+
+        id_ct = -1
+        id_base = 5 #5 character counter (was 1e5 now the string version with 0's id_base + 1 long,
+
+        while id_ct != 0:
+
+            #detectid_base = np.int64(cfg.datevshot.replace('v', '', )) * np.int64(1e7) + 9000000
+            #detectid_base = np.int64(cfg.datevshot[2:].replace('v', '', )) * np.int64(1e5) + 90000
+            detectid_base = np.int64(cfg.datevshot[2:].replace('v', '', )) * np.int64(str(1).ljust(id_base + 1, '0')) + \
+                            np.int64(str(9).ljust(id_base , '0'))
+            cmd = f"python3 {hetdex_api_path}/h5tools/create_cont_hdf5.py"
+            #cmd = f"python3 {cfg.cwd}/../create_cont_hdf5.py"
+            cmd += f" --detectid_base {detectid_base}"
+            cmd += f" --date {cfg.datevshot[0:8]}"
+            cmd += f" --observation \"{cfg.datevshot[-3:]}\""
+            cmd += f" -of \"{cfg.datevshot}_cont.h5\""
+            cmd += f" --detect_path \"{cfg.cwd}/cs/spec\""
+
+            system_command(cfg, cmd)
+
+            #sanity check the counter ... IF we exceed 10,000 detections, the counter fails
+            id_ct = check_detid_counter(cfg,cont=True,nominal_max=detectid_base + np.int64(str(9).ljust(id_base ,'9')))
+            if id_ct > 0:
+                #this is a problem and we need to re-run with a different base
+                print(f"[{cfg.datevshot}] More than expected ({id_ct}) number of continuum detections. Must reset counter and rebuild.")
+                id_base = len(str(id_ct)) + 1
+            elif id_ct < 0:
+                #this is an error
+                print(f"[{cfg.datevshot}] Error ({id_ct}) checking number of continuum detections. ")
+                id_ct = 0
+
 
     except:
         #print(traceback.format_exc())
