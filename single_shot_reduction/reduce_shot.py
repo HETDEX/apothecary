@@ -132,7 +132,7 @@ s04a_get_ifucens = True
 s04b_rfft = True  #rfft = run full field on tmp
 s04c_rcal_all = True
 s04d_shot_h5 = True
-s04e_amp_stats = True
+s04e_amp_stats = True  #includes updating FiberIndex, FiberMask and AmpStats
 s04f_analysis = True
 s04_make_shot = s04_make_shot | s04a_get_ifucens | s04b_rfft | s04c_rcal_all | s04d_shot_h5 | s04e_amp_stats | s04f_analysis#sanity catch
 
@@ -2957,6 +2957,15 @@ def add_fiber_index(cfg,shot_h5_fqfn=None):
         rc = 0
         if shot_h5_fqfn is None:
             shot_h5_fqfn = os.path.join(cfg.cwd,f"{cfg.datevshot}.h5")
+
+        #this might be an update of masking to existing shot, .... if the FiberIndex already exists, we
+        #can skip this part
+
+        h5 = tables.open_file(shot_h5_fqfn,mode='r')
+        if h5.__contains__("/FiberIndex"):
+            print(f"[{cfg.datevshot}] FiberIndex already exists in {shot_h5_fqfn} ... ")
+            h5.close()
+            return 0
 
         print(f"[{cfg.datevshot}] Adding fiber index  to: {shot_h5_fqfn} ... ")
 
