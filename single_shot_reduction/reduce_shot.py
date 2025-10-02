@@ -2946,7 +2946,44 @@ def amp_stats(cfg,shot_h5_fqfn=None):
 
     return rc
 
+def add_fiber_index(cfg,shot_h5_fqfn=None):
+    """
 
+    :param cfg:
+    :return:
+    """
+
+    try:
+        rc = 0
+        if shot_h5_fqfn is None:
+            shot_h5_fqfn = os.path.join(cfg.cwd,f"{cfg.datevshot}.h5")
+
+        print(f"[{cfg.datevshot}] Adding fiber index  to: {shot_h5_fqfn} ... ")
+
+        cmd = f"python3 {hetdex_api_path}/h5tools/create_fiber_index_hdf5.py"
+        cmd += f" --shot_h5  {shot_h5_fqfn}"
+
+        system_command(cfg, cmd)
+
+        #test:
+        try:
+            h5 = tables.open_file(shot_h5_fqfn,mode="r")
+            if h5.__contains__("/FiberIndex"):
+                #success
+                print(f"[{cfg.datevshot}] Pass. Successfully added FiberIndex.")
+            else:
+                print(f"[{cfg.datevshot}] FAIL! Failed to add FiberIndex.")
+                rc = -1
+            h5.close()
+
+        except:
+            rc = -1
+            print(f"[{cfg.datevshot}] Could add fiber index to shot h5.", traceback.format_exc())
+    except:
+        rc = -1
+        print(f"[{cfg.datevshot}] Could add fiber index to shot h5.", traceback.format_exc())
+
+    return rc
 
 def add_fiber_mask(cfg,shot_h5_fqfn=None):
     """
@@ -4288,9 +4325,16 @@ if s04_make_shot and not dtprog["s04_make_shot"]:
         if rc < 0:
             print(f"[{cfg.datevshot}] Non-fatal. Could not compute amp stats from shot h5 file. Will continue anyway with catalog creation.")
 
-        rc = add_fiber_mask(cfg)
+        #need to add the index first
+        rc = add_fiber_index(cfg)
         if rc < 0:
-            print(f"[{cfg.datevshot}] Non-fatal. Could not update shot h5 file with fiber level masking. Will continue anyway with catalog creation.")
+            print(f"[{cfg.datevshot}] Severe, but non-fatal. Could not add fiber index. Will continue anyway with catalog creation.")
+        else:
+            #then can add the mask
+            rc = add_fiber_mask(cfg)
+            if rc < 0:
+                print(f"[{cfg.datevshot}] Non-fatal. Could not update shot h5 file with fiber level masking. Will continue anyway with catalog creation.")
+
         progress_update(cfg,dtprog, "s04e_amp_stats")
 
     #basic shot analysis (mostly images for review)
