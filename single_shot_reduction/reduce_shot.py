@@ -246,9 +246,10 @@ if "-help" in args:
            where <shot> is YYYYMMDDSSS or YYYYMMDDvSSS
     
     switches (all optional):
-    --clean <integer> : -5 to 5; 0 performs no cleanup (e.g. for full debugging), 
+    --clean <integer> : -5 to 5; 0 performs no cleanup (e.g. for full debugging). Default = (1) if not specified.
                       negatives do the same as positives except they force the clean-up immediately and as the only action
-                      1 = [default] basic cleaning of scripts and non-informative intermediate files
+                      0 = No clean up at all. Intermediate files and all tempory scripts reamin. Good for debugging.
+                      1 = *** default *** Basic cleaning of scripts and non-informative intermediate files
                           (--resume can still work if accompanied by --update)
                       2 = removes additional intermediate files, and most debugging files, vdrp, etc
                           (--resume can still work if accompanied by --update)
