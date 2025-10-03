@@ -103,7 +103,6 @@ WorkDirRoot = "./"
 red1path = None # if None, will use the local (cwd) as the basepath, otherwise user can edit and specify one here
                 # "/scratch/03261/polonius/red1/reductions/"
 
-
 HETRaw_archive = "/corral-repl/utexas/Hobby-Eberly-Telesco/het_raw/"
 HET_by_date = "/work/03946/hetdex/maverick/"
 karlgettar = "/work/00115/gebhardt/maverick/gettar/"
@@ -1478,10 +1477,58 @@ def initial_setup(cfg):
     virus_paths = [HET_by_date,os.path.join(cfg.cwd_orig,"het_raw")]
     if not os.path.exists(os.path.join(virus_paths[0],virustar)):
         if not os.path.exists(os.path.join(virus_paths[1],virustar)):
-            print(f"[{cfg.datevshot}] FATAL. Could not locate {virustar} under {virus_paths}")
-            print(f"[{cfg.datevshot}] You may need to first copy and extract "
-                  f"/corral/utexas/Hobby-Eberly-Telesco/het_raw/<date>.tar to your local het_raw directory")
-            return -1
+            fail = True
+            if os.path.exists(os.path.join(HETRaw_archive,f"{cfg.datevshot[-3:]}.tar")):
+                print(f"[{cfg.datevshot}]. Could not locate {virustar} under {virus_paths}")
+                print(f"[{cfg.datevshot}]. Will attempt to copy. If successful, this will take many minutes ...")
+
+                #tmp lock file (so only one attempt to copy and extract; since there are often many observations
+                #   in this file, only one of the tasks that are on that date should copy)
+                tmp_lock_file =f"{cfg.datevshot[-3:]}.lock"
+                lock = FileLock(tmp_lock_file)  # we are in the top directory (not sciXXXX)
+                with lock:
+                    #try to copy
+                    if not os.path.exists(f"{cfg.cwd_orig}/het_raw"):
+                        os.makedirs(f"{cfg.cwd_orig}/het_raw", exist_ok=True)
+
+                    if safe_cd("../het_raw"):
+                        #check that another process has not already copied the file (see above pathing)
+                        if not os.path.exists(os.path.join(virus_paths[1], virustar)):
+
+                            shutil.copy2(os.path.join(os.path.join(HETRaw_archive,f"{cfg.datevshot[-3:]}.tar"),"."))
+
+                            try:
+                                # need only some of the paths ... don't know which /virus we may also need so keep all
+                                cmd = f"tar -xvf {cfg.datevshot[-3:]}.tar {cfg.datevshot[-3:]}/virus"
+                                system_command(cfg, cmd)
+
+                                cmd = f"tar -xvf {cfg.datevshot[-3:]}.tar gc1"
+                                system_command(cfg, cmd)
+
+                                cmd = f"tar -xvf {cfg.datevshot[-3:]}.tar gc2"
+                                system_command(cfg, cmd)
+
+                                #last check (note: gc1 and gc2 are desirable to have, but not required)
+                                if os.path.exists(os.path.join(virus_paths[1], virustar)):
+                                    fail = False #we should be okay now
+
+                            except:
+                                print(f"[{cfg.datevshot}] Failed to copy/extract date tar file.",traceback.format_exc())
+
+                            #now we should delete the big <date>.tar file
+                            cmd = f"rm  {cfg.datevshot[-3:]}.tar"
+                            system_command(cfg, cmd)
+
+                        else:
+                            fail = False #another process DID copy and the file we want is there now
+
+            if fail:
+                print(f"[{cfg.datevshot}] FATAL. Could not locate {virustar} under {virus_paths}")
+                print(f"[{cfg.datevshot}] You may need to first copy and extract "
+                      f"{HETRaw_archive}/<date>.tar to your local het_raw directory")
+                return -1
+            else: #we did eventually get what we need, so go back to the working dir and continue
+                os.chdir(workdir)
 
     if not resume or cfg.update_local_repo:
         print(f"Copying source code to working directory {cfg.cwd}...")
