@@ -1480,9 +1480,10 @@ def initial_setup(cfg):
     if not os.path.exists(os.path.join(virus_paths[0],virustar)):
         if not os.path.exists(os.path.join(virus_paths[1],virustar)):
             fail = True
-            if os.path.exists(os.path.join(HETRaw_archive,f"{cfg.datevshot[:8]}.tar")):
+            src_tar = os.path.join(HETRaw_archive,f"{cfg.datevshot[:8]}.tar")
+            if os.path.exists(src_tar):
                 print(f"[{cfg.datevshot}]. Could not locate {virustar} under {virus_paths}")
-                print(f"[{cfg.datevshot}]. Will attempt to copy. If successful, this will take many minutes ...")
+                print(f"[{cfg.datevshot}]. Will attempt to copy {src_tar}. If successful, this will take many minutes ...")
 
                 #tmp lock file (so only one attempt to copy and extract; since there are often many observations
                 #   in this file, only one of the tasks that are on that date should copy)
@@ -1497,18 +1498,24 @@ def initial_setup(cfg):
                         #check that another process has not already copied the file (see above pathing)
                         if not os.path.exists(os.path.join(virus_paths[1], virustar)):
 
-                            shutil.copy2(os.path.join(HETRaw_archive,f"{cfg.datevshot[:8]}.tar"),".")
+                            #shutil.copy2(os.path.join(HETRaw_archive,f"{cfg.datevshot[:8]}.tar"),".")
 
                             try:
                                 # need only some of the paths ... don't know which /virus we may also need so keep all
-                                cmd = f"tar -xvf {cfg.datevshot[:8]}.tar {cfg.datevshot[:8]}/virus"
+                                #cmd = f"tar -xvf {cfg.datevshot[:8]}.tar {cfg.datevshot[:8]}/virus"
+                                cmd = f"tar -xvf {src_tar} {cfg.datevshot[:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar"
                                 system_command(cfg, cmd)
 
-                                cmd = f"tar -xvf {cfg.datevshot[:8]}.tar gc1"
-                                system_command(cfg, cmd)
+                                #cmd = f"tar -xvf {cfg.datevshot[:8]}.tar gc1"
+                                #this MIGHT already exist if another process got it
+                                if not os.path.exists(f"{cfg.datevshot[:8]}/gc1"):
+                                    cmd = f"tar -xvf {src_tar} {cfg.datevshot[:8]}/gc1"
+                                    system_command(cfg, cmd)
 
-                                cmd = f"tar -xvf {cfg.datevshot[:8]}.tar gc2"
-                                system_command(cfg, cmd)
+                                #cmd = f"tar -xvf {cfg.datevshot[:8]}.tar gc2"
+                                if not os.path.exists(f"{cfg.datevshot[:8]}/gc2"):
+                                    cmd = f"tar -xvf {src_tar} {cfg.datevshot[:8]}/gc2"
+                                    system_command(cfg, cmd)
 
                                 #last check (note: gc1 and gc2 are desirable to have, but not required)
                                 if os.path.exists(os.path.join(virus_paths[1], virustar)):
@@ -1517,9 +1524,10 @@ def initial_setup(cfg):
                             except:
                                 print(f"[{cfg.datevshot}] Failed to copy/extract date tar file.",traceback.format_exc())
 
+                            #not necessary ... changed to just extract the key files
                             #now we should delete the big <date>.tar file
-                            cmd = f"rm  {cfg.datevshot[:8]}.tar"
-                            system_command(cfg, cmd)
+                            #cmd = f"rm  {cfg.datevshot[:8]}.tar"
+                            #system_command(cfg, cmd)
 
                         else:
                             fail = False #another process DID copy and the file we want is there now
@@ -1530,7 +1538,7 @@ def initial_setup(cfg):
                       f"{HETRaw_archive}/<date>.tar to your local het_raw directory")
                 return -1
             else: #we did eventually get what we need, so go back to the working dir and continue
-                os.chdir(workdir)
+                os.chdir(cfg.cwd)
 
     if not resume or cfg.update_local_repo:
         print(f"Copying source code to working directory {cfg.cwd}...")
