@@ -1493,11 +1493,11 @@ def initial_setup(cfg):
                     if not os.path.exists(f"{cfg.cwd_orig}/het_raw"):
                         os.makedirs(f"{cfg.cwd_orig}/het_raw", exist_ok=True)
 
-                    if safe_cd("../het_raw"):
+                    if safe_cd(f"{cfg.cwd_orig}/het_raw"):
                         #check that another process has not already copied the file (see above pathing)
                         if not os.path.exists(os.path.join(virus_paths[1], virustar)):
 
-                            shutil.copy2(os.path.join(os.path.join(HETRaw_archive,f"{cfg.datevshot[:8]}.tar"),"."))
+                            shutil.copy2(os.path.join(HETRaw_archive,f"{cfg.datevshot[:8]}.tar"),".")
 
                             try:
                                 # need only some of the paths ... don't know which /virus we may also need so keep all
