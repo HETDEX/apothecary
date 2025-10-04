@@ -1478,7 +1478,7 @@ def initial_setup(cfg):
     if not os.path.exists(os.path.join(virus_paths[0],virustar)):
         if not os.path.exists(os.path.join(virus_paths[1],virustar)):
             fail = True
-            if os.path.exists(os.path.join(HETRaw_archive,f"{cfg.datevshot[-3:]}.tar")):
+            if os.path.exists(os.path.join(HETRaw_archive,f"{cfg.datevshot[:8]}.tar")):
                 print(f"[{cfg.datevshot}]. Could not locate {virustar} under {virus_paths}")
                 print(f"[{cfg.datevshot}]. Will attempt to copy. If successful, this will take many minutes ...")
 
@@ -1495,17 +1495,17 @@ def initial_setup(cfg):
                         #check that another process has not already copied the file (see above pathing)
                         if not os.path.exists(os.path.join(virus_paths[1], virustar)):
 
-                            shutil.copy2(os.path.join(os.path.join(HETRaw_archive,f"{cfg.datevshot[-3:]}.tar"),"."))
+                            shutil.copy2(os.path.join(os.path.join(HETRaw_archive,f"{cfg.datevshot[:8]}.tar"),"."))
 
                             try:
                                 # need only some of the paths ... don't know which /virus we may also need so keep all
-                                cmd = f"tar -xvf {cfg.datevshot[-3:]}.tar {cfg.datevshot[-3:]}/virus"
+                                cmd = f"tar -xvf {cfg.datevshot[:8]}.tar {cfg.datevshot[:8]}/virus"
                                 system_command(cfg, cmd)
 
-                                cmd = f"tar -xvf {cfg.datevshot[-3:]}.tar gc1"
+                                cmd = f"tar -xvf {cfg.datevshot[:8]}.tar gc1"
                                 system_command(cfg, cmd)
 
-                                cmd = f"tar -xvf {cfg.datevshot[-3:]}.tar gc2"
+                                cmd = f"tar -xvf {cfg.datevshot[:8]}.tar gc2"
                                 system_command(cfg, cmd)
 
                                 #last check (note: gc1 and gc2 are desirable to have, but not required)
@@ -1516,7 +1516,7 @@ def initial_setup(cfg):
                                 print(f"[{cfg.datevshot}] Failed to copy/extract date tar file.",traceback.format_exc())
 
                             #now we should delete the big <date>.tar file
-                            cmd = f"rm  {cfg.datevshot[-3:]}.tar"
+                            cmd = f"rm  {cfg.datevshot[:8]}.tar"
                             system_command(cfg, cmd)
 
                         else:
