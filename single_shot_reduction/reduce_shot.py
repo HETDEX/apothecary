@@ -283,6 +283,8 @@ if "-help" in args:
 queue_elixer = False
 if "-queue_elixer" in args:
     print("Hidden switch : queueing elixer slurm jobs that match datevshot ...")
+    print("Usage: python reduce_shot.py <datevshot>")
+    print("Usage: wildcards allowed, but DO NOT prefix with 'sci' ")
     args.remove("-queue_elixer")
     queue_elixer = True
 
