@@ -1966,6 +1966,10 @@ def run_vdrp(cfg):
 
     os.chdir(os.path.join(cfg.cwd,"vdrp/shifts"))
 
+    fail_gaia = False
+    fail_sdss = False
+    fail_panstarrs = False
+
 
     #GAIA first
     #command is based on rta.YYYYMM
@@ -1987,8 +1991,14 @@ def run_vdrp(cfg):
         #move the output under gaia
         os.makedirs("gaia",exist_ok=True)
         system_command(cfg,f"mv {cfg.datevshot[0:6]}??v??? gaia")
+
+        #check the dithall.gaia exists
+        if not os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.gaia")):
+            fail_gaia = True
+
     except Exception as e:
         print(f"[{cfg.datevshot}] VDRP: GAIA fail.",e,  "\n", traceback.format_exc())
+        fail_gaia = True
 
 
     #!!! notice: we are doing limited checking here ... that will be done later
@@ -2015,11 +2025,17 @@ def run_vdrp(cfg):
         #move the output under sdss
         os.makedirs("sdss",exist_ok=True)
         system_command(cfg,f"mv {cfg.datevshot[0:6]}??v??? sdss")
+
+        #check the dithall.sdss exists
+        if not os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.sdss")):
+            fail_sdss = True
+
     except Exception as e:
         print(f"[{cfg.datevshot}] VDRP: SDSS fail.", e, "\n", traceback.format_exc())
+        fail_sdss = True
 
 
-    if do_panstarrs:
+    if do_panstarrs or (fail_gaia and fail_sdss):
         #PanSTARRS
         print(f"[{cfg.datevshot}] VDRP: PANSTARRS")
         try:
@@ -2036,13 +2052,20 @@ def run_vdrp(cfg):
             #move the output under panstarrs
             os.makedirs("panstarrs",exist_ok=True)
             system_command(cfg,f"mv {cfg.datevshot[0:6]}??v??? panstarrs")
+
+            # check the dithall.panstarrs exists
+            if not os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.panstarrs")):
+                fail_panstarrs = True
+
         except Exception as e:
             print(f"[{cfg.datevshot}] VDRP: PANSTARRS fail.", e, "\n", traceback.format_exc())
+            fail_panstarrs = True
 
     #todo: which is the main dithall, etc???? (normally it is SDSS for calibration and gaia for astrometry)
     #print("!!! todo: copy GAIA dithaall to /scatch/projects and /corral-repl ???")
 
     # set the star catalog to use for calibration (make a softlink to the starcat specific output for this shot)
+    # note: this happens regardless of outcome
     # just in case something went badly wrong, make sure we are in the right directory
     os.chdir(os.path.join(cfg.cwd, "vdrp/shifts"))
     system_command(cfg, f"ln -s {cfg.starcat_cal}/{cfg.datevshot} {cfg.datevshot}")
@@ -2056,8 +2079,40 @@ def check_vdrp(cfg):
     :param cfg:
     :return:
     """
-    print("todo: check vdrp ... ")
-    return 0
+
+    fail_gaia = False
+    fail_sdss = False
+    fail_panstarrs = False
+
+    # check the dithall.gaia exists
+    if os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.gaia")):
+        print(f"[{cfg.datevshot}] VDRP: GAIA [Pass]")
+    else:
+        print(f"[{cfg.datevshot}] VDRP: GAIA [FAIL]")
+        fail_gaia = True
+
+    # check the dithall.sdss exists
+    if os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.sdss")):
+        print(f"[{cfg.datevshot}] VDRP: SDSS [Pass]")
+    else:
+        print(f"[{cfg.datevshot}] VDRP: SDSS [FAIL]")
+        fail_sdss = True
+
+    # check the dithall.panstarrs exists (this might not have been run, so it may be okay if it did not)
+    if os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.panstarrs")):
+        print(f"[{cfg.datevshot}] VDRP: PanSTARRs [Pass]")
+    else:
+        fail_panstarrs = True
+        if (fail_gaia and fail_sdss):
+            print(f"[{cfg.datevshot}] VDRP: PanSTARRs [FAIL]")
+        else:
+            #maybe it just was not set to run
+            print(f"[{cfg.datevshot}] VDRP: PanSTARRs not found.")
+
+    if fail_gaia and fail_sdss and fail_panstarrs:
+        return -1
+    else:
+        return 0
 
 
 
@@ -4257,7 +4312,8 @@ else:
 if s02_vdrp and not dtprog["s02_vdrp"]:
     run_vdrp(cfg)
 
-    check_vdrp(cfg)
+    if check_vdrp(cfg) < 0:
+        Quit(cfg, -1, "FATAL. Could not make astrometric solution.")
 
     #todo: optional manual step here (need to be hetdex user), copy the *.dithall to
     #  /scratch/projects/hetdex/detect/dithall   (and /coral-repl/...)
