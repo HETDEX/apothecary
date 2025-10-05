@@ -837,10 +837,10 @@ def Quit(cfg,rc,msg=None,write_status=True):
         if write_status and safe_cd(cfg.cwd):
             if rc < 0:
                 with open("status.fail","w") as f:
-                    f.write(f"[{cfg.datevshot}] ({rc}) {msg}")
+                    f.write(f"[{cfg.datevshot}] ({rc}) {msg}\n")
             else:
                 with open("status.pass","w") as f:
-                    f.write(f"[{cfg.datevshot}] ({rc}) {msg}")
+                    f.write(f"[{cfg.datevshot}] ({rc}) {msg}\n")
     except:
         pass
 
