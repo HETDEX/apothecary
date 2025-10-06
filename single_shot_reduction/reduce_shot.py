@@ -104,6 +104,8 @@ red1path = None # if None, will use the local (cwd) as the basepath, otherwise u
                 # "/scratch/03261/polonius/red1/reductions/"
 
 HETRaw_archive = "/corral-repl/utexas/Hobby-Eberly-Telesco/het_raw/"
+#HETDEXSurvey = "/corral-repl/utexas/Hobby-Eberly-Telesco/hdr5/survey/survey_hdr5.h5"
+HETDEXSurvey = "/scratch/projects/hetdex/hdr5/survey/survey_hdr5.h5"
 HET_by_date = "/work/03946/hetdex/maverick/"
 karlgettar = "/work/00115/gebhardt/maverick/gettar/"
 karlfplane = "/work/00115/gebhardt/maverick/fplane/"
@@ -199,6 +201,7 @@ s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_sour
 @dataclass
 class Config:
 
+    hetdex: bool = False #if True, can re-run hetdex shots, otherwise they are not allowed
     clean: int = 0 #post run clean level; 0 = do not clean
     clean_only: bool = False #if True, do nothing except for -clean
     #simul : int = 0 #number of simultaneous shots being run (e.g. tasks per node), 0 is unset
@@ -223,6 +226,7 @@ class Config:
     file_stdout = None
 
     guider_fwhm = None
+
 
 
 
@@ -263,6 +267,8 @@ if "-help" in args:
                       exactly one to reduce). If not present or set to (0), will use all exposures for the observation. 
         
     --help : display this help text and exit
+    
+    --hetdex : if present, overrides the restriction on running existing HETDEX shots
              
     --overwrite : removes the shot working directory completely and (re)starts fresh. 
               !!! Notice: --resume has priority over --overwrite
@@ -344,6 +350,10 @@ if "-exp" in args:
     del args[i+1]  # args.pop(0) #remove THIS file
     args.remove("-exp")
 
+
+if "-hetdex" in args:
+    cfg.hetdex = True
+    args.remove("-hetdex")
 
 #whatever is left should be the shot
 if len(args) != 1:
@@ -1394,6 +1404,20 @@ def precheck(cfg):
             if importlib.util.find_spec(pkg) is None:
                 print(f"Fatal. You need to install '{pkg}'")
                 rc = -1
+
+
+        #is this a hetdex shot and if so, is it allowed?
+        if not cfg.hetdex:
+            try:
+                h5 = tables.open_file(HETDEXSurvey,mode="r")
+                dex_shots = h5.root.Survey.read(field="shotid")
+                if np.int64(cfg.datevshot.replace("v","")) in dex_shots:
+                    print(f"[{cfg.datevshot}] is an existing HETDEX shot. To re-reduce here, re-run with --hetdex")
+                    rc = -1
+                h5.close()
+            except:
+                print(f"[{cfg.datevshot}] Exception checking HETDEX Survye file {HETDEXSurvey}", traceback.format_exc())
+
 
         if rc != 0:
             return -1
@@ -4227,9 +4251,16 @@ def prep_elixer(cfg):
                 # make a copy of the elixer.run as elixer_lines.run so can prepend
                 if safe_cd(os.path.join(elixdir,"out")):
                     if os.path.exists("elixer_line.run"):
-                        system_command(cfg, "cp elixer.run elixer_cont.run")
-                        system_command(cfg, "rm elixer.run")
-                        system_command(cfg, "cat elixer_line.run elixer_cont.run > elixer.run")
+                        system_command(cfg, "mv elixer.run elixer_cont.run")
+                        #for some reason, a simple cat is not working ....
+                        #system_command(cfg, "sleep 5; cat elixer_line.run elixer_cont.run > elixer.run")
+                        with open("elixer.run","w") as elixer_run:
+                            with open("elixer_line.run","r") as elixer_line:
+                                for line in elixer_line:
+                                    elixer_run.write(line)
+                            with open("elixer_cont.run", "r") as elixer_cont:
+                                for line in elixer_cont:
+                                    elixer_run.write(line)
 
             #print(f"[{cfg.datevshot}]Preparing ELiXer SLURMS ... ")
             #os.chdir(elixdir)
