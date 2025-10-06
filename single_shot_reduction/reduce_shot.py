@@ -833,6 +833,11 @@ def Quit(cfg,rc,msg=None,write_status=True):
         #else:
         #    print(f"({rc})")
 
+    try: #remove the status.run file (if it exists)
+        system_command(cfg,f"rm {os.path.join(cfg.cwd,'status.run')}")
+    except:
+        pass
+
     try:
         if write_status and safe_cd(cfg.cwd):
             if rc < 0:
@@ -3604,12 +3609,17 @@ def check_detid_counter(cfg,cont,nominal_max):
 
         h5 = tables.open_file(f"{cfg.datevshot}_{which}.h5")
         ids = h5.root.Detections.read(field="detectid")
-        maxid = np.max(ids)
+        if ids is not None and len(ids) > 0:
+            maxid = np.max(ids)
 
-        if maxid > nominal_max:
-            rc = len(ids)
+            if maxid > nominal_max:
+                rc = len(ids)
+            else:
+                rc = 0
         else:
-            rc = 0
+            print(f"[{cfg.datevshot}] Warning! No detections found in {cfg.datevshot}_{which}.h5")
+            rc = -1 #it is not reasonable that there should not be any detections
+                    #this is not fatal, but it will print an error
 
     except:
         rc = -1
@@ -4153,20 +4163,69 @@ def prep_elixer(cfg):
             which_elixer = f"python {elixer_path}/selixer.py" #"selixer.test "
             elixer_base_cmd = f" -f --slurm 0 --nodes 1 --log info --shot_h5 {shot_h5} --diagnose {diagnose_tab} " \
                               f" --png --error 3.0 --neighborhood 10.0 --post_merge 2 "
-            elixer_line_cmd = f" --name line --dets line.dets  --hdf5 {line_h5} "
-            elixer_cont_cmd = f" --name cont --continuum --dets cont.dets  --hdf5 {cont_h5} "
 
-            with open(os.path.join(elixdir,"elixer_cmd.txt"),"w") as f:
-                if make_lines:
+            #combine into a single job at the end, so their names need to match
+            elixer_line_cmd = f" --name out --dets line.dets  --hdf5 {line_h5} "
+            elixer_cont_cmd = f" --name out --continuum --dets cont.dets  --hdf5 {cont_h5} "
+
+            minutes = 0
+            dispatch_base = 0
+            os.chdir(elixdir)
+            if make_lines:
+                with open(os.path.join("elixer_line_cmd.txt"),"w") as f:
                     f.write(f"{which_elixer} {elixer_base_cmd} {elixer_line_cmd} \n")
-                if make_conts:
+
+                print(f"[{cfg.datevshot}] Preparing ELiXer (line) SLURM ... ")
+                system_command(cfg, "source elixer_line_cmd.txt")
+
+                try:
+                    #get the time to add to the continuum sources AND get the dispatch_base
+                    if safe_cd(os.path.join(elixdir,"out")):
+                        fns = sorted(glob.glob("dispatch_*"))
+                        if len(fns) > 0:
+                            dispatch_base = int(fns[-1][-4:])
+                            # no point in getting the time if this failed, so assuming it was successful:
+                            with open("elixer.slurm",'r') as slurm_file:
+                                for line in slurm_file:
+                                    if "#SBATCH -t" in line and "Run time" in line:
+                                        toks = line.split()
+                                        t_idx = toks.index("-t")
+                                        t_idx += 1
+                                        t = datetime.strptime(toks[t_idx],"%H:%M:%S")
+                                        minutes = int(t.hour * 60 + t.minute)
+                                        break
+
+                        #make a copy of the elixer.run as elixer_lines.run so can prepend
+                        system_command(cfg,"cp elixer.run elixer_line.run")
+                except:
+                    print(f"[{cfg.datevshot}] Error bulding elixer.slurm file(s) ...", traceback.format_exc())
+
+            os.chdir(elixdir)
+            if make_conts:
+                # is there a line slurm already set up?
+                print(f"[{cfg.datevshot}] Extra time ({minutes}) and dispatch start ({dispatch_base})")
+                if minutes > 0 and dispatch_base > 0:
+                    elixer_cont_cmd += f" --time_add {minutes}  --dispatch_base {dispatch_base} "
+
+                with open(os.path.join("elixer_cont_cmd.txt"), "w") as f:
                     f.write(f"{which_elixer} {elixer_base_cmd} {elixer_cont_cmd} \n")
 
-            print(f"[{cfg.datevshot}]Preparing ELiXer SLURMS ... ")
-            os.chdir(elixdir)
-            system_command(cfg,"source elixer_cmd.txt")
+                print(f"[{cfg.datevshot}] Preparing ELiXer (cont) SLURM ... ")
+                system_command(cfg, "source elixer_cont_cmd.txt")
 
-            print("Default ELiXer SLURMS prepared. However, you may edit ./elixer/elixer_cmd.txt re-run if needed.")
+                # make a copy of the elixer.run as elixer_lines.run so can prepend
+                if safe_cd(os.path.join(elixdir,"out")):
+                    if os.path.exists("elixer_line.run"):
+                        system_command(cfg, "cp elixer.run elixer_cont.run")
+                        system_command(cfg, "rm elixer.run")
+                        system_command(cfg, "cat elixer_line.run elixer_cont.run > elixer.run")
+
+            #print(f"[{cfg.datevshot}]Preparing ELiXer SLURMS ... ")
+            #os.chdir(elixdir)
+            #system_command(cfg,"source elixer_cmd.txt")
+
+            print("Default ELiXer SLURMS prepared. However, you may edit ./elixer/elixer_*_cmd.txt re-run if needed.")
+            print("NOTICE!!! if there is a single 'out' directory, then the line and cont files have been merged together.")
             print("To re-run, remove the ./elixer/line and ./elixer/cont directories then 'source' the edited 'elixer_cmd.txt' file."
                   " It will set up, but not queue, two SLURM jobs (line and cont).")
             print("You may then edit ./elixer/line/elixer.slurm and ./elixer/cont/elixer.slurm if needed and sbatch when ready.")
@@ -4223,7 +4282,7 @@ if cfg.exp <= 0:
     else:
         #print(f"[{cfg.datevshot}] !!! bad !!! Unusual number of exposures ({cfg.numexp}).")
         print(f"********************************************************************************************")
-        print(f"!!! WARNING !!! Unusual number of exposures ({cfg.numexp}) !!! Reduction may be problematic.")
+        print(f"!!! WARNING !!! Unusual number of exposures ({cfg.numexp}) for {cfg.datevshot} !!! Reduction may be problematic.")
         print(f"                You may want to consider reducing each exposure individually. ")
         print(f"********************************************************************************************")
 else:
@@ -4286,6 +4345,11 @@ print(f"[{cfg.datevshot}] Logging redirected to: {cfg.cwd}/{cfg.file_stdout.name
 
 # get the progress state. Useful if resuming (implied)
 dtprog = progress_init(cfg)
+
+
+#begin
+with open("status.run", "w") as f:
+    f.write(f"[{cfg.datevshot}] running .... \n")
 
 ###########
 # step1
