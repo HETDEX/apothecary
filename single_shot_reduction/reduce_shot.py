@@ -711,6 +711,7 @@ def post_clean(cfg):
                 system_command(cfg, f"rm *.txt")
                 system_command(cfg, f"rm *.dat")
                 system_command(cfg, f"rm *.fwhm")
+                system_command(cfg, f"rm status.*")
 
 
 
