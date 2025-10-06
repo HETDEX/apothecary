@@ -700,12 +700,19 @@ def post_clean(cfg):
 
 
 
-        if cfg.clean >= 5:  # ONLY keep the shot
+        if cfg.clean >= 5:  # ONLY keep the shot and detection h5 files
             if safe_cd(cfg.cwd):
+
                 system_command(cfg, f"rm -rf elixer") #NOTE: here we can go ahead and remove since it is the top dir
                                                       #and does not matter if elixer has executed
-                system_command(cfg, f"rm diagnose_classifications.tab")
-                system_command(cfg, f"rm {cfg.datevshot}_*")
+                system_command(cfg, f"rm *.tab")
+                system_command(cfg, f"rm *.pickle")
+                system_command(cfg, f"rm *.fits")
+                system_command(cfg, f"rm *.txt")
+                system_command(cfg, f"rm *.dat")
+                system_command(cfg, f"rm *.fwhm")
+
+
 
 
     except:
@@ -1420,6 +1427,9 @@ def initial_setup(cfg):
             print(f"[{cfg.datevshot}] Shot directory already exists here! {workdir}")
             print(f"[{cfg.datevshot}] Please include --resume or --overwrite to make intention clear.")
             print(f"[{cfg.datevshot}] Or is this a repeated SLURM task?")
+            if cfg.clean > 1:
+                print(f"[{cfg.datevshot}] Did you intend to only clean up the directory? "
+                      f"If so, --clean needs to be the negative value. (see --help)")
             return -1
 
     if not resume:
