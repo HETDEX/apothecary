@@ -212,8 +212,10 @@ class Config:
     datevshot: str = ""
     exp: int = 0  #specific exposure number to reduce
     numexp: int = 0 #number of exposures in the shot
+    total_exp_time : float = 0.0 #in seconds
     cwd_orig: str = os.getcwd()
     cwd: str = os.getcwd()
+    virus_tar_path : str = None
     #red1dir: str = f"{os.getcwd()}" #e.g. <path>/red1/reductions
                     # BUT "reductions" is added later, so stop at the "red1" equivalent; so is same as just cwd_orig here
     scriptdir: str = ""
@@ -918,6 +920,50 @@ def system_command(cfg,cmd):
         os.system(f"{cmd}")
 
 
+def get_exposure_times(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+
+    try:
+        date = cfg.datevshot[0:8]
+        path = os.path.join(HET_by_date, date)
+        virus_shot = "virus0000" + cfg.datevshot[-3:]
+        #base_tarfn = os.path.join(path, f"virus/{virus_shot}.tar")
+        if cfg.virus_tar_path is not None:
+            base_tarfn = cfg.virus_tar_path
+        else:
+            base_tarfn = os.path.join(path, f"virus/{virus_shot}.tar")
+
+        exposure_times = []
+        if os.path.exists(base_tarfn):
+            with tar.open(base_tarfn, "r") as tarfh:
+                fns = np.array(tarfh.getnames())
+                # should look like a list of:  virus0000007/exp01/virus/20241017T024257.2_106RU_sci.fits
+                # should all be the same base within each exposure
+                all_exps = np.array([x.split("/")[1] for x in fns])
+                exps = np.unique(all_exps)
+                # just need one from each exp
+                for exp in exps:
+                    sel = all_exps == exp
+                    if np.count_nonzero(sel) > 0:
+                        fn0 = fns[sel][0]
+                        t1, p1 = Utils.open_file_from_tar(base_tarfn, fn0)
+                        fh = fits.open(t1)
+                        exposure_times.append(fh[0].header['EXPTIME'])
+                        fh.close()
+
+        if len(exposure_times) == 0:
+            # could not find any
+            cfg.total_exp_time = None
+        else:
+            cfg.total_exp_time = np.nansum(exposure_times)
+
+    except:
+        print(f"Exception in get_exposure_times: {traceback.format_exc()}")
+
 def get_guider_fwhm(cfg):
     """
     try to get the seeing fwhm (IQ -- image quality) from the guider (gc1 or gc2) for the shot
@@ -972,7 +1018,12 @@ def get_guider_fwhm(cfg):
         #first what is the virus shot(s) we need
         #the guider filenames will not be the same, but will be close
         virus_shot = "virus0000" + cfg.datevshot[-3:]
-        base_tarfn = os.path.join(path, f"virus/{virus_shot}.tar")
+
+        if cfg.virus_tar_path is not None:
+            base_tarfn = cfg.virus_tar_path
+        else:
+            base_tarfn = os.path.join(path, f"virus/{virus_shot}.tar")
+
         if os.path.exists(base_tarfn):
             with tar.open(base_tarfn, "r") as tarfh:
                 fns = np.array(tarfh.getnames())
@@ -998,6 +1049,8 @@ def get_guider_fwhm(cfg):
         if len(exposure_fn_times) == 0:
             #could not find any
             return None
+        else:
+            cfg.total_exp_time = np.nansum(exposure_times)
 
         #try gc1
         base_tarfn = os.path.join(path,"gc1/gc1.tar")
@@ -1579,6 +1632,11 @@ def initial_setup(cfg):
                 return -1
             else: #we did eventually get what we need, so go back to the working dir and continue
                 os.chdir(cfg.cwd)
+                cfg.virus_tar_path = os.path.join(f"{cfg.cwd_orig}/het_raw",virustar)
+        else:
+            cfg.virus_tar_path = os.path.join(virus_paths[1], virustar)
+    else:
+        cfg.virus_tar_path = os.path.join(virus_paths[0],virustar)
 
     if not resume or cfg.update_local_repo:
         print(f"Copying source code to working directory {cfg.cwd}...")
@@ -3058,7 +3116,7 @@ def amp_stats(cfg,shot_h5_fqfn=None):
 
             #???how much of stats_qc needs to be re-done since it is based on 3-dithers and some joint statistics???
             #several of the checks are looking for extreme variation over the dithers, which can't be done with just one dither
-            t = AmpStats.stats_qc(t, extend=True)
+            t = AmpStats.stats_qc(t, extend=True,total_exp_time=cfg.total_exp_time)
 
             t.write(f"{cfg.datevshot}_ampstats.fits",format="fits",overwrite=True)
             t.write(f"{cfg.datevshot}_ampstats.tab", format="ascii",overwrite=True)
@@ -4197,7 +4255,7 @@ def prep_elixer(cfg):
 
             which_elixer = f"python {elixer_path}/selixer.py" #"selixer.test "
             elixer_base_cmd = f" -f --slurm 0 --nodes 1 --log info --shot_h5 {shot_h5} --diagnose {diagnose_tab} " \
-                              f" --png --error 3.0 --neighborhood 10.0 --post_merge 2 "
+                              f" --png --error 3.0 --neighborhood 10.0 --post_merge 2 --ntasks_per_node 40 "
 
             #combine into a single job at the end, so their names need to match
             elixer_line_cmd = f" --name out --dets line.dets  --hdf5 {line_h5} "
@@ -4353,12 +4411,13 @@ rc = node_setup(cfg)
 
 if cfg.numexp < 3:
     print(f"Fewer than 3 exposures (assume dithers). Checking guider for seeing FWHM...")
-    cfg.guider_fwhm = get_guider_fwhm(cfg)
+    cfg.guider_fwhm = get_guider_fwhm(cfg) #this also gets the exposure times
     if cfg.guider_fwhm is not None:
         print(f"Using guider FWHM = {cfg.guider_fwhm}")
     else:
         print(f"Unable to obtain guider seeing FWHM. Will measure as best can be from available data.")
-
+else:
+    get_exposure_times(cfg)
 
 
 
