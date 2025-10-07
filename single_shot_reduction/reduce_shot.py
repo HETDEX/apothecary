@@ -432,6 +432,38 @@ def run_queue_elixer(cfg):
 
     os.chdir(cwd)
 
+def hetdex_dither(cfg):
+    """
+    check the dither positions if 3 exposures ... is it HETDEX ?
+    since this uses the shot h5 file we generate, need to wait until that is ready to run
+    (can use this to see if we should bother with detections)
+    (e.g. if just one exposure OR is 3 exposures as HETDEX dither, then, yes, run detections)
+    :param cfg:
+    :return: -1 (error) 0 = no  1 = yes
+    """
+
+    rc  = 0
+    try:
+        h5 = tables.open_file(os.path.join(cfg.cwd,f"{cfg.datevshot}.h5"),mode='r')
+        x = h5.root.Shot.read(field="xditherpos")
+        y = h5.root.Shot.read(field="yditherpos")
+
+        if len(x) == 3 and len(y) == 3:
+            if x[0] == 0 and y[0] == 0:
+                if 0.8 < x[1] < 1.5 and -0.9 < y[1] < -0.5:
+                    if 0.8 < x[2] < 1.5 and 0.5 < y[2] < 0.9:
+                        rc = 1
+    except:
+        rc = -1
+        print(f"[{cfg.datevshot}] Exception in hetdex_dither()", traceback.format_exc())
+
+    try:
+        h5.close()
+    except:
+        pass
+
+    return rc
+
 def post_clean(cfg):
     """
     clean up after the run ...
@@ -538,12 +570,6 @@ def post_clean(cfg):
                         system_command(cfg,f"rm {fn}")
 
 
-
-            ############################
-            # getcen
-            ############################
-            if safe_cd(cfg.cwd):
-                system_command(cfg, f"rm -rf ./getcen")
 
 
             ############################
@@ -700,6 +726,10 @@ def post_clean(cfg):
             #removes the various original .mc, .spec, etc files
             #removed diagnose specific classifications
             # can no longer use --resume
+
+            if safe_cd(cfg.cwd):
+                system_command(cfg, f"rm -rf ./getcen")
+
 
             if safe_cd(cfg.cwd):
                 ############################
@@ -4267,6 +4297,26 @@ def prep_elixer(cfg):
             minutes = 0
             dispatch_base = 0
             os.chdir(elixdir)
+
+            #get count of line detects and continuum detects
+            try:
+                with open("line.dets","r") as f:
+                    line_ct = np.sum([1 for line in f])
+            except:
+                line_ct = None
+
+            try:
+                with open("cont.dets","r") as f:
+                    cont_ct = np.sum([1 for line in f])
+            except:
+                cont_ct = None
+
+            # todo: act if counts are abnormally large?
+            # tasks_per_node = 56 #normal default
+            # if very many continuum (more than 500 or more than lines) could be an issue with memory and need to cut down
+            #
+
+
             if make_lines:
                 with open(os.path.join("elixer_line_cmd.txt"),"w") as f:
                     f.write(f"{which_elixer} {elixer_base_cmd} {elixer_line_cmd} \n")
@@ -4647,6 +4697,24 @@ else:
 # line detections
 # continuum detections
 ###########
+
+
+#precheck
+if cfg.numexp == 1:
+    pass
+elif cfg.numexp == 3:
+    rc = hetdex_dither(cfg)
+
+    if rc == 1: #all good
+        pass
+    elif rc == 0: #not HETDEX dither (that is okay but we cannot move on to source detection)
+        Quit(cfg, 0,f"[{cfg.datevshot}] ({cfg.numexp}) exposures not in HETDEX dither configuration and is not "
+             f"compatible with source detection. Will end here.")
+    else: #fail case
+        Quit(cfg, -1,f"[{cfg.datevshot}] Fatal error checking dither configuration. Will terminate here.")
+else:
+    Quit(cfg,0,f"[{cfg.datevshot}] Number of exposures ({cfg.numexp}) incompatible with source detection. Will end here.")
+
 
 if s05_detection and not dtprog["s05_detection"]:
 
