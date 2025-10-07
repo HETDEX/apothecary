@@ -445,13 +445,13 @@ def hetdex_dither(cfg):
     rc  = 0
     try:
         h5 = tables.open_file(os.path.join(cfg.cwd,f"{cfg.datevshot}.h5"),mode='r')
-        x = h5.root.Shot.read(field="xditherpos")
-        y = h5.root.Shot.read(field="yditherpos")
-
+        x = h5.root.Shot.read(field="xditherpos")[0]
+        y = h5.root.Shot.read(field="yditherpos")[0]
+        #very roughly ... allowing for some pretty big errors to even try
         if len(x) == 3 and len(y) == 3:
             if x[0] == 0 and y[0] == 0:
-                if 0.8 < x[1] < 1.5 and -0.9 < y[1] < -0.5:
-                    if 0.8 < x[2] < 1.5 and 0.5 < y[2] < 0.9:
+                if 0.0 < x[1] < 1.7 and -1.2 < y[1] < 0.0:
+                    if 0.0 < x[2] < 1.7 and 0.0 < y[2] < 1.5:
                         rc = 1
     except:
         rc = -1
