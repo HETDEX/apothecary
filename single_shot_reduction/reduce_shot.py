@@ -68,7 +68,7 @@ plt.style.use('default')
 # CONFIGURATION
 ########################################################################
 EchoCmds = True  #if True echo system commands to the log
-FilterDetsOnBadAmps = False # if True, do NOT pass detections that are on reported bad amps to elixer for processing
+FilterDetsOnBadAmps = True # if True, do NOT pass detections that are on reported bad amps to elixer for processing
 DefaultClean = 1 #clean 0 does nothing, 1 cleans script files and temporary stuff, 2,3,4,5 are increasingly agressive
 FutureShotDateLimit = 20490101000  # do not allow shots after this dave+shot
 LastKnownFplane = "fp20240731"
