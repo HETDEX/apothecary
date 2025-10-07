@@ -960,9 +960,10 @@ def get_exposure_times(cfg):
             cfg.total_exp_time = None
         else:
             cfg.total_exp_time = np.nansum(exposure_times)
+            print(f"[{cfg.datevshot}] Total exposure time: {cfg.total_exp_time}")
 
     except:
-        print(f"Exception in get_exposure_times: {traceback.format_exc()}")
+        print(f"[{cfg.datevshot}] Exception in get_exposure_times: {traceback.format_exc()}")
 
 def get_guider_fwhm(cfg):
     """
@@ -1051,6 +1052,7 @@ def get_guider_fwhm(cfg):
             return None
         else:
             cfg.total_exp_time = np.nansum(exposure_times)
+            print(f"[{cfg.datevshot}] Total exposure time: {cfg.total_exp_time}")
 
         #try gc1
         base_tarfn = os.path.join(path,"gc1/gc1.tar")
@@ -3177,6 +3179,7 @@ def add_fiber_index(cfg,shot_h5_fqfn=None):
             print(f"[{cfg.datevshot}] FiberIndex already exists in {shot_h5_fqfn} ... ")
             h5.close()
             return 0
+        h5.close() #must close the read handle, since the create_fiber_index_hdf5 will open as append
 
         print(f"[{cfg.datevshot}] Adding fiber index  to: {shot_h5_fqfn} ... ")
 
@@ -4416,7 +4419,8 @@ if cfg.numexp < 3:
         print(f"Using guider FWHM = {cfg.guider_fwhm}")
     else:
         print(f"Unable to obtain guider seeing FWHM. Will measure as best can be from available data.")
-else:
+
+if cfg.total_exp_time is None or cfg.total_exp_time == 0:
     get_exposure_times(cfg)
 
 
