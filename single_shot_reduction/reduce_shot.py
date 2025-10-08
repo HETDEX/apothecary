@@ -206,6 +206,7 @@ class Config:
     clean_only: bool = False #if True, do nothing except for -clean
     #simul : int = 0 #number of simultaneous shots being run (e.g. tasks per node), 0 is unset
     update_local_repo: bool = False
+    update_only : bool = False
     overwrite: bool = False
     resume: bool = False
     shotid: int = 0
@@ -285,10 +286,11 @@ if "-help" in args:
     """
 
     print(help)
-
     exit(0)
 
+len_args = len(args)
 queue_elixer = False
+
 if "-queue_elixer" in args:
     print("Hidden switch : queueing elixer slurm jobs that match datevshot ...")
     print("Usage: python reduce_shot.py <datevshot>")
@@ -359,9 +361,13 @@ if "-hetdex" in args:
 
 #whatever is left should be the shot
 if len(args) != 1:
-    print(f"Fatal: Problem with remaining args: {args}")
-    print(f"exititing....")
-    exit(-1)
+    #could be just an update or a help (but help is handled earlier)
+    if cfg.update_local_repo and len_args == 1: #was just an update
+        cfg.update_only = True
+    else:
+        print(f"Fatal: Problem with remaining args: {args}")
+        print(f"exititing....")
+        exit(-1)
 else:
     if not queue_elixer:
         try:
@@ -1511,6 +1517,23 @@ def precheck(cfg):
         print(f"Exception in precheck: {traceback.format_exc()}")
 
     return 0
+
+
+def update_only(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+
+    lock = FileLock(Lock_mutex_fn)  # we are in the top directory (not sciXXXX)
+    with lock:
+        if cfg.update_local_repo:
+            print("(Only) Updating local repo ...")
+            shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
+                            os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
+            cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+
 
 def initial_setup(cfg):
     """
@@ -4404,6 +4427,10 @@ def prep_elixer(cfg):
 ###########
 # setup
 ###########
+
+if cfg.update_only:
+    update_only(cfg)
+    exit(0)
 
 if queue_elixer:
     run_queue_elixer(cfg)
