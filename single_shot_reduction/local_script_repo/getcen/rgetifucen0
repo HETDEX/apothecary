@@ -1,3 +1,6 @@
+echo "rgetifucen0 -- do nothing"
+exit 0
+
 date=$1
 shot=$2
 resdir=$(pwd)
