@@ -1482,6 +1482,11 @@ def precheck(cfg):
     """
 
     try:
+
+        # echo a few key paths:
+        print(f"[{cfg.datevshot}] Precheck. HETDEX_API path: {hetdex_api_path}")
+        print(f"[{cfg.datevshot}] Precheck. ELiXer path: {elixer_path}")
+
         month = cfg.datevshot[0:6]
         path_check = os.path.join(hetdex_projects_path,f"lib_calib/{month}")
         if not os.path.exists(path_check):
@@ -4427,6 +4432,7 @@ def prep_elixer(cfg):
 ###########
 # setup
 ###########
+
 
 if cfg.update_only:
     update_only(cfg)
