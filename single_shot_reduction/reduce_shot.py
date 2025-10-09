@@ -204,6 +204,7 @@ class Config:
     hetdex: bool = False #if True, can re-run hetdex shots, otherwise they are not allowed
     clean: int = 0 #post run clean level; 0 = do not clean
     clean_only: bool = False #if True, do nothing except for -clean
+    clean_done : bool = False #set to True if the post_clean() has been performed
     #simul : int = 0 #number of simultaneous shots being run (e.g. tasks per node), 0 is unset
     update_local_repo: bool = False
     update_only : bool = False
@@ -487,11 +488,16 @@ def post_clean(cfg):
     """
 
     try:
+
+        if cfg.clean_done:
+            return
+
         #always try to clean up /tmp
         node_clean(cfg)
 
         if cfg.clean <=0:
             print(f"[{cfg.datevshot}] No -clean")
+            cfg.clean_done = True
             return
         else:
             print(f"[{cfg.datevshot}] --clean {cfg.clean}")
@@ -761,8 +767,7 @@ def post_clean(cfg):
                 system_command(cfg, f"rm *.fwhm")
                 system_command(cfg, f"rm status.*")
 
-
-
+        cfg.clean_done = True
 
     except:
         print(f"Exception in post_clean(). {traceback.format_exc()}")
@@ -906,6 +911,9 @@ def Quit(cfg,rc,msg=None,write_status=True):
         pass
 
     node_clean(cfg)
+
+    if rc >= 0:
+        post_clean(cfg)
 
     exit(rc)
 
@@ -4741,11 +4749,13 @@ elif cfg.numexp == 3:
     if rc == 1: #all good
         pass
     elif rc == 0: #not HETDEX dither (that is okay but we cannot move on to source detection)
+        post_clean(cfg)
         Quit(cfg, 0,f"[{cfg.datevshot}] ({cfg.numexp}) exposures not in HETDEX dither configuration and is not "
              f"compatible with source detection. Will end here.")
     else: #fail case
         Quit(cfg, -1,f"[{cfg.datevshot}] Fatal error checking dither configuration. Will terminate here.")
 else:
+    post_clean(cfg)
     Quit(cfg,0,f"[{cfg.datevshot}] Number of exposures ({cfg.numexp}) incompatible with source detection. Will end here.")
 
 
