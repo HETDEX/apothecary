@@ -2617,7 +2617,7 @@ def run_rcal(cfg):
         for multi, ra, dec in zip(multis, ras, decs):
             ct += 1
             #check the output exists cal_out/20240730v009_514_103_019_cal.fits
-            base_str = f"{ct}) checking {multi[6:]}  {ra:0.7f} {dec:0.7f} ... "
+            base_str = f"{ct}) checking run_cal [{cfg.datevshot}] {multi[6:]}  {ra:0.7f} {dec:0.7f} ... "
             #print(f"{ct}) checking {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ", end="")
             outfn = f"{cfg.datevshot}_{multi[6:]}_cal.fits"
             if os.path.exists(os.path.join("cal_out/", outfn)):
@@ -2654,13 +2654,13 @@ def run_rcal(cfg):
 
         if len(passed_rcal_list) == len(ras):
             rc = 0
-            print(f"{cfg.datevshot} (run_rcal) All Pass")
+            print(f"[{cfg.datevshot}] (run_rcal) All Pass")
         elif len(failed_rcal_list) == len(ras):  # all failed
             rc = -1
-            print(f"{cfg.datevshot} (run_rcal) ALL FAIL")
+            print(f"[{cfg.datevshot}] (run_rcal) ALL FAIL")
         else:
             rc = 1
-            print(f"{cfg.datevshot} (run_rcal) Mixed results of {len(ras)}: {len(passed_rcal_list)} Pass, {len(failed_rcal_list)} FAIL")
+            print(f"[{cfg.datevshot}] (run_rcal) Mixed results of {len(ras)}: {len(passed_rcal_list)} Pass, {len(failed_rcal_list)} FAIL")
 
 
     except:
@@ -2782,7 +2782,7 @@ def rdet_rf1(cfg):
         ct = 0
         for multi, ra, dec in zip(multis, ras, decs):
             ct +=1
-            base_str = f"{ct}) checking [{cfg.datevshot}] {multi[6:]}  {ra:0.7f} {dec:0.7f} ... "
+            base_str = f"{ct}) checking rdet_rf1 [{cfg.datevshot}] {multi[6:]}  {ra:0.7f} {dec:0.7f} ... "
             #print(f"{ct}) checking [{cfg.datevshot}] {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ", end="")
             output_found = np.array([0,0,0])
             for i,ext in enumerate(output_extensions):
