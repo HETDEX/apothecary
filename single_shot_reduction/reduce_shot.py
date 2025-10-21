@@ -4294,6 +4294,7 @@ def prep_elixer(cfg):
 
         make_lines = True
         tab = Table.read(f"{cfg.datevshot}_line_sourcecat.tab",format="ascii")
+        line_ct = -1
         if len(tab) == 0:
             print(f"[{cfg.datevshot}] Error! no line sources recorded. ")
             make_lines = False
@@ -4301,11 +4302,13 @@ def prep_elixer(cfg):
             sel = np.array([x['multiframe'] not in bad_amps_list for x in tab])
             print(f"[{cfg.datevshot}] Excluding {len(sel)-np.count_nonzero(sel)} / {len(sel)} line detections as residing on bad amps.")
             line_dets = list(tab['detectid'][sel])
+            line_ct = len(line_dets)
             np.savetxt(os.path.join(elixdir, "line.dets"), line_dets, fmt="%d")
             del tab
 
         make_conts = True
         tab = Table.read(f"{cfg.datevshot}_cont_sourcecat.tab",format="ascii")
+        cont_ct = -1
         if len(tab) == 0:
             print(f"[{cfg.datevshot}] Error! no continuum sources recorded. ")
             make_conts = False
@@ -4313,8 +4316,15 @@ def prep_elixer(cfg):
             sel = np.array([x['multiframe'] not in bad_amps_list for x in tab])
             print(f"[{cfg.datevshot}] Excluding {len(sel) - np.count_nonzero(sel)} / {len(sel)} continuum detections as residing on bad amps.")
             cont_dets = list(tab['detectid'][sel])
+            cont_ct = len(cont_dets)
             np.savetxt(os.path.join(elixdir, "cont.dets"), cont_dets, fmt="%d")
             del tab
+
+
+        tasks_per_node = 40
+
+        if line_ct > 500 or cont_ct > 500:
+            tasks_per_node = 25 #slow it down and conserve memory
 
         if make_lines or make_conts:
             shot_h5 = os.path.join(cfg.cwd,f"{cfg.datevshot}.h5")
@@ -4324,7 +4334,7 @@ def prep_elixer(cfg):
 
             which_elixer = f"python {elixer_path}/selixer.py" #"selixer.test "
             elixer_base_cmd = f" -f --slurm 0 --nodes 1 --log info --shot_h5 {shot_h5} --diagnose {diagnose_tab} " \
-                              f" --png --error 3.0 --neighborhood 10.0 --post_merge 2 --ntasks_per_node 40 "
+                              f" --png --error 3.0 --neighborhood 10.0 --post_merge 2 --ntasks_per_node {tasks_per_node} "
 
             #combine into a single job at the end, so their names need to match
             elixer_line_cmd = f" --name out --dets line.dets  --hdf5 {line_h5} "
