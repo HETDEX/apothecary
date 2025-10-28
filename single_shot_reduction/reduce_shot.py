@@ -2818,7 +2818,7 @@ def rdet_rf1(cfg):
                 #print(f"{base_str} {len(failed_list)} failed. Can be transient issues, so will re-run ...")
                 print(f"{cfg.datevshot} (rdet_rf1) : serially re-run {len(failed_list)} failed IFUs ...")
                 for ct,cmd in enumerate(failed_list):
-                    print(f"{cfg.datevshot} (rdet_rf1) : {ct} {cmd.split()[1]} {cmd.split()[2]} {cmd.split()[6]} ...",end="")
+                    print(f"{cfg.datevshot} (rdet_rf1) : {ct} {cmd.split()[1]} {cmd.split()[2]} {cmd.split()[6]} ...")#,end="")
                     system_command(cfg, cmd)
 
                     output_found = np.array([0, 0, 0])
@@ -2830,7 +2830,7 @@ def rdet_rf1(cfg):
                     if np.count_nonzero(output_found) != 3:
                         # something failed, we will want to re-run these once
                         #failed_list.append(cmd)
-                        print(f" FAIL. Second attempt. No more retries.")
+                        print(f"{cfg.datevshot} (rdet_rf1) : {ct} {cmd.split()[1]} {cmd.split()[2]} {cmd.split()[6]} ... FAIL. Second attempt. No more retries.")
                         rc = 1 #some failures, but not all
                     else:
                         print(f" pass")
