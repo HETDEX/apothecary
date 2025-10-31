@@ -457,8 +457,12 @@ def hetdex_dither(cfg):
         #very roughly ... allowing for some pretty big errors to even try
         if len(x) == 3 and len(y) == 3:
             if x[0] == 0 and y[0] == 0:
-                if 0.0 < x[1] < 1.7 and -1.2 < y[1] < 0.0:
-                    if 0.0 < x[2] < 1.7 and 0.0 < y[2] < 1.5:
+                # if 0.0 < x[1] < 1.7 and -1.2 < y[1] < 0.0:
+                #     if 0.0 < x[2] < 1.7 and 0.0 < y[2] < 1.5:
+                #         rc = 1
+                #keep this pretty loose
+                if 0.0 < x[1] < 2.0 and -2.0 < y[1] < 0.0:
+                    if 0.0 < x[2] < 2.0 and 0.0 < y[2] < 2.0:
                         rc = 1
     except:
         rc = -1
@@ -1910,7 +1914,7 @@ def num_exposures_in_shot(shotid):
 
     #the ? could be s or t
     try:
-        idx = -1
+        #idx = -1
         date, shot, exp = np.loadtxt(fn.replace('?','s'),usecols=[1,2,3],unpack=True,dtype=str)
         dse = sorted(np.unique([d + s + e for d, s, e in zip(date, shot, exp)]))
         ds = np.array([x[:-5] for x in dse])

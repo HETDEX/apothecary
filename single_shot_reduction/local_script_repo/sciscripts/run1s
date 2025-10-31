@@ -42,7 +42,7 @@ cp ${ddir}/rj .
 cp ${ddir}/rback .
 
 #note this next line scriptdir is dynamically replaced when run from
-#the single shot reduction code
+#the single shot reduction code, the hardcoded scriptdir=XXX line is ignored and is just a manual safety
 scriptdir="/scratch/03261/polonius/hetdex/single_shot/science_reductions/sciscripts/"
 cp ${scriptdir}rbfits .
 cp ${scriptdir}rbfits0 .
