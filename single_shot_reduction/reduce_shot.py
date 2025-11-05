@@ -130,6 +130,7 @@ try:
     #need somewhere around 20GB for normal big shots (once IFU is full)
     #varies depending also on the number of exposures, but 20GB is a safe rule of thumb
     MaxSafeActiveShots = int(AssumedMemFootprint // ApproxBaseRAM)
+    print("*** setting MaxSafeActiveShots to {MaxSafeActiveShots}. BaseRAM {ApproxBaseRAM:0.1f}GB, Footprint ~ {AssumedMemFootprint}GB")
 except:
     ApproxBaseRAM = -1
     MaxSafeActiveShots = 0
@@ -379,6 +380,7 @@ if "-hetdex" in args:
 
 if "-nolimit" in args:
     MaxSafeActiveShots = 0
+    print("*** --nolimit Override. Do NOT enforce simultaneous active shot limit per node.")
     args.remove("-nolimit")
 
 #whatever is left should be the shot
