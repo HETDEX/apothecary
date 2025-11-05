@@ -288,6 +288,8 @@ if "-help" in args:
     --help : display this help text and exit
     
     --hetdex : if present, overrides the restriction on running existing HETDEX shots
+    
+    --nolimit : if present, overrides the in-code limiting of simultaneous active shots per node
              
     --overwrite : removes the shot working directory completely and (re)starts fresh. 
               !!! Notice: --resume has priority over --overwrite
@@ -374,6 +376,10 @@ if "-exp" in args:
 if "-hetdex" in args:
     cfg.hetdex = True
     args.remove("-hetdex")
+
+if "-nolimit" in args:
+    MaxSafeActiveShots = 0
+    args.remove("-nolimit")
 
 #whatever is left should be the shot
 if len(args) != 1:
@@ -1836,20 +1842,22 @@ def initial_setup(cfg):
     return 0
 
 
-def node_setup(cfg,safelimit=0):
+def node_setup(cfg): #,safelimit=0):
     """
 
     extra stuff shared for datevshots on same node
 
     :param cfg:
-    :param safelimit: if positive, do NOT start until the active shot count is BELOW the safelimit
-                      e.g. THIS shot adds +1 to reach the safelimit
+   # :param safelimit: if positive, do NOT start until the active shot count is BELOW the safelimit
+   #                   e.g. THIS shot adds +1 to reach the safelimit
     :return:
     """
+    global MaxSafeActiveShots
 
     try:
         lock = FileLock(Lock_tmp_mutex_fn)
-        if safelimit > 0 and MaxSafeActiveShots > 0:
+        #if safelimit > 0 and MaxSafeActiveShots > 0:
+        if MaxSafeActiveShots > 0:
             redlight = True
             print(f"[{cfg.datevshot}] checking if safe to start ...")
 
