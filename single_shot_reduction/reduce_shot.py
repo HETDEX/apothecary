@@ -57,7 +57,8 @@ from elixer import utilities as Utils
 import importlib.util
 
 import traceback
-
+import psutil
+import time
 import matplotlib
 matplotlib.use('agg')
 
@@ -118,6 +119,20 @@ hetdex_api_path = os.path.dirname(importlib.util.find_spec("hetdex_api").origin)
 hetdex_api_path = "/".join(hetdex_api_path.split("/")[0:-1])
 
 
+#since this is done outside (that is, the SLURM sets this up) it is not useful here, in this code, to know this
+# A way to deal with it here, would be to change the mutex to a sempahore and have a resource count
+#   and then throttle any use, regardless of SLURM ... e.g for a given /tmp/ only allow 1 shot to run for vm-small
+#   or 10-12 or so for normal .. any additionals would wait on the semaphore
+AssumedMemFootprint = 20.0  # GB assumption
+SafeActiveShotsSleep = 30.0 # recheck every xx seconds
+try:
+    ApproxBaseRAM = psutil.virtual_memory()[0] / (1024**3) #in GB (e.g. ~32GB for vm small, 256 GB for normal on LS6)
+    #need somewhere around 20GB for normal big shots (once IFU is full)
+    #varies depending also on the number of exposures, but 20GB is a safe rule of thumb
+    MaxSafeActiveShots = int(AssumedMemFootprint // ApproxBaseRAM)
+except:
+    ApproxBaseRAM = -1
+    MaxSafeActiveShots = 0
 
 
 #execute steps
@@ -1821,24 +1836,48 @@ def initial_setup(cfg):
     return 0
 
 
-def node_setup(cfg):
+def node_setup(cfg,safelimit=0):
     """
 
     extra stuff shared for datevshots on same node
 
     :param cfg:
+    :param safelimit: if positive, do NOT start until the active shot count is BELOW the safelimit
+                      e.g. THIS shot adds +1 to reach the safelimit
     :return:
     """
 
     try:
         lock = FileLock(Lock_tmp_mutex_fn)
-        with lock:
-            #create a sync directory and file to hold list of datevshot being used
-            #a bit later this will then be the count of simulataneous datevshots and used to tune the num of processes
+        if safelimit > 0 and MaxSafeActiveShots > 0:
+            redlight = True
+            print(f"[{cfg.datevshot}] checking if safe to start ...")
 
-            os.makedirs(Node_basedir, exist_ok=True)
-            with open(os.path.join(Node_basedir,f"{cfg.datevshot}.sync"), "w") as f:
-                f.write(f"BEGIN {str(datetime.now())}\n")
+            while redlight:
+                with lock:
+                    #how many are active?
+                    fns = glob.glob(os.path.join(Node_basedir, "*.sync"))
+                    active = len(fns)
+                    if active < MaxSafeActiveShots: #good to go
+                        os.makedirs(Node_basedir, exist_ok=True)
+                        with open(os.path.join(Node_basedir, f"{cfg.datevshot}.sync"), "w") as f:
+                            f.write(f"BEGIN {str(datetime.now())}\n")
+                        redlight = False
+                        print(f"[{cfg.datevshot}] cleared to start.")
+                    else:
+                        print(f"[{cfg.datevshot}] too many active shots ({active}). Must wait ...")
+
+                if redlight:
+                    time.sleep(SafeActiveShotsSleep)
+
+        else:
+            with lock:
+                #create a sync directory and file to hold list of datevshot being used
+                #a bit later this will then be the count of simulataneous datevshots and used to tune the num of processes
+
+                os.makedirs(Node_basedir, exist_ok=True)
+                with open(os.path.join(Node_basedir,f"{cfg.datevshot}.sync"), "w") as f:
+                    f.write(f"BEGIN {str(datetime.now())}\n")
 
         # lock auto releases
     except:
@@ -1876,8 +1915,8 @@ def node_active_ct(cfg):
 
     try:
         ct = -1
-        lock = FileLock(Lock_tmp_mutex_fn)
-        with lock:
+        lock = FileLock(Lock_tmp_mutex_fn) #get lock instance, but does not ACQUIRE lock
+        with lock: #lock ACQUIRED here
             fns = glob.glob(os.path.join(Node_basedir,"*.sync"))
             ct = len(fns)
             print(f"[{cfg.datevshot}] checking active shot count for shared /tmp: {ct}")
@@ -1886,6 +1925,8 @@ def node_active_ct(cfg):
         print(f"Exception! in node_active_ct()", traceback.format_exc())
 
     return ct
+
+
 
 def num_exposures_in_shot(shotid):
     """
