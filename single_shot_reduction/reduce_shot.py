@@ -130,7 +130,8 @@ try:
     #need somewhere around 20GB for normal big shots (once IFU is full)
     #varies depending also on the number of exposures, but 20GB is a safe rule of thumb
     MaxSafeActiveShots = int(AssumedMemFootprint // ApproxBaseRAM)
-    print("*** setting MaxSafeActiveShots to {MaxSafeActiveShots}. BaseRAM {ApproxBaseRAM:0.1f}GB, Footprint ~ {AssumedMemFootprint}GB")
+    print(f"*** setting MaxSafeActiveShots to {MaxSafeActiveShots}. "
+          f"BaseRAM {ApproxBaseRAM:0.1f}GB, Footprint ~ {AssumedMemFootprint}GB")
 except:
     ApproxBaseRAM = -1
     MaxSafeActiveShots = 0
@@ -1012,8 +1013,15 @@ def get_exposure_times(cfg):
         if os.path.exists(base_tarfn):
             with tar.open(base_tarfn, "r") as tarfh:
                 fns = np.array(tarfh.getnames())
+                #only want the files that are virus*/exp??/virus/....
+                fns_sel = np.array(["/exp" in fn for fn in fns])
+                fns = fns[fns_sel]
+                fns_sel = np.array([".fits" in fn for fn in fns])
+                fns = fns[fns_sel]
                 # should look like a list of:  virus0000007/exp01/virus/20241017T024257.2_106RU_sci.fits
                 # should all be the same base within each exposure
+                # not all the file names are that way, though
+
                 all_exps = np.array([x.split("/")[1] for x in fns])
                 exps = np.unique(all_exps)
                 # just need one from each exp
@@ -1101,6 +1109,12 @@ def get_guider_fwhm(cfg):
                 fns = np.array(tarfh.getnames())
                 #should look like a list of:  virus0000007/exp01/virus/20241017T024257.2_106RU_sci.fits
                 #should all be the same base within each exposure
+                #only want the files that are virus*/exp??/virus/....
+                fns_sel = np.array(["/exp" in fn for fn in fns])
+                fns = fns[fns_sel]
+                fns_sel = np.array([".fits" in fn for fn in fns])
+                fns = fns[fns_sel]
+
                 all_exps = np.array([x.split("/")[1] for x in fns])
                 exps = np.unique(all_exps)
                 #just need one from each exp
