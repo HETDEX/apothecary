@@ -129,7 +129,7 @@ try:
     ApproxBaseRAM = psutil.virtual_memory()[0] / (1024**3) #in GB (e.g. ~32GB for vm small, 256 GB for normal on LS6)
     #need somewhere around 20GB for normal big shots (once IFU is full)
     #varies depending also on the number of exposures, but 20GB is a safe rule of thumb
-    MaxSafeActiveShots = int(AssumedMemFootprint // ApproxBaseRAM)
+    MaxSafeActiveShots = int(ApproxBaseRAM//AssumedMemFootprint)
     print(f"*** setting MaxSafeActiveShots to {MaxSafeActiveShots}. "
           f"BaseRAM {ApproxBaseRAM:0.1f}GB, Footprint ~ {AssumedMemFootprint}GB")
 except:
