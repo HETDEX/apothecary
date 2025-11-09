@@ -2086,7 +2086,10 @@ def vdrp_check_norms(cfg):
                 print("Possible bad dither norm:", os.path.basename(fn), norms)
                 rc = -1
 
-        print("check norms ... fail")
+        if rc < 0:
+            print("check norms ... fail")
+        else:
+            print("check norms ... pass")
         return rc
     else:
         print("check norms ... OK")
