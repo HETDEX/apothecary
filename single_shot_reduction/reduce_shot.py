@@ -1675,7 +1675,6 @@ def initial_setup(cfg):
     os.chdir(workdir)
     cfg.cwd = os.getcwd() #now under the sci<shot> directory
 
-
     #check for virus.tar files
     virustar = f"{cfg.datevshot[0:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar"
     virus_paths = [HET_by_date,os.path.join(cfg.cwd_orig,"het_raw")]
@@ -1748,6 +1747,15 @@ def initial_setup(cfg):
         cfg.virus_tar_path = os.path.join(virus_paths[0],virustar)
 
     if not resume or cfg.update_local_repo:
+
+        # some other process might be updating the local repo ... do not proceed IF there is a lock
+        lock = FileLock(Lock_mutex_fn)  # we are in the top directory (not sciXXXX)
+        with lock:
+            # obtained the lock, so we should be good now,
+            # just release and go
+            print(f"[{cfg.datevshot}] Mutex checked. Okay. Safe to local_repo.")
+            # lock auto releases
+
         print(f"Copying source code to working directory {cfg.cwd}...")
         ## if ANY of this fails it is fatal
 
@@ -4539,12 +4547,12 @@ if cfg.clean_only:
 
 rc = precheck(cfg)
 if rc < 0:
-    Quit(cfg,rc,"Precheck failed. Reduction cannot run.",write_status=False)
+    Quit(cfg,rc,"FATAL! Precheck failed. Reduction cannot run.",write_status=False)
 
 cfg.numexp, cfg.gettar_fn = num_exposures_in_shot(cfg.shotid)
 
 if cfg.numexp <= 0:
-    Quit(cfg, -1, f"Could not find shot {cfg.datevshot}",write_status=False)
+    Quit(cfg, -1, f"FATAL! Could not find shot {cfg.datevshot}",write_status=False)
 
 
 # if cfg.simul == 1:
