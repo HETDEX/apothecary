@@ -892,6 +892,75 @@ def progress_init(cfg):
 
     return dtprog
 
+
+
+def write_summary(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+    orig_dir = os.getcwd()
+    try:
+        os.chdir(cfg.cwd)
+        h5 = tables.open_file(f"{cfg.datevshot}.h5",mode="r")
+
+        with open("summary.txt","w") as f:
+            f.write(f"field:\t\t{h5.root.Shot.read(field='field')[0]}\n")
+            f.write(f"RA,Dec:\t\t{h5.root.Shot.read(field='ra')[0]}, {h5.root.Shot.read(field='dec')[0]}\n")
+            f.write(f"exptimes:\t{h5.root.Shot.read(field='exptime')[0]}\n")
+            dit_norms = h5.root.Shot.read(field="relflux_virus")[0]
+            f.write(f"relflux_virus:\t{dit_norms}\n")
+            try:
+                max_ditnorm = np.max(dit_norms) / np.min(dit_norms)
+                f.write(f"dither norm:\t{max_ditnorm:0.4f}\n")
+            except:
+                pass
+
+            waves = h5.root.Calibration.Throughput.throughput.read(field="wavelength")
+            tp = h5.root.Calibration.Throughput.throughput.read(field="throughput")
+            tp_at_w = np.interp(4600.0, waves, tp)
+            f.write(f"response_4540:\t{h5.root.Shot.read(field='response_4540')[0]:0.4f}\n")
+            f.write(f"interp  @4600:\t{tp_at_w:0.4f}\n")
+            f.write(f"fwhm_virus:\t{h5.root.Shot.read(field='fwhm_virus')[0]:0.4f}\n")
+
+            dx1 = h5.root.Shot.read(field="xditherpos")[0]
+            dy1 = h5.root.Shot.read(field="yditherpos")[0]
+            f.write(f"Dithers: \t({dx1[0]:0.4f},{dy1[0]:0.4f}) ({dx1[1]:0.4f},{dy1[2]:0.4f}) ({dx1[2]:0.4f},{dy1[2]:0.4f})\n")
+
+            try:
+                total = 0
+                with open(f"{cfg.cwd}/elixer/line.dets", "r") as f2:
+                    total = len(f2.readlines())
+
+                #outer file:
+                f.write(f"Line Dets:\t{total}\n")
+
+            except:
+                pass
+
+            try:
+                total = 0
+                with open(f"{cfg.cwd}/elixer/cont.dets", "r") as f2:
+                    total = len(f2.readlines())
+
+                # outer file:
+                f.write(f"Cont Dets:\t{total}\n")
+
+            except:
+                pass
+
+    except:
+        print(f"[{cfg.datevshot}] Exception! trying to write summary file", traceback.format_exc())
+
+    try:
+        h5.close()
+    except:
+        pass
+
+    os.chdir(orig_dir)
+
+
 def Quit(cfg,rc,msg=None,write_status=True):
     """
 
@@ -905,6 +974,10 @@ def Quit(cfg,rc,msg=None,write_status=True):
         print(f"[{cfg.datevshot}] ({rc})",msg)
     else:
         print(f"[{cfg.datevshot}] ({rc})")
+
+
+    if rc >=0:
+        write_summary(cfg)
 
    # if cfg.orig_stdout:
    #     sys.stdout = cfg.orig_stdout
@@ -2522,9 +2595,15 @@ def run_make_ifucen(cfg):
             ras, decs = np.loadtxt(f"ifucen_{cfg.datevshot}.dat", dtype=float,
                                    usecols=(1, 2), unpack=True)
             badct = np.count_nonzero(ras == -666)
-            if badct> 0:
-                rc = -1
-                print(f"[{cfg.datevshot}] failed to get IFU centers. Invalid RA, Decs.")
+            if badct > 0:
+                if badct < 3:  # allow 1 or 2 bad ifus
+                    badsel = ras == -666
+                    mf = np.loadtxt(f"ifucen_{cfg.datevshot}.dat", dtype=str, usecols=(0), unpack=True)
+                    print(f"[{cfg.datevshot}] failed to get {badct} IFU centers ({mf[badsel]}). Treat as non-fatal.")
+                    rc = 0 #call it non-fatal
+                else:
+                    print(f"[{cfg.datevshot}] failed to get {badct} IFU centers. Likely fatal.")
+                    rc = -1
             else:
                 #all is good, assume anyway
                 rc = 0
