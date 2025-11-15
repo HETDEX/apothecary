@@ -2976,6 +2976,8 @@ def rdet_rf1(cfg):
             if len(failed_list) < len(ras):
                 #print(f"{base_str} {len(failed_list)} failed. Can be transient issues, so will re-run ...")
                 print(f"{cfg.datevshot} (rdet_rf1) : serially re-run {len(failed_list)} failed IFUs ...")
+                #reset rc
+                rc = 0
                 for ct,cmd in enumerate(failed_list):
                     print(f"{cfg.datevshot} (rdet_rf1) : {ct} {cmd.split()[1]} {cmd.split()[2]} {cmd.split()[6]} ...")#,end="")
                     system_command(cfg, cmd)
@@ -2993,11 +2995,8 @@ def rdet_rf1(cfg):
                         rc = 1 #some failures, but not all
                     else:
                         print(f" pass")
-
-
             else:
                 print(f"[{cfg.datevshot}] (rdet_rf1) All failed. Will not attempt full re-run.")
-
 
     except:
         print(traceback.format_exc())
