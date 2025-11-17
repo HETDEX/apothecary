@@ -4533,7 +4533,7 @@ def prep_elixer(cfg):
                     if safe_cd(os.path.join(elixdir,"out")):
                         fns = sorted(glob.glob("dispatch_*"))
                         if len(fns) > 0:
-                            dispatch_base = int(fns[-1][-4:])
+                            dispatch_base = int(fns[-1][-4:]) + 1 #need the +1 so you start conts at the next dispatch
                             # no point in getting the time if this failed, so assuming it was successful:
                             with open("elixer.slurm",'r') as slurm_file:
                                 for line in slurm_file:
@@ -4668,6 +4668,12 @@ rc = initial_setup(cfg)
 
 if rc < 0:
     Quit(cfg,rc,"Could not complete initial setup.",write_status=False)
+
+
+
+#print("Temporary ... make summary.txt ONLY")
+#Quit(cfg,rc=0,msg="Temporary ... make summary.txt ONLY",write_status=True)
+
 
 rc = node_setup(cfg)
 
