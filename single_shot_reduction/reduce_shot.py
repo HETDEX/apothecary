@@ -378,14 +378,15 @@ if "-exp" in args:
     args.remove("-exp")
 
 if "-email" in args:
+    i = args.index("-email")
     try:
         cfg.email = args[i+1]
         #really basic sanity check
         if '@' not in cfg.email:
-            print(f"Invalid -email specified")
+            print(f"Invalid -email format specified: {cfg.email}")
             exit(-1)
     except:
-        print(f"Invalid -email specified")
+        print(f"Invalid -email specified: {args[i+1]}")
         exit(-1)
 
     del args[i+1]  # args.pop(0) #remove THIS file
