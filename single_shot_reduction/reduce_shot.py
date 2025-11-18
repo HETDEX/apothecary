@@ -230,6 +230,7 @@ class Config:
     shotid: int = 0
     datevshot: str = ""
     exp: int = 0  #specific exposure number to reduce
+    email: str = ""
     numexp: int = 0 #number of exposures in the shot
     total_exp_time : float = 0.0 #in seconds
     cwd_orig: str = os.getcwd()
@@ -286,6 +287,8 @@ if "-help" in args:
                       
     --exp <integer> : will operate on only the specified exposure (e.g. in a multi-exposure observation, can select
                       exactly one to reduce). If not present or set to (0), will use all exposures for the observation. 
+                      
+    --email <str> : if provided will attach to the elixer slurm job so this email address will get notifications
         
     --help : display this help text and exit
     
@@ -373,6 +376,20 @@ if "-exp" in args:
 
     del args[i+1]  # args.pop(0) #remove THIS file
     args.remove("-exp")
+
+if "-email" in args:
+    try:
+        cfg.email = args[i+1]
+        #really basic sanity check
+        if '@' not in cfg.email:
+            print(f"Invalid -email specified")
+            exit(-1)
+    except:
+        print(f"Invalid -email specified")
+        exit(-1)
+
+    del args[i+1]  # args.pop(0) #remove THIS file
+    args.remove("-email")
 
 
 if "-hetdex" in args:
@@ -4492,7 +4509,12 @@ def prep_elixer(cfg):
 
             which_elixer = f"python {elixer_path}/selixer.py" #"selixer.test "
             elixer_base_cmd = f" -f --slurm 0 --nodes 1 --log info --shot_h5 {shot_h5} --diagnose {diagnose_tab} " \
-                              f" --png --error 3.0 --neighborhood 10.0 --post_merge 2 --ntasks_per_node {tasks_per_node} "
+                              f" --png --error 3.0 --neighborhood 10.0 --post_merge 2 --ntasks_per_node {tasks_per_node} " \
+                              f" --timex 0.8"
+                            #reduce time by about 20% ... the neighborhood is faster since only checking THIS shot
+
+            if len(cfg.email) > 5:
+                elixer_base_cmd += f" --email {cfg.email} "
 
             #combine into a single job at the end, so their names need to match
             elixer_line_cmd = f" --name out --dets line.dets  --hdf5 {line_h5} "
