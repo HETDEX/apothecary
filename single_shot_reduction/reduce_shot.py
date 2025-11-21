@@ -226,6 +226,7 @@ class Config:
     update_local_repo: bool = False
     update_only : bool = False
     overwrite: bool = False
+    shot_only: bool = False
     resume: bool = False
     shotid: int = 0
     datevshot: str = ""
@@ -302,6 +303,8 @@ if "-help" in args:
     --resume : (re)starts roughly at the last completed step (see sciXXXX/progress.dat)
            !!! Notice: This does NOT re-run steps that completed with failures, it only re-runs incomplete steps.
            !!! Notice: --resume has priority over --overwrite
+           
+    --shot_only : ONLY (re)build the shot h5 file. Do NOT run detections or elixer.
                
     --update : removes and re-fetches the local_script_depo prior to running
                on a --resume, also updates the scripts already in the shot working directory
@@ -361,6 +364,10 @@ if "-update" in args:
 if "-overwrite" in args:
     cfg.overwrite = True
     args.remove("-overwrite")
+
+if "-shot_only" in args:
+    cfg.shot_only = True
+    args.remove("-shot_only")
 
 if "-resume" in args: #opposide of --overwite ... do NOT touch the (intermediate) output of the working directory
     cfg.resume = True
@@ -4939,7 +4946,10 @@ else:
 
 
 #precheck
-if cfg.numexp == 1:
+
+if cfg.shot_only: #we are done
+    Quit(cfg, 0, f"[{cfg.datevshot}] --shot_only specified.  Will end here.")
+elif cfg.numexp == 1:
     pass
 elif cfg.numexp == 3:
     rc = hetdex_dither(cfg)
