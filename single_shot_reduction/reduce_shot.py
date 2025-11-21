@@ -931,6 +931,7 @@ def write_summary(cfg):
         h5 = tables.open_file(f"{cfg.datevshot}.h5",mode="r")
 
         with open("summary.txt","w") as f:
+            f.write(f"shot:\t\t{cfg.datevshot}\n")
             f.write(f"field:\t\t{h5.root.Shot.read(field='field')[0]}\n")
             f.write(f"RA,Dec:\t\t{h5.root.Shot.read(field='ra')[0]}, {h5.root.Shot.read(field='dec')[0]}\n")
             f.write(f"exptimes:\t{h5.root.Shot.read(field='exptime')[0]}\n")
