@@ -2690,7 +2690,7 @@ def run_rfft(cfg):
                             #assume good
                             print(f"[{cfg.datevshot}] rfft [Pass] {fn}")
                     elif suffix == "ds9.reg": #not important, but just assume good
-                        print(f"[{cfg.datevshot}] rff [Pass] {fn}")
+                        print(f"[{cfg.datevshot}] rfft [Pass] {fn}")
                     elif suffix == "sky.dat": #this is the easy one to check
                         col2 = np.loadtxt(fn,dtype=float,usecols=[1])
                         if np.any(col2):
