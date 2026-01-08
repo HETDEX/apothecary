@@ -251,6 +251,8 @@ class Config:
     guider_fwhm = None
 
     special = 0 #do some special, direct edit code stuff
+    hetdex_original = False #set to True if this shot is in the original hetdex data
+                            ## (vs the 'hetdex' member which is true if --hetdex is specified to allow this)
 
 
 
@@ -1811,16 +1813,21 @@ def precheck(cfg):
 
 
         #is this a hetdex shot and if so, is it allowed?
-        if not cfg.hetdex:
-            try:
-                h5 = tables.open_file(HETDEXSurvey,mode="r")
-                dex_shots = h5.root.Survey.read(field="shotid")
-                if np.int64(cfg.datevshot.replace("v","")) in dex_shots:
+
+        try:
+            h5 = tables.open_file(HETDEXSurvey,mode="r")
+            dex_shots = h5.root.Survey.read(field="shotid")
+            h5.close()
+            if np.int64(cfg.datevshot.replace("v","")) in dex_shots:
+                cfg.hetdex_original = True
+                if not cfg.hetdex:
                     print(f"[{cfg.datevshot}] is an existing HETDEX shot. To re-reduce here, re-run with --hetdex")
                     rc = -1
-                h5.close()
-            except:
-                print(f"[{cfg.datevshot}] Exception checking HETDEX Survye file {HETDEXSurvey}", traceback.format_exc())
+                else:
+                    #this is okay
+                    print(f"[{cfg.datevshot}] is an existing HETDEX shot, but --hetdex specified, so will re-reduce.")
+        except:
+            print(f"[{cfg.datevshot}] Exception checking HETDEX Survye file {HETDEXSurvey}", traceback.format_exc())
 
 
         if rc != 0:
@@ -4875,8 +4882,9 @@ if cfg.special == 1:
     Quit(cfg, 0, f"Done with special handling. {cfg.datevshot}",write_status=False)
 
 
-if cfg.numexp < 3:
-    print(f"Fewer than 3 exposures (assume dithers). Checking guider for seeing FWHM...")
+if cfg.numexp < 3 or not cfg.hetdex_original:
+    #print(f"Fewer than 3 exposures (assume dithers). Checking guider for seeing FWHM...")
+    print(f"[{cfg.datevshot}] Checking guider for seeing FWHM...")
     cfg.guider_fwhm = get_guider_fwhm(cfg) #this also gets the exposure times
     if cfg.guider_fwhm is not None:
         print(f"Using guider FWHM = {cfg.guider_fwhm}")
