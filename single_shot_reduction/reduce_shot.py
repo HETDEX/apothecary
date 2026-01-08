@@ -4872,7 +4872,8 @@ rc = node_setup(cfg)
 if cfg.special == 1:
     print("*** SPECIAL (1) *** forcing guider fwhm then terminating")
     cfg.guider_fwhm = get_guider_fwhm(cfg)
-    exit(0)
+    Quit(cfg, 0, f"Done with special handling. {cfg.datevshot}",write_status=False)
+
 
 if cfg.numexp < 3:
     print(f"Fewer than 3 exposures (assume dithers). Checking guider for seeing FWHM...")
