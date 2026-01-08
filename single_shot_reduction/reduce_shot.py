@@ -250,7 +250,7 @@ class Config:
 
     guider_fwhm = None
 
-
+    special = 0 #do some special, direct edit code stuff
 
 
 
@@ -408,6 +408,15 @@ if "-nolimit" in args:
     MaxSafeActiveShots = 0
     print("*** --nolimit Override. Do NOT enforce simultaneous active shot limit per node.")
     args.remove("-nolimit")
+
+
+if "-special" in args:
+    i = args.index("-special")
+    cfg.special = int(args[i+1])
+    del args[i + 1]
+    args.remove("-special")
+    print(f"*** --special condition invoked. Condition = {cfg.special}")
+
 
 #whatever is left should be the shot
 if len(args) != 1:
@@ -1150,8 +1159,41 @@ def get_guider_fwhm(cfg):
     :return:
     """
 
+
+    def get_gc_path(cfg,which_gc="gc1",path=""):
+        base_tarfn = os.path.join(path,f"{which_gc}/{which_gc}.tar")
+        if not os.path.exists(base_tarfn) and cfg.virus_tar_path is not None:
+            #try based on the virus_tar_path
+            base_tarfn = os.path.join(cfg.virus_tar_path.rstrip(".tar"),f"{which_gc}.tar")
+
+            if not os.path.exists(base_tarfn):
+                # try based on the virus_tar_path, up two levels
+                base_tarfn = os.path.join(os.path.dirname(cfg.virus_tar_path), f"../{which_gc}/{which_gc}.tar")
+
+                if not os.path.exists(base_tarfn):
+                    #sometimes is called images.tar
+                    base_tarfn = os.path.join(os.path.dirname(cfg.virus_tar_path), f"../{which_gc}/images.tar")
+
+                    if not os.path.exists(base_tarfn):
+                        base_tarfn = f"./{which_gc}.tar" #last chance, check locally
+
+        return base_tarfn
+
+    def which_dither_time(curr_time="",dither_starts=[]):
+        #starts look like yyyymmddThhmmss.s
+        #can use alphabet sorting
+        try:
+            idx = sorted(list(dither_starts) + [curr_time]).index(curr_time)
+        except:
+            idx = 99
+        return idx if idx > 0 else 1
+
     try:
         saved_fn = "guider.fwhm"
+        saved_detailed_fn = "detailed.fwhm" #each entry from the guider over the whole shot, all dithers, all times
+                                            #this is extra info for later, optional diagnostics
+                                            #and is only gathered if GuiderFWHM_ALL is set
+
         if os.path.exists(saved_fn):
             fwhm = np.loadtxt(saved_fn,dtype=float) #just one value
             if fwhm is None or np.isnan(fwhm):
@@ -1178,6 +1220,7 @@ def get_guider_fwhm(cfg):
 
         exposure_times = [] #exposure times (seconds) from HDU
         exposure_fn_times =[] #date T time string from the fileanames
+        #dither_start_times = []  # same time as exposure_fn_times  ... the time on the file name matches the UT time the exposure STARTED
 
         gc_start_times = []
         gc_stop_times = []
@@ -1227,6 +1270,7 @@ def get_guider_fwhm(cfg):
                         t1, p1 = Utils.open_file_from_tar(base_tarfn, fn0)
                         fh = fits.open(t1)
                         exposure_times.append(fh[0].header['EXPTIME'])
+                        #dither_start_times.append(fh[0].header['UT'])  #note: 'DATE' is when the file was written out
                         #or would DARKTIME be better ??
                         fh.close()
 
@@ -1239,7 +1283,12 @@ def get_guider_fwhm(cfg):
             print(f"[{cfg.datevshot}] Total exposure time: {cfg.total_exp_time}")
 
         #try gc1
-        base_tarfn = os.path.join(path,"gc1/gc1.tar")
+        # base_tarfn = os.path.join(path,"gc1/gc1.tar")
+        # if not os.path.exists(base_tarfn) and cfg.virus_tar_path is not None:
+        #     #try based on the virus_tar_path, up two levels
+        #     base_tarfn = os.path.join(cfg.virus_tar_path.rstrip(".tar"),"gc1.tar")
+
+        base_tarfn = get_gc_path(cfg,"gc1",path)
         if os.path.exists(base_tarfn):
             with tar.open(base_tarfn, "r") as tarfh:
                 gc1_names = tarfh.getnames()
@@ -1247,8 +1296,20 @@ def get_guider_fwhm(cfg):
                 #only want the dateTtime prefix
                 #gc1_times = [x.split("/")[1].split("_")[0] for x in gc1_names]
 
+
+
         #try gc2
-        base_tarfn = os.path.join(path,"gc2/gc2.tar")
+        # base_tarfn = os.path.join(path,"gc2/gc2.tar")
+        # if not os.path.exists(base_tarfn) and cfg.virus_tar_path is not None:
+        #
+        #     #try top most:
+        #
+        #
+        #     #then try under the virusXXXXXX, but these don't have the IQ card?
+        #     #try based on the virus_tar_path, up two levels
+        #     base_tarfn = os.path.join(cfg.virus_tar_path.rstrip(".tar"),"gc2.tar")
+
+        base_tarfn = get_gc_path(cfg, "gc2", path)
         if os.path.exists(base_tarfn):
             with tar.open(base_tarfn, "r") as tarfh:
                 gc2_names = tarfh.getnames()
@@ -1265,15 +1326,20 @@ def get_guider_fwhm(cfg):
         if GuiderFWHM_ALL: #use all within specified time range
 
             for fntime, exptime in zip(exposure_fn_times, exposure_times):
+                #fntime, from the name is the time the exposure STARTED (not written). It matches to "UT" card and the stop is the "DATE" card in HDU
                 fntime = datetime(int(fntime[0:4]), int(fntime[4:6]), int(fntime[6:8]),
                                   int(fntime[9:11]), int(fntime[11:13]), int(fntime[13:15]))
-                delta_time = fntime - timedelta(seconds=exptime)
+                delta_time = fntime #- timedelta(seconds=6.0) # !!! YES this is correct. The filename has the START time, not the writeout (stop)time
+                #delta_time = fntime - timedelta(seconds=exptime)
                 time_str = f"{str(delta_time.year)}{str(delta_time.month).zfill(2)}{str(delta_time.day).zfill(2)}T" \
                            f"{str(delta_time.hour).zfill(2)}{str(delta_time.minute).zfill(2)}{str(delta_time.second).zfill(2)}.0"
 
                 gc_start_times.append(time_str)
+
                 #Guider typically records every few seconds, so no need to go after
-                delta_time = fntime #+ timedelta(seconds=120.0)  # go up to 2 minutes after
+                #could go an extra one past just to get one more data point 5 -6 seconds is typical
+                delta_time = fntime + timedelta(seconds=exptime) #+ timedelta(seconds=6.0)   #timedelta(seconds=120.0)  # go up to 2 minutes after
+                #delta_time = fntime
                 time_str = f"{str(delta_time.year)}{str(delta_time.month).zfill(2)}{str(delta_time.day).zfill(2)}T" \
                            f"{str(delta_time.hour).zfill(2)}{str(delta_time.minute).zfill(2)}{str(delta_time.second).zfill(2)}.0"
                 gc_stop_times.append(time_str)
@@ -1283,16 +1349,24 @@ def get_guider_fwhm(cfg):
                 for start_time, stop_time in zip(gc_start_times,gc_stop_times):
                     for name in gc1_names:
                         #just want the time part
-                        if start_time <= name[2:19] <= stop_time: #yes, technically string compares, but works for the time format here
-                            gc1_near.append(name)
+                        try:
+                            time_part = os.path.basename(name)[:17] #[2:19]
+                            if start_time <= time_part <= stop_time: #yes, technically string compares, but works for the time format here
+                                gc1_near.append(name)
+                        except:
+                            pass
 
             if gc2_names is not None:
                 gc2_near = [] #list of lists ... ie. if 3 exposures, will be a 3 long list each with 2 elements
                 for start_time, stop_time in zip(gc_start_times,gc_stop_times):
                     for name in gc2_names:
                         #just want the time part
-                        if start_time <= name[2:19] <= stop_time: #yes, technically string compares, but works for the time format here
-                            gc2_near.append(name)
+                        try:
+                            time_part = os.path.basename(name)[:17]#[2:19]
+                            if start_time <= time_part <= stop_time: #yes, technically string compares, but works for the time format here
+                                gc2_near.append(name)
+                        except:
+                            pass
         else: #just use the two nearest
             # get nearest (sort with exposusre name, find the index of the exposure name and take the index before and after?)
 
@@ -1319,29 +1393,71 @@ def get_guider_fwhm(cfg):
                     gc2_near.append([gc_x[lidx]] + [gc_x[ridx]])
 
         iq = [] #image quality (seeing fwhm) list
+        iq_time = [] #time stamp for the image quality
+        iq_dither = []
+
         if GuiderFWHM_ALL:
             #note: which guider is active could change? so check both?
-            base_tarfn = os.path.join(path, "gc1/gc1.tar")
+            # base_tarfn = os.path.join(path, "gc1/gc1.tar")
+            # if not os.path.exists(base_tarfn) and cfg.virus_tar_path is not None:
+            #     # try based on the virus_tar_path, up two levels
+            #     base_tarfn = os.path.join(cfg.virus_tar_path.rstrip(".tar"), "gc1.tar")
+
+            base_tarfn = get_gc_path(cfg, "gc1", path)
+
             if os.path.exists(base_tarfn):
                 for name in gc1_near:
                     try:
                         t1, p1 = Utils.open_file_from_tar(base_tarfn, name)
                         fh = fits.open(t1)
                         if fh[0].header['GUIDLOOP'] == 'ACTIVE':
-                            iq.append(float(fh[0].header['IQ'])) #this is clipped later to exlcude 0s and other bad values
+                            try:
+                                iq.append(float(fh[0].header['IQ'])) #this is clipped later to exlcude 0s and other bad values
+                                iq_time.append(os.path.basename(name)[:17])
+                                iq_dither.append(which_dither_time(iq_time[-1],exposure_fn_times))
+                            except:
+                                try:
+                                    #card not there, try using PIXSCALE and OBFWHM
+                                    pixscale = float(fh[0].header['PIXSCALE'])
+                                    obfwhm = float(fh[0].header['OBFWHM'])
+                                    iq.append(obfwhm * pixscale)
+                                    iq_time.append(os.path.basename(name)[:17])
+                                    iq_dither.append(which_dither_time(iq_time[-1],exposure_fn_times))
+                                except:
+                                    pass
+
                         fh.close()
                         t1.close()
                     except:
                         pass #don't let one bad read bomb out
 
-            base_tarfn = os.path.join(path, "gc2/gc2.tar")
+            # base_tarfn = os.path.join(path, "gc2/gc2.tar")
+            # if not os.path.exists(base_tarfn) and cfg.virus_tar_path is not None:
+            #     # try based on the virus_tar_path, up two levels
+            #     base_tarfn = os.path.join(cfg.virus_tar_path.rstrip(".tar"), "gc2.tar")
+
+            base_tarfn = get_gc_path(cfg, "gc2", path)
             if os.path.exists(base_tarfn):
                 for name in gc2_near:
                     try:
                         t1, p1 = Utils.open_file_from_tar(base_tarfn, name)
                         fh = fits.open(t1)
                         if fh[0].header['GUIDLOOP'] == 'ACTIVE':
-                            iq.append(float(fh[0].header['IQ'])) #this is clipped later to exlcude 0s and other bad values
+                            try:
+                                iq.append(float(fh[0].header['IQ'])) #this is clipped later to exlcude 0s and other bad values
+                                iq_time.append(os.path.basename(name)[:17])
+                                iq_dither.append(which_dither_time(iq_time[-1],exposure_fn_times))
+                            except:
+                                try:
+                                    # card not there, try using PIXSCALE and OBFWHM
+                                    pixscale = float(fh[0].header['PIXSCALE'])
+                                    obfwhm = float(fh[0].header['OBFWHM'])
+                                    iq.append(obfwhm * pixscale)
+                                    iq_time.append(os.path.basename(name)[:17])
+                                    iq_dither.append(which_dither_time(iq_time[-1],exposure_fn_times))
+                                except:
+                                    pass
+
                         fh.close()
                         t1.close()
                     except:
@@ -1349,7 +1465,12 @@ def get_guider_fwhm(cfg):
 
         else: #just the two nearest
             #now which to use? gc1 or gc2
-            base_tarfn = os.path.join(path, "gc1/gc1.tar")
+            # base_tarfn = os.path.join(path, "gc1/gc1.tar")
+            # if not os.path.exists(base_tarfn) and cfg.virus_tar_path is not None:
+            #     # try based on the virus_tar_path, up two levels
+            #     base_tarfn = os.path.join(cfg.virus_tar_path.rstrip(".tar"), "gc1.tar")
+
+            base_tarfn = get_gc_path(cfg, "gc1", path)
             gc1_active=False
             if os.path.exists(base_tarfn):
                 try:
@@ -1363,7 +1484,12 @@ def get_guider_fwhm(cfg):
                     print(f"Exception in get_guider_fwhm: {traceback.format_exc()}")
 
 
-            base_tarfn = os.path.join(path, "gc2/gc2.tar")
+            # base_tarfn = os.path.join(path, "gc2/gc2.tar")
+            # if not os.path.exists(base_tarfn) and cfg.virus_tar_path is not None:
+            #     # try based on the virus_tar_path, up two levels
+            #     base_tarfn = os.path.join(cfg.virus_tar_path.rstrip(".tar"), "gc2.tar")
+
+            base_tarfn = get_gc_path(cfg, "gc2", path)
             gc2_active=False
             if os.path.exists(base_tarfn):
                 try:
@@ -1377,11 +1503,20 @@ def get_guider_fwhm(cfg):
                     print(f"Exception in get_guider_fwhm: {traceback.format_exc()}")
 
             if gc1_active:
-                base_tarfn = os.path.join(path, "gc1/gc1.tar")
+                # base_tarfn = os.path.join(path, "gc1/gc1.tar")
+                # if not os.path.exists(base_tarfn) and cfg.virus_tar_path is not None:
+                #     # try based on the virus_tar_path, up two levels
+                #     base_tarfn = os.path.join(cfg.virus_tar_path.rstrip(".tar"), "gc1.tar")
+
+                base_tarfn = get_gc_path(cfg, "gc1", path)
                 gc_near = gc1_near
 
             elif gc2_active:
-                base_tarfn = os.path.join(path, "gc2/gc2.tar")
+                # base_tarfn = os.path.join(path, "gc2/gc2.tar")
+                # if not os.path.exists(base_tarfn) and cfg.virus_tar_path is not None:
+                #     # try based on the virus_tar_path, up two levels
+                #     base_tarfn = os.path.join(cfg.virus_tar_path.rstrip(".tar"), "gc2.tar")
+                base_tarfn = get_gc_path(cfg, "gc2", path)
                 gc_near = gc2_near
             else:
                 print(f"No active guider. Cannot get seeing fwhm.")
@@ -1392,7 +1527,17 @@ def get_guider_fwhm(cfg):
                     try:
                         t1, p1 = Utils.open_file_from_tar(base_tarfn, near_file)
                         fh = fits.open(t1)
-                        iq.append(float(fh[0].header['IQ']))
+                        try:
+                            iq.append(float(fh[0].header['IQ']))  # this is clipped later to exlcude 0s and other bad values
+                        except:
+                            try:
+                                # card not there, try using PIXSCALE and OBFWHM
+                                pixscale = float(fh[0].header['PIXSCALE'])
+                                obfwhm = float(fh[0].header['OBFWHM'])
+                                iq.append(obfwhm * pixscale)
+                            except:
+                                pass
+
                         fh.close()
                         t1.close()
                     except:
@@ -1402,8 +1547,23 @@ def get_guider_fwhm(cfg):
             np.savetxt(saved_fn,[iq[0]],fmt="%0.4f")
             return iq[0]
         elif len(iq) > 1:
-            md_iq = np.nanmedian(np.clip(iq,0.1,9.0))
+            md_iq = np.nanmedian(np.clip(iq, 0.1, 9.0))
             np.savetxt(saved_fn, [md_iq], fmt="%0.4f")
+
+            std_iq = np.nanstd(np.clip(iq, 0.1, 9.0))
+            if len(iq_dither) > 0:
+                with open(saved_detailed_fn,"w") as f:
+                    f.write(f"Shot median: {md_iq:0.4f} +/- {std_iq:0.5f}\n")
+                    for i in range(cfg.numexp):
+                        sel = np.array(iq_dither) == i + 1
+                        md_iq = np.nanmedian(np.clip(np.array(iq)[sel], 0.1, 9.0))
+                        std_iq = np.nanstd(np.clip(np.array(iq)[sel], 0.1, 9.0))
+                        f.write(f"  Dither #{i+1}: {md_iq:0.4f} +/- {std_iq:0.5f}\n")
+
+                    f.write("All guider values:\n")
+                    for i in range(len(iq_dither)):
+                        f.write(f"{iq_dither[i]} {iq_time[i]} {iq[i]:0.4f}\n")
+
             return md_iq
         else:
             return None
@@ -4708,6 +4868,11 @@ if rc < 0:
 
 
 rc = node_setup(cfg)
+
+if cfg.special == 1:
+    print("*** SPECIAL (1) *** forcing guider fwhm then terminating")
+    cfg.guider_fwhm = get_guider_fwhm(cfg)
+    exit(0)
 
 if cfg.numexp < 3:
     print(f"Fewer than 3 exposures (assume dithers). Checking guider for seeing FWHM...")
