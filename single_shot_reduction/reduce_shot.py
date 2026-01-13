@@ -320,6 +320,11 @@ len_args = len(args)
 queue_elixer = False
 
 if "-queue_elixer" in args:
+    # this is option is to be used on its own call, not part of a normal reduction
+    # it looks for the shot under the current directory (reduction must already be completed in a previous run)
+    #  and calls sbatch for the line and conts (again, which should have been previously created)
+    # e.g. it just makes it simpler to call sbatch on already created slurm jobs
+    #      it shoud be executed from the normal login node
     print("Hidden switch : queueing elixer slurm jobs that match datevshot ...")
     print("Usage: python reduce_shot.py <datevshot>")
     print("Usage: wildcards allowed, but DO NOT prefix with 'sci' ")
