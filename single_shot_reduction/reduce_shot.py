@@ -487,15 +487,18 @@ def run_queue_elixer(cfg):
 
     cwd = os.getcwd()
     fns = glob.glob(f"sci{cfg.datevshot}")
-    #print(fns)
+    print(f"Attempting to SLURM queue using pattern: {cfg.datevshot}")
+    print(f"  matches: {fns}")
     for fn in fns:
         try:
-            for dettype in ["line","cont"]:
+            for dettype in ["out","line","cont"]:
                 slurm_path = os.path.join(fn, f"elixer/{dettype}")
                 if safe_cd(slurm_path):
                     if os.path.exists("elixer.slurm"):
-                        cmd = f"cd {slurm_path} ; sbatch elixer.slurm ; cd {cwd}"
-                        #print(cmd)
+                        #don't need the cd commands anymore since using safe_cd() above
+                        #cmd = f"cd {slurm_path} ; sbatch elixer.slurm ; cd {cwd}"
+                        cmd = f"sbatch elixer.slurm"
+                        #print(f"Sending cmd to shell: {cmd}")
                         system_command(cfg,cmd)
 
                     os.chdir(cwd)
