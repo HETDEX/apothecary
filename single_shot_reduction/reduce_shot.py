@@ -528,10 +528,19 @@ def hetdex_dither(cfg):
                 # if 0.0 < x[1] < 1.7 and -1.2 < y[1] < 0.0:
                 #     if 0.0 < x[2] < 1.7 and 0.0 < y[2] < 1.5:
                 #         rc = 1
-                #keep this pretty loose
-                if (0.0 < x[1] < 2.0) and (-2.0 < y[1] < 0.0):
-                    if (0.0 < x[2] < 2.0) and (0.0 < y[2] < 2.0):
+
+
+                #expect 1 move in x of about 1.5" and then x2 close to x1
+                #and 2 moves in y with opposite signs and separation around 1.5"
+                # keep this pretty loose
+                if 0.5 < abs(x[1]) < 2.5 and abs(x[2] - x[1]) < 0.5:
+                    if y[1] * y[2] < 0 and 0.5 < abs(y[2] - y[1]) < 2.5:
                         rc = 1
+
+                # #keep this pretty loose
+                # if (0.0 < x[1] < 2.0) and (-2.0 < y[1] < 0.0) and \
+                #    (0.0 < x[2] < 2.0) and ( 0.0 < y[2] < 2.0):
+                #     rc = 1
     except:
         rc = -1
         print(f"[{cfg.datevshot}] Exception in hetdex_dither()", traceback.format_exc())
