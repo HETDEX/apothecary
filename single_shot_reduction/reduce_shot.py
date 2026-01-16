@@ -529,8 +529,8 @@ def hetdex_dither(cfg):
                 #     if 0.0 < x[2] < 1.7 and 0.0 < y[2] < 1.5:
                 #         rc = 1
                 #keep this pretty loose
-                if 0.0 < x[1] < 2.0 and -2.0 < y[1] < 0.0:
-                    if 0.0 < x[2] < 2.0 and 0.0 < y[2] < 2.0:
+                if (0.0 < x[1] < 2.0) and (-2.0 < y[1] < 0.0):
+                    if (0.0 < x[2] < 2.0) and (0.0 < y[2] < 2.0):
                         rc = 1
     except:
         rc = -1
@@ -971,7 +971,7 @@ def write_summary(cfg):
 
             dx1 = h5.root.Shot.read(field="xditherpos")[0]
             dy1 = h5.root.Shot.read(field="yditherpos")[0]
-            f.write(f"Dithers: \t({dx1[0]:0.4f},{dy1[0]:0.4f}) ({dx1[1]:0.4f},{dy1[2]:0.4f}) ({dx1[2]:0.4f},{dy1[2]:0.4f})\n")
+            f.write(f"Dithers: \t({dx1[0]:0.4f},{dy1[0]:0.4f}) ({dx1[1]:0.4f},{dy1[1]:0.4f}) ({dx1[2]:0.4f},{dy1[2]:0.4f})\n")
 
             try:
                 total = 0
