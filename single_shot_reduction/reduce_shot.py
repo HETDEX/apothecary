@@ -533,6 +533,14 @@ def hetdex_dither(cfg):
                 #expect 1 move in x of about 1.5" and then x2 close to x1
                 #and 2 moves in y with opposite signs and separation around 1.5"
                 # keep this pretty loose
+
+                if abs(x[2]-x[1]) > abs(y[2]-y[1]):
+                    #flip x and y, just for this logic
+                    #it does not really matter which holds close to constant and which moves around 1.5"
+                    #for the fill
+                    y = h5.root.Shot.read(field="xditherpos")[0]
+                    x = h5.root.Shot.read(field="yditherpos")[0]
+
                 if 0.5 < abs(x[1]) < 2.5 and abs(x[2] - x[1]) < 0.5:
                     if y[1] * y[2] < 0 and 0.5 < abs(y[2] - y[1]) < 2.5:
                         rc = 1
