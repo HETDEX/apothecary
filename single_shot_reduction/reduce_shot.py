@@ -1979,7 +1979,7 @@ def initial_setup(cfg):
 
                 #tmp lock file (so only one attempt to copy and extract; since there are often many observations
                 #   in this file, only one of the tasks that are on that date should copy)
-                tmp_lock_file =f"{cfg.datevshot[-3:]}.lock"
+                tmp_lock_file =f"{cfg.datevshot[:-4]}.lock"
                 lock = FileLock(tmp_lock_file)  # we are in the top directory (not sciXXXX)
                 with lock:
                     #try to copy
