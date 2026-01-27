@@ -17,11 +17,8 @@ import numpy as np
 import tables
 import os
 import sys
-import time as pytime
 import traceback
 
-#for convenience
-from elixer import global_config as G
 
 UNSET_FLOAT = -999.999
 UNSET_INT = -99999
@@ -31,33 +28,37 @@ SUPPORTED_ELIXER_H5_VERSIONS = [b"0.9.2",]
 
 #logging will just be prints
 #this is all single threaded, no real management needed
-class PrintLog():
+class PrintLog:
     def __init__(self,logfile=None):
         self.logfile =logfile
 
-    def log(self,msg):
+    def log(self,msg,exc_info=False):
         print(msg,flush=True)
         if self.logfile:
             try:
                 with open(self.logfile,"a") as f:
-                    f.write(msg+"\n")
+                    if exc_info:
+                        f.write(msg + traceback.format_exc() + "\n")
+                    else:
+                        f.write(msg+"\n")
             except:
                 pass
 
-    def critical(self,msg):
-        self.log(msg)
+    def critical(self,msg,exc_info=False):
+        self.log(msg,exc_info)
 
-    def error(self,msg):
-        self.log(msg)
+    def error(self,msg,exc_info=False):
+        self.log(msg,exc_info)
 
-    def info(self,msg):
-        self.log(msg)
+    def info(self,msg,exc_info=False):
+        self.log(msg,exc_info)
 
-    def warning(self,msg):
-        self.log(msg)
+    def warning(self,msg,exc_info=False):
+        self.log(msg,exc_info)
 
-    def debug(self,msg):
-        self.log(msg)
+    def debug(self,msg,exc_info=False):
+        self.log(msg,exc_info)
+# end class def
 
 log = PrintLog('h5_merge.log')
 
@@ -150,7 +151,7 @@ class Detections(tables.IsDescription):
     continuum_wide_err = tables.Float32Col(dflt=UNSET_FLOAT)
     mag_g_wide = tables.Float32Col(dflt=UNSET_FLOAT) #the pseudo g-band magnitude from the spectrum
     mag_g_wide_err = tables.Float32Col(dflt=UNSET_FLOAT)
-    mag_g_wide_limit = tables.Float32Col(dflt=G.HETDEX_CONTINUUM_MAG_LIMIT)
+    mag_g_wide_limit = tables.Float32Col(dflt=24.8)
     eqw_rest_lya_wide = tables.Float32Col(dflt=UNSET_FLOAT)
     eqw_rest_lya_wide_err = tables.Float32Col(dflt=UNSET_FLOAT)
     plae_wide = tables.Float32Col(dflt=UNSET_FLOAT)
@@ -251,24 +252,22 @@ class Aperture(tables.IsDescription):
     dec = tables.Float32Col(pos=2,dflt=UNSET_FLOAT) #was aperture_dec
     catalog_name = tables.StringCol(itemsize=16)
     filter_name = tables.StringCol(itemsize=16)
-    image_depth_mag = tables.Float32Col(dflt=99.9)
-    pixel_scale = tables.Float32Col(dflt=UNSET_FLOAT)
-    radius = tables.Float32Col(dflt=UNSET_FLOAT) #in arcsec , #was aperture_radius
-    mag = tables.Float32Col(dflt=UNSET_FLOAT) #was aperture_mag
-    mag_err = tables.Float32Col(dflt=UNSET_FLOAT) #was  aperture_mag_err
-
-    mag_dered = tables.Float32Col(dflt=UNSET_FLOAT) # #added 0.9.2
-
-    aperture_area_pix = tables.Float32Col(dflt=UNSET_FLOAT) #pixels
-    sky_area_pix = tables.Float32Col(dflt=UNSET_FLOAT) #pixels
-    eqw_rest_lya = tables.Float32Col(dflt=UNSET_FLOAT) #was  aperture_eqw_rest_lya
-    eqw_rest_lya_err = tables.Float32Col(dflt=UNSET_FLOAT) #was  aperture_eqw_rest_lya_err
-    plae = tables.Float32Col(dflt=UNSET_NAN) #was  aperture_plae
-    plae_max = tables.Float32Col(dflt=UNSET_NAN) #was  aperture_plae_max
-    plae_min = tables.Float32Col(dflt=UNSET_NAN) #was  aperture_plae_min
-    aperture_cts = tables.Float32Col(dflt=UNSET_FLOAT) #was aperture_counts
-    sky_cts = tables.Float32Col(dflt=UNSET_FLOAT)
-    sky_average = tables.Float32Col(dflt=UNSET_FLOAT)
+    image_depth_mag = tables.Float16Col(dflt=99.9)
+    pixel_scale = tables.Float16Col(dflt=UNSET_FLOAT)
+    radius = tables.Float16Col(dflt=UNSET_FLOAT) #in arcsec , #was aperture_radius
+    mag = tables.Float16Col(dflt=UNSET_FLOAT) #was aperture_mag
+    mag_err = tables.Float16Col(dflt=UNSET_FLOAT) #was  aperture_mag_err
+    mag_dered = tables.Float16Col(dflt=UNSET_FLOAT) # #added 0.9.2
+    aperture_area_pix = tables.Float32Col(dflt=UNSET_FLOAT) #pixels  #leave at 32
+    sky_area_pix = tables.Float32Col(dflt=UNSET_FLOAT) #pixels  #leave at 32
+    eqw_rest_lya = tables.Float16Col(dflt=UNSET_FLOAT) #was  aperture_eqw_rest_lya
+    eqw_rest_lya_err = tables.Float16Col(dflt=UNSET_FLOAT) #was  aperture_eqw_rest_lya_err
+    plae = tables.Float16Col(dflt=UNSET_NAN) #was  aperture_plae
+    plae_max = tables.Float16Col(dflt=UNSET_NAN) #was  aperture_plae_max
+    plae_min = tables.Float16Col(dflt=UNSET_NAN) #was  aperture_plae_min
+    aperture_cts = tables.Float32Col(dflt=UNSET_FLOAT) #was aperture_counts  #leave at 32
+    sky_cts = tables.Float32Col(dflt=UNSET_FLOAT)  #leave at 32
+    sky_average = tables.Float32Col(dflt=UNSET_FLOAT)  #leave at 32
 
 class ElixerApertures(tables.IsDescription): #perhaps keep just the selected ones??
     #one entry per aperture photometry collected
@@ -277,15 +276,13 @@ class ElixerApertures(tables.IsDescription): #perhaps keep just the selected one
     dec = tables.Float32Col(pos=2,dflt=UNSET_FLOAT)
     catalog_name = tables.StringCol(itemsize=16)
     filter_name = tables.StringCol(itemsize=16)
-    image_depth_mag = tables.Float32Col(dflt=99.9)
-    pixel_scale = tables.Float32Col(dflt=UNSET_FLOAT) #arcsec/pixel
+    image_depth_mag = tables.Float16Col(dflt=99.9)
+    pixel_scale = tables.Float16Col(dflt=UNSET_FLOAT) #arcsec/pixel
     selected = tables.BoolCol(dflt=False) #if True this is the object used for the aperture PLAE/OII, etc (see above table)
-    radius = tables.Float32Col(dflt=UNSET_FLOAT) #major axis (diameter) 'a' in arcsec
-    mag = tables.Float32Col(dflt=UNSET_FLOAT)
-    mag_err = tables.Float32Col(dflt=UNSET_FLOAT)
-
-    mag_dered = tables.Float32Col(dflt=UNSET_FLOAT)  #added 0.9.2
-
+    radius = tables.Float16Col(dflt=UNSET_FLOAT) #major axis (diameter) 'a' in arcsec
+    mag = tables.Float16Col(dflt=UNSET_FLOAT)
+    mag_err = tables.Float16Col(dflt=UNSET_FLOAT)
+    mag_dered = tables.Float16Col(dflt=UNSET_FLOAT)  #added 0.9.2
     background_cts = tables.Float32Col(dflt=UNSET_FLOAT) #sky_average
     background_err = tables.Float32Col(dflt=UNSET_FLOAT)
     flux_cts = tables.Float32Col(dflt=UNSET_FLOAT)
@@ -301,33 +298,29 @@ class ExtractedObjects(tables.IsDescription): #keep all, I think
     dec = tables.Float32Col(pos=2,dflt=UNSET_FLOAT)
     catalog_name = tables.StringCol(itemsize=16)
     filter_name = tables.StringCol(itemsize=16)
-    image_depth_mag = tables.Float32Col(dflt=99.9)
-    pixel_scale = tables.Float32Col(dflt=UNSET_FLOAT) #arcsec/pixel
+    image_depth_mag = tables.Float16Col(dflt=99.9)
+    pixel_scale = tables.Float16Col(dflt=UNSET_FLOAT) #arcsec/pixel
     selected = tables.BoolCol(dflt=False) #if True this is the object used for the aperture PLAE/OII, etc (see above table)
-    major = tables.Float32Col(dflt=UNSET_FLOAT) #major axis (diameter) 'a' in arcsec
-    minor = tables.Float32Col(dflt=UNSET_FLOAT) #'b'
-    theta = tables.Float32Col(dflt=0.0) #radians counter-clockwise from x-axis
-    mag = tables.Float32Col(dflt=UNSET_FLOAT)
-    mag_err = tables.Float32Col(dflt=UNSET_FLOAT)
-
-    mag_dered = tables.Float32Col(dflt=UNSET_FLOAT)  #added 0.9.2
-
+    major = tables.Float16Col(dflt=UNSET_FLOAT) #major axis (diameter) 'a' in arcsec
+    minor = tables.Float16Col(dflt=UNSET_FLOAT) #'b'
+    theta = tables.Float16Col(dflt=0.0) #radians counter-clockwise from x-axis
+    mag = tables.Float16Col(dflt=UNSET_FLOAT)
+    mag_err = tables.Float16Col(dflt=UNSET_FLOAT)
+    mag_dered = tables.Float16Col(dflt=UNSET_FLOAT)  #added 0.9.2
 
     background_cts = tables.Float32Col(dflt=UNSET_FLOAT)
     background_err = tables.Float32Col(dflt=UNSET_FLOAT)
     flux_cts = tables.Float32Col(dflt=UNSET_FLOAT)
     flux_err = tables.Float32Col(dflt=UNSET_FLOAT)
     flags = tables.Int32Col(dflt=0)
-    dist_curve = tables.Float32Col(dflt=UNSET_FLOAT)
-    dist_baryctr = tables.Float32Col(dflt=UNSET_FLOAT)
+    dist_curve = tables.Float16Col(dflt=UNSET_FLOAT)
+    dist_baryctr = tables.Float16Col(dflt=UNSET_FLOAT)
     image_flags = tables.Int64Col(dflt=0) #separate from the aperture flags, these are ties to the image reduction pipeline
 
-    fixed_aper_radius = tables.Float32Col(dflt=UNSET_FLOAT)
-    fixed_aper_mag = tables.Float32Col(dflt=UNSET_FLOAT)
-    fixed_aper_mag_err = tables.Float32Col(dflt=UNSET_FLOAT)
-
-    fixed_aper_mag_dered = tables.Float32Col(dflt=UNSET_FLOAT)  #added 0.9.2
-
+    fixed_aper_radius = tables.Float16Col(dflt=UNSET_FLOAT)
+    fixed_aper_mag = tables.Float16Col(dflt=UNSET_FLOAT)
+    fixed_aper_mag_err = tables.Float16Col(dflt=UNSET_FLOAT)
+    fixed_aper_mag_dered = tables.Float16Col(dflt=UNSET_FLOAT)  #added 0.9.2
 
     fixed_aper_flux_cts = tables.Float32Col(dflt=UNSET_FLOAT)
     fixed_aper_flux_err = tables.Float32Col(dflt=UNSET_FLOAT)
@@ -352,20 +345,20 @@ class CatalogMatch(tables.IsDescription):
     selected = tables.BoolCol(pos=3,dflt=False)
     catalog_name = tables.StringCol(itemsize=16)
     filter_name = tables.StringCol(itemsize=16)
-    match_num = tables.Int32Col(dflt=-1)
-    separation = tables.Float32Col(dflt=UNSET_FLOAT) #in arcsec
-    prob_match = tables.Float32Col(dflt=UNSET_FLOAT) #in arcsec
-    specz = tables.Float32Col(dflt=UNSET_FLOAT) #was cat_specz
-    photz = tables.Float32Col(dflt=UNSET_FLOAT) #was cat_photz
+    match_num = tables.Int16Col(dflt=-1)
+    separation = tables.Float16Col(dflt=UNSET_FLOAT) #in arcsec
+    prob_match = tables.Float16Col(dflt=UNSET_FLOAT) #in arcsec
+    specz = tables.Float16Col(dflt=UNSET_FLOAT) #was cat_specz
+    photz = tables.Float16Col(dflt=UNSET_FLOAT) #was cat_photz
     flux = tables.Float32Col(dflt=UNSET_FLOAT) #was  cat_flux
     flux_err = tables.Float32Col(dflt=UNSET_FLOAT) #was cat_flux_err
-    mag = tables.Float32Col(dflt=UNSET_FLOAT) #was  cat_mag
-    mag_err = tables.Float32Col(dflt=UNSET_FLOAT) #was cat_mag_err
-    eqw_rest_lya = tables.Float32Col(dflt=UNSET_FLOAT) #was cat_eqw_rest_lya
-    eqw_rest_lya_err = tables.Float32Col(dflt=UNSET_FLOAT) #was cat_eqw_rest_lya_err
-    plae = tables.Float32Col(dflt=UNSET_FLOAT) #was  cat_plae
-    plae_max = tables.Float32Col(dflt=UNSET_FLOAT) #was cat_plae_max
-    plae_min = tables.Float32Col(dflt=UNSET_FLOAT) #was cat_plae_min
+    mag = tables.Float16Col(dflt=UNSET_FLOAT) #was  cat_mag
+    mag_err = tables.Float16Col(dflt=UNSET_FLOAT) #was cat_mag_err
+    eqw_rest_lya = tables.Float16Col(dflt=UNSET_FLOAT) #was cat_eqw_rest_lya
+    eqw_rest_lya_err = tables.Float16Col(dflt=UNSET_FLOAT) #was cat_eqw_rest_lya_err
+    plae = tables.Float16Col(dflt=UNSET_FLOAT) #was  cat_plae
+    plae_max = tables.Float16Col(dflt=UNSET_FLOAT) #was cat_plae_max
+    plae_min = tables.Float16Col(dflt=UNSET_FLOAT) #was cat_plae_min
 
     #maybe add in the PDF of the photz ... not sure how big
     #to make the columns ... needs to be fixed, but might
@@ -668,17 +661,17 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
     :return:
     """
 
+    fileh = None
+    shot_h5 = None
+    elixer_h5 = None
 
     try:
-        shot_h5 = None
-        elixer_h5 = None
-
         #check that the one or two input files exist and can be opened
         if shot_fn is not None:
             try:
                 shot_h5 = tables.open_file(shot_fn,mode='r')
             except:
-                log.critical(f"Failed to open input shot.h5 file: {shot_fn}",traceback.format_exc())
+                log.critical(f"Failed to open input shot.h5 file: {shot_fn}",exc_info=True)
                 return
 
         if shot_h5 is None: #this MUST always be provided
@@ -689,11 +682,11 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             try:
                 elixer_h5 = tables.open_file(elixer_fn,mode='r')
             except:
-                log.critical(f"Fatal. Failed to open input elixer.h5 file: {elixer_fn}",traceback.format_exc())
+                log.critical(f"Fatal. Failed to open input elixer.h5 file: {elixer_fn}",exc_info=True)
                 return
 
             if elixer_h5 is None:
-                log.critical(f"Fatal. Failed to open input elixer.h5 file: {elixer_fn}", traceback.format_exc())
+                log.critical(f"Fatal. Failed to open input elixer.h5 file: {elixer_fn}", exc_info=True)
                 return
 
             #check supported version
@@ -768,7 +761,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             fileh.root.Data.Fibers.cols.ra.create_csindex()
             fileh.root.Data.Fibers.cols.dec.create_csindex()
         except:
-            log.debug("Index fail on fibers table", traceback.format_exc())
+            log.debug("Index fail on fibers table",exc_info=True)
 
         fileh.root.Data.Fibers.flush()
         #done with the shot.h5 file now
@@ -822,7 +815,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 fileh.root.Detections.cols.ra.create_csindex()
                 fileh.root.Detections.cols.dec.create_csindex()
             except:
-                log.debug("Index fail on Detections table", traceback.format_exc())
+                log.debug("Index fail on Detections table", exc_info=True)
 
             fileh.root.Detections.flush()
 
@@ -836,7 +829,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             try:
                 fileh.root.SpectraLines.cols.detectid.create_csindex()
             except:
-                log.debug("Index fail on SpectraLines table", traceback.format_exc())
+                log.debug("Index fail on SpectraLines table", exc_info=True)
 
             fileh.root.SpectraLines.flush()
 
@@ -862,9 +855,190 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             try:
                 fileh.root.CalibratedSpectra.cols.detectid.create_csindex()
             except:
-                log.debug("Index fail on CalibratedSpectra table", traceback.format_exc())
+                log.debug("Index fail on CalibratedSpectra table", exc_info=True)
 
             fileh.root.CalibratedSpectra.flush()
+
+
+            ###############################################
+            # Aperture
+            #################################################
+            for row in elixer_h5.root.Aperture.read():
+                new_row = fileh.root.Aperture.row
+
+                new_row['detectid'] = row['detectid']
+                new_row['ra'] = row['ra']
+                new_row['dec'] = row['dec']
+                new_row['catalog_name'] = row['catalog_name']
+                new_row['filter_name'] = row['filter_name']
+                new_row['image_depth_mag'] = row['image_depth_mag'].astype(np.float16)
+                new_row['pixel_scale'] = row['pixel_scale'].astype(np.float16)
+                new_row['radius'] = row['radius'].astype(np.float16)
+                new_row['mag'] = row['mag'].astype(np.float16)
+                new_row['mag_err'] = row['mag_err'].astype(np.float16)
+                new_row['mag_dered'] = row['mag_dered'].astype(np.float16)
+
+                new_row['aperture_area_pix'] = row['aperture_area_pix'] #.astype(np.float16) #could be very many pix
+                new_row['sky_area_pix'] = row['sky_area_pix'] #.astype(np.float16) #could be very many pix
+                new_row['eqw_rest_lya'] = row['eqw_rest_lya'].astype(np.float16)
+                new_row['eqw_rest_lya_err'] = row['eqw_rest_lya_err'].astype(np.float16)
+                new_row['plae'] = row['plae'].astype(np.float16)
+                new_row['plae_max'] = row['plae_max'].astype(np.float16)
+                new_row['plae_min'] = row['plae_min'].astype(np.float16)
+
+                new_row['aperture_cts'] = row['aperture_cts'] #could be very many counts
+                new_row['sky_cts'] = row['sky_cts']   #could be very many counts
+                new_row['sky_average'] = row['sky_average'] #could be very many counts
+
+                new_row.append()
+
+            fileh.root.Aperture.flush()
+            #set the index
+            try:
+                fileh.root.Aperture.cols.detectid.create_csindex()
+            except:
+                log.debug("Index fail on Aperture table", exc_info=True)
+
+            fileh.root.Aperture.flush()
+
+
+
+            ##########################################
+            # ElixerApertures
+            # Only keep the one selected aperture size ?
+            ##########################################
+            for row in elixer_h5.root.ElixerApertures.read_where("selected==True"):
+                new_row = fileh.root.ElixerApertures.row
+
+                new_row['detectid'] = row['detectid']
+                new_row['ra'] = row['ra']
+                new_row['dec'] = row['dec']
+                new_row['catalog_name'] = row['catalog_name']
+                new_row['filter_name'] = row['filter_name']
+                new_row['image_depth_mag'] = row['image_depth_mag'].astype(np.float16)
+                new_row['pixel_scale'] = row['pixel_scale'].astype(np.float16)
+                new_row['selected'] = row['selected']
+                new_row['radius'] = row['radius'].astype(np.float16)
+                new_row['mag'] = row['mag'].astype(np.float16)
+                new_row['mag_err'] = row['mag_err'].astype(np.float16)
+                new_row['mag_dered'] = row['mag_dered'].astype(np.float16)
+
+                new_row['background_cts'] = row['background_cts'] #.astype(np.float16) #could be very many pix
+                new_row['background_err'] = row['background_err'] #.astype(np.float16) #could be very many pix
+
+
+                new_row['flux_cts'] = row['flux_cts'] #could be very many counts
+                new_row['flux_err'] = row['flux_err']   #could be very many counts
+                new_row['flags'] = row['flags']
+                new_row['image_flags'] = row['image_flags']
+                new_row.append()
+
+            fileh.root.ElixerApertures.flush()
+            #set the index
+            try:
+                fileh.root.ElixerApertures.cols.detectid.create_csindex()
+            except:
+                log.debug("Index fail on ElixerApertures table", exc_info=True)
+
+            fileh.root.ElixerApertures.flush()
+
+
+
+            ##################################################
+            # ExtractedObjects
+            ##################################################
+            for row in elixer_h5.root.ExtractedObjects.read_where("selected==True"):
+                new_row = fileh.root.ExtractedObjects.row
+
+                new_row['detectid'] = row['detectid']
+                new_row['ra'] = row['ra']
+                new_row['dec'] = row['dec']
+                new_row['catalog_name'] = row['catalog_name']
+                new_row['filter_name'] = row['filter_name']
+                new_row['image_depth_mag'] = row['image_depth_mag'].astype(np.float16)
+                new_row['pixel_scale'] = row['pixel_scale'].astype(np.float16)
+                new_row['selected'] = row['selected']
+
+                new_row['major'] = row['major'].astype(np.float16)
+                new_row['minor'] = row['minor'].astype(np.float16)
+                new_row['theta'] = row['theta'].astype(np.float16)
+                new_row['mag'] = row['mag'].astype(np.float16)
+                new_row['mag_err'] = row['mag_err'].astype(np.float16)
+                new_row['mag_dered'] = row['mag_dered'].astype(np.float16)
+
+                new_row['background_cts'] = row['background_cts'] #.astype(np.float16) #could be very many pix
+                new_row['background_err'] = row['background_err'] #.astype(np.float16) #could be very many pix
+                new_row['flux_cts'] = row['flux_cts'] #could be very many counts
+                new_row['flux_err'] = row['flux_err']   #could be very many counts
+                new_row['flags'] = row['flags']
+
+                new_row['dist_curve'] = row['dist_curve'].astype(np.float16)
+                new_row['dist_baryctr'] = row['dist_baryctr'].astype(np.float16)
+
+                new_row['image_flags'] = row['image_flags']
+
+                new_row['fixed_aper_radius'] = row['fixed_aper_radius'].astype(np.float16)
+                new_row['fixed_aper_mag'] = row['fixed_aper_mag'].astype(np.float16)
+                new_row['fixed_aper_mag_err'] = row['fixed_aper_mag_err'].astype(np.float16)
+                new_row['fixed_aper_mag_dered'] = row['fixed_aper_mag_dered'].astype(np.float16)
+
+                new_row['fixed_aper_flux_cts'] = row['fixed_aper_flux_cts']
+                new_row['fixed_aper_flux_err'] = row['fixed_aper_flux_err']
+                new_row['fixed_aper_flags'] = row['fixed_aper_flags']
+
+                new_row.append()
+
+            fileh.root.ExtractedObjects.flush()
+            #set the index
+            try:
+                fileh.root.ExtractedObjects.cols.detectid.create_csindex()
+            except:
+                log.debug("Index fail on ExtractedObjects table", exc_info=True)
+
+            fileh.root.ExtractedObjects.flush()
+
+
+
+            #########################################
+            # CatalogMatch
+            ########################################
+            for row in elixer_h5.root.CatalogMatch.read_where("selected==True"):
+                new_row = fileh.root.CatalogMatch.row
+
+                new_row['detectid'] = row['detectid']
+                new_row['ra'] = row['ra']
+                new_row['dec'] = row['dec']
+                new_row['selected'] = row['selected']
+                new_row['catalog_name'] = row['catalog_name']
+                new_row['filter_name'] = row['filter_name']
+
+                new_row['match_num'] = row['match_num'].astype(np.int16)
+                new_row['separation'] = row['separation'].astype(np.float16)
+                new_row['prob_match'] = row['prob_match'].astype(np.float16)
+                new_row['specz'] = row['specz'].astype(np.float16)
+                new_row['photz'] = row['photz'].astype(np.float16)
+
+                new_row['flux'] = row['flux']
+                new_row['flux_err'] = row['flux_err']
+
+                new_row['mag'] = row['mag'].astype(np.float16)
+                new_row['mag_err'] = row['mag_err'].astype(np.float16)
+                new_row['eqw_rest_lya'] = row['eqw_rest_lya'].astype(np.float16)
+                new_row['eqw_rest_lya_err'] = row['eqw_rest_lya_err'].astype(np.float16)
+                new_row['plae'] = row['plae'].astype(np.float16)
+                new_row['plae_max'] = row['plae_max'].astype(np.float16)
+                new_row['plae_min'] = row['plae_min'].astype(np.float16)
+
+                new_row.append()
+
+            fileh.root.CatalogMatch.flush()
+            #set the index
+            try:
+                fileh.root.CatalogMatch.cols.detectid.create_csindex()
+            except:
+                log.debug("Index fail on CatalogMatch table", exc_info=True)
+
+            fileh.root.CatalogMatch.flush()
 
 
 
@@ -881,8 +1055,8 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
 
 
-
-    fileh.close()
+    if fileh is not None:
+        fileh.close()
 #end build_ssr_shot_h5
 
 
