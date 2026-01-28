@@ -22,6 +22,7 @@ import glob
 from PIL import Image
 from tqdm import tqdm
 import traceback
+import time
 
 
 UNSET_FLOAT = -999.999
@@ -83,10 +84,15 @@ class Detections(tables.IsDescription):
     elixer_datetime = tables.StringCol(itemsize=21,pos=2) #YYYY-MM-DD hh:mm:ss
 
 
+    # h5_report_idx = tables.Int32Col(pos=3,dflt=-1)
+    # h5_report_gpcd = tables.StringCol(itemsize=32,pos=4,dflt="")
+    # h5_neighbor_idx = tables.Int32Col(pos=5,dflt=-1)
+    # h5_neighbor_gpcd = tables.StringCol(itemsize=32,pos=6,dflt="")
+
     h5_report_idx = tables.Int32Col(pos=3,dflt=-1)
-    h5_report_gpcd = tables.StringCol(itemsize=32,pos=4,dflt="")
+    h5_report_id = tables.Int32Col(pos=4,dflt=-1)
     h5_neighbor_idx = tables.Int32Col(pos=5,dflt=-1)
-    h5_neighbor_gpcd = tables.StringCol(itemsize=32,pos=6,dflt="")
+    h5_neighbor_id = tables.Int32Col(pos=6,dflt=-1)
 
     #shotid = tables.Int64Col() #redundant with shot table
     #obsid = tables.Int32Col() #redundant with shot table
@@ -735,9 +741,9 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         fileh.root.Shot.append(shot_h5.root.Shot.read())
         fileh.root.Shot.flush()
 
-        print(f"Loading Fiber data ... ")
+        print(f"Importing Fiber data ... ",flush=True)
         #many for fibers, so iterate
-        for row in shot_h5.root.Data.Fibers.read():
+        for row in tqdm(shot_h5.root.Data.Fibers.read()):
             new_row = fileh.root.Data.Fibers.row
             #go over some columns individual since want to change some types
             #directy copy columns:
@@ -1080,7 +1086,7 @@ def get_max_image(image_path):
     # t3 = []
 
     try:
-        print("Checking image sizes ...")
+        print("Checking image sizes ...",flush=True)
         image_fns = sorted(glob.glob(image_path))
         for img_path in tqdm(image_fns):
             x1,x2,x3  = np.array(Image.open(img_path)).shape
@@ -1099,7 +1105,13 @@ def get_max_image(image_path):
     # print(f"x1: {np.unique(t1)}")
     # print(f"x2: {np.unique(t2)}")
     # print(f"x3: {np.unique(t3)}")
-    return (max1,max2,max3), sorted(np.unique(t1))
+
+    unique_d1, unique_ct = np.unique(t1,return_counts=True)
+
+    return (max1,max2,max3), unique_d1, unique_ct
+
+
+
 
 def add_images(shot_h5fn,image_path,group_name,earray_name="image_data"):
     """
@@ -1113,12 +1125,25 @@ def add_images(shot_h5fn,image_path,group_name,earray_name="image_data"):
 
         print(f"Importing images: {image_path} to root.{group_name}.{earray_name}*")
 
-        max_shape, unique_d1 = get_max_image(image_path)
+        #max_shape, unique_d1, unique_ct = get_max_image(image_path)
+
+        max_shape, img_dict = get_image_dict(image_path)
+        unique_d1 = img_dict.keys()
+        unique_ct = np.array([len(img_dict[k]) for k in img_dict.keys()])
+
+        #sort
+        unique_d1, unique_ct = zip(*sorted(zip(unique_d1, unique_ct))[::-1]) #decreasing size (this is slightly better on storage)
+        #unique_d1, unique_ct = zip(*sorted(zip(unique_d1, unique_ct))) #increasing size
+
+        image_fns = []
+        for k in unique_d1: #in same D1 size order
+            image_fns += img_dict[k]
+
 
         with tables.open_file(shot_h5fn,mode="r+") as h5:  #so will auto close regardless of exit
             dtb = h5.root.Detections
 
-            image_fns = sorted(glob.glob(image_path))
+            #image_fns = sorted(glob.glob(image_path)) #instead use order from img_dict above
 
             # Create a group to store the images #might already exist
             try:
@@ -1127,38 +1152,41 @@ def add_images(shot_h5fn,image_path,group_name,earray_name="image_data"):
                 img_group = h5.root.elixer_reports
 
             img = Image.open(image_fns[0])
-            #img_shape = max_shape # np.array(img).shape
             img_dtype = np.array(img).dtype
 
             # Define atom and filters for compression (e.g., zlib, blosc)
             atom = tables.Atom.from_dtype(img_dtype)
-            # Using 'blosc' for efficient lossless compression is common
-            filters = tables.Filters(complevel=5, complib='blosc')
+            # Using 'blosc' for efficient lossless compression is common 0 = none, 1=minimum up to 9=maximum compression
+            #filters = tables.Filters(complevel=9, complib='blosc')
+            filters = tables.Filters(complevel=1, complib='bzip2', bitshuffle=False, shuffle=False)
 
-            # Create a resizable CArray to store the images
+            # Create a resizable eArray to store the images
             # The shape is (0, ...) to start empty, and the maxshape is (None, ...)
             # to allow the first dimension to grow indefinitely.
 
-            all_ea = [] #in order of unique_d1
+            all_ea = []
             all_ea_idx = []
-            for d1 in unique_d1:
+            for d1,img_ct in zip(unique_d1,unique_ct):
                 name = earray_name + "_" + str(d1)
                 img_shape = (d1,max_shape[1],max_shape[2])
                 try:
                     image_array = h5.create_earray(img_group, name, atom,
                                                      shape=(0,) + img_shape,
-                                                     #maxshape=(None,) + img_shape,
-                                                     #obj=img,
+                                                     expectedrows=img_ct,
                                                      filters=filters)
 
                     all_ea.append(image_array)
                     all_ea_idx.append(0)
                 except:
-                    #todo:
-                    print(f"todo: need to fix this ... open the correct earray {name} ... or disallow")
-                    image_array = h5.root.elixer_reports.image_data
+                    try:
+                        e1 = traceback.format_exc()
+                        image_array = h5.get_node(img_group)._f_get_child(name)
+                    except:
+                        print(f"Cannot import images.\nException #1: {e1}\nException #2: {traceback.format_exc()}")
 
-            # Iterate through all image files, resize if needed, and append to the CArray
+            # Iterate through all image files, resize if needed, and append to the eArray
+            total_images = len(image_fns)
+            print(f"Importing {total_images} images ... ",flush=True)
             for img_path in tqdm(image_fns):
                 img = Image.open(img_path)
                 # Optional: Resize images to a consistent size if necessary
@@ -1174,7 +1202,7 @@ def add_images(shot_h5fn,image_path,group_name,earray_name="image_data"):
                 #debug:
                 #print(i,d1,img_as_array.shape,all_ea[i].name,all_ea[i]._v_chunkshape,img_path)
 
-                all_ea[i].append([img_as_array])#, dtype=img_dtype)
+                all_ea[i].append([img_as_array])
 
                 #now update Detections
                 did = Path(img_path).stem
@@ -1184,35 +1212,143 @@ def add_images(shot_h5fn,image_path,group_name,earray_name="image_data"):
                     did = did[:-4] #strip off the _nei
                 did = np.int64(did)
 
-
-                # idx =  dtb.get_where_list("detectid==did")[0] #should be exactly 1
-                # for row in dtb.iterrows(start=idx, stop=idx+1, step=1):
-                #     if nei:
-                #         row['h5_neighbor_gpcd'] = all_ea[i].name
-                #     else:
-                #         row['h5_report_gpcd'] = all_ea[i].name
-                #     row.update()
-
-
                 idx = dtb.get_where_list("detectid==did")[0]
                 row = dtb.read_where("detectid==did")  # [0]
                 if nei:
-                    row[0]['h5_neighbor_gpcd'] = all_ea[i].name
+                    row[0]['h5_neighbor_id'] = d1
                     row[0]['h5_neighbor_idx'] = all_ea_idx[i]
                 else:
-                    row[0]['h5_report_gpcd'] = all_ea[i].name
+                    row[0]['h5_report_id'] = d1
                     row[0]['h5_report_idx'] = all_ea_idx[i]
                 all_ea_idx[i] += 1
                 dtb.modify_rows(start=idx, stop=idx + 1, step=1, rows=row)
 
             dtb.flush()
 
-            print(f"Stored {len(image_fns)} images in {shot_h5fn}.")
+            print(f"Stored {total_images} images in {shot_h5fn}.")
 
     except:
         print(f"Exception in add_report_images(): {traceback.format_exc()}")
 
 
+def get_image_dict(image_path):
+    """
+
+    :param image_path:
+    :return: 3-tuple of (max) shape, and dictionary of image paths keyed by the image 1st Dimension length
+    """
+
+    max1 = 0
+    max2 = 0
+    max3 = 0
+
+    img_dict = {}
+
+    try:
+        print("Checking image sizes ...",flush=True)
+        image_fns = sorted(glob.glob(image_path))
+        for img_path in tqdm(image_fns):
+            x1,x2,x3  = np.array(Image.open(img_path)).shape
+
+            max1 = max(max1, x1)
+            max2 = max(max2, x2)
+            max3 = max(max3, x3)
+
+            if x1 in img_dict.keys():
+                img_dict[x1].append(img_path)
+            else:
+                img_dict[x1] = [img_path]
+
+    except:
+        print(f"Exception: {traceback.format_exc()}")
+
+    return (max1,max2,max3), img_dict
+
+
+def import_images(shot_h5fn,image_path,group_name,carray_name="image_data"):
+    """
+
+    :param shot_h5fn: new ssr shot h5 path and filename
+    :param image_path: path to images, include wildcards as will be used with glob
+    :return:
+    """
+
+    try:
+
+        print(f"Importing images: {image_path} to root.{group_name}.{carray_name}*")
+
+        max_shape, img_dict = get_image_dict(image_path)
+
+        with tables.open_file(shot_h5fn,mode="r+") as h5:  #so will auto close regardless of exit
+
+            dtb = h5.root.Detections
+
+            # Create a group to store the images #might already exist
+            try:
+                img_group = h5.create_group(h5.root, group_name)
+            except:
+                img_group = h5.root.elixer_reports
+
+
+            img = Image.open(img_dict[next(iter(img_dict))][0]) #just need one,so open 1st image in dict
+            img_dtype = np.array(img).dtype
+
+            # Define atom and filters for compression (e.g., zlib, blosc)
+            atom = tables.Atom.from_dtype(img_dtype)
+            # Using 'blosc' for efficient lossless compression is common 0 = none, 1=minimum up to 9=maximum compression
+            # better compression net result with shuffle=False (default is True) and bitshuffle=False (default)
+            filters = tables.Filters(complevel=1, complib='bzip2',bitshuffle=False,shuffle=False)
+            #filters = None
+
+
+
+            #iterate (in decending order of 1D size) over the img_dict and pre-allocate carrays and then populate
+            total_images = sum(len(img_dict[k]) for k in img_dict.keys())
+            print(f"Importing {total_images} images ... ",flush=True)
+            for key in sorted(img_dict.keys())[::-1]:
+                name = carray_name + "_" + str(key)
+                img_shape = (key, max_shape[1], max_shape[2])
+                try:
+                    image_array = h5.create_carray(img_group, name, atom,
+                                                   shape=(len(img_dict[key]),) + img_shape,
+                                                   filters=filters)
+                except:
+                    try:
+                        e1 = traceback.format_exc()
+                        image_array = h5.get_node(img_group)._f_get_child(name)
+                    except:
+                        print(f"Cannot import images.\nException #1: {e1}\nException #2: {traceback.format_exc()}")
+
+                #print(f"Importing ID:{key} ...")
+                for i, img_path in enumerate(tqdm(img_dict[key])):
+                    img_as_array = np.array(Image.open(img_path))
+                    image_array[i] = [img_as_array]
+
+                    # now update Detections
+                    did = Path(img_path).stem
+                    nei = False
+                    if did[-4:] == "_nei":
+                        nei = True
+                        did = did[:-4]  # strip off the _nei
+                    did = np.int64(did)
+
+                    idx = dtb.get_where_list("detectid==did")[0]
+                    row = dtb.read_where("detectid==did")  # [0]
+                    if nei:
+                        row[0]['h5_neighbor_id'] = key
+                        row[0]['h5_neighbor_idx'] = i
+                    else:
+                        row[0]['h5_report_id'] = key
+                        row[0]['h5_report_idx'] = i
+
+                    dtb.modify_rows(start=idx, stop=idx + 1, step=1, rows=row)
+
+            dtb.flush()
+
+            print(f"Stored {total_images} images in {shot_h5fn}.")
+
+    except:
+        print(f"Exception in add_report_images(): {traceback.format_exc()}")
 
 ########################################################################
 ########################################################################
@@ -1269,24 +1405,33 @@ if "-images" in args:
 if len(args) > 0:
     print(f"Unknown remainting args: {args}")
 
+start_time = time.perf_counter()
+
 new_h5_fn = build_ssr_shot_h5(shot_h5_path, elixer_fn=elixer_h5_path)
 if images_path is not None:
+    #pass
+    #using the earray and growing
     add_images(new_h5_fn,os.path.join(images_path,"25*[0-9].png"),"elixer_reports")
     add_images(new_h5_fn,os.path.join(images_path,"25*_nei.png"),"elixer_neighbors")
 
+    #pre-allocating with carray
+    #import_images(new_h5_fn,os.path.join(images_path,"25*[0-9].png"),"elixer_reports")
+    #import_images(new_h5_fn,os.path.join(images_path,"25*_nei.png"),"elixer_neighbors")
 
+
+print(f"Elapsed time: {time.perf_counter() - start_time}")
 
 # example code to fetch images
 # main elixer report
 # did = np.int64(25112201200666)
 # row = dtb.read_where("detectid==did")[0]
 # gp = h5.get_node(f"/elixer_reports")
-# path = gp._f_get_child(row['h5_report_gpcd'].decode())
+# path = gp._f_get_child(f"image_data_{row['h5_report_id']}")
 # idx = row['h5_report_idx']
 # Image.fromarray(path[idx]).show()
 
 # neighborhod report
 # gp = h5.get_node(f"/elixer_neighbors")
-# path = gp._f_get_child(row['h5_neighbor_gpcd'].decode())
+# path = gp._f_get_child(f"image_data_{row['h5_neighbor_id']}")
 # idx = row['h5_neighbor_idx']
 # Image.fromarray(path[idx]).show()
