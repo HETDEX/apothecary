@@ -16,7 +16,11 @@ __version__ = '0.1.0'
 import numpy as np
 import tables
 import os
+from pathlib import Path
 import sys
+import glob
+from PIL import Image
+from tqdm import tqdm
 import traceback
 
 
@@ -73,11 +77,16 @@ class Detections(tables.IsDescription):
     """
     mostly a clone of elixer's h5 Detections table, with the shot specific info removed as redundant to the shot table
     """
+
     detectid = tables.Int64Col(pos=0)
+    elixer_version = tables.StringCol(itemsize=16,pos=1) #version of elixer that generated this detection report
+    elixer_datetime = tables.StringCol(itemsize=21,pos=2) #YYYY-MM-DD hh:mm:ss
 
-    elixer_version = tables.StringCol(itemsize=16,pos=2) #version of elixer that generated this detection report
-    elixer_datetime = tables.StringCol(itemsize=21,pos=3) #YYYY-MM-DD hh:mm:ss
 
+    h5_report_idx = tables.Int32Col(pos=3,dflt=-1)
+    h5_report_gpcd = tables.StringCol(itemsize=32,pos=4,dflt="")
+    h5_neighbor_idx = tables.Int32Col(pos=5,dflt=-1)
+    h5_neighbor_gpcd = tables.StringCol(itemsize=32,pos=6,dflt="")
 
     #shotid = tables.Int64Col() #redundant with shot table
     #obsid = tables.Int32Col() #redundant with shot table
@@ -94,26 +103,29 @@ class Detections(tables.IsDescription):
 
 
     #about the detection
-    ra = tables.Float32Col(dflt=UNSET_FLOAT,pos=4)
-    dec = tables.Float32Col(dflt=UNSET_FLOAT,pos=5)
-    wavelength_obs = tables.Float32Col(dflt=UNSET_FLOAT,pos=6)
-    wavelength_obs_err = tables.Float32Col(dflt=UNSET_FLOAT,pos=7)
+
+    ra = tables.Float32Col(dflt=UNSET_FLOAT,pos=7)
+    dec = tables.Float32Col(dflt=UNSET_FLOAT,pos=8)
+    wavelength_obs = tables.Float32Col(dflt=UNSET_FLOAT,pos=9)
+    wavelength_obs_err = tables.Float32Col(dflt=UNSET_FLOAT,pos=10)
     apcor_4500 = tables.Float32Col(dflt=UNSET_FLOAT)
 
-    z_best = tables.Float32Col(dflt=-1.0,pos=8)
-    z_best_pz = tables.Float32Col(dflt=0.0,pos=9)
+    z_best = tables.Float32Col(dflt=-1.0,pos=11)
+    z_best_pz = tables.Float32Col(dflt=0.0,pos=12)
 
-    z_best_plya_thresh = tables.Float32Col(dflt=-1.0, pos=10)
-    z_best_2 = tables.Float32Col(dflt=-1.0, pos=11)
-    z_best_pz_2 = tables.Float32Col(dflt=0.0, pos=12)
-    z_best_plya_thresh_2 = tables.Float32Col(dflt=-1.0, pos=13)
-    z_best_3 = tables.Float32Col(dflt=-1.0, pos=14)
-    z_best_pz_3 = tables.Float32Col(dflt=0.0, pos=15)
-    z_best_plya_thresh_3 = tables.Float32Col(dflt=-1.0, pos=16)
 
-    flags = tables.Int32Col(dflt=0,pos=17)
-    review = tables.Int8Col(dflt=0,pos=18)
-    cluster_parent = tables.Int64Col(dflt=0,pos=19)
+    z_best_plya_thresh = tables.Float32Col(dflt=-1.0, pos=13)
+    z_best_2 = tables.Float32Col(dflt=-1.0, pos=14)
+    z_best_pz_2 = tables.Float32Col(dflt=0.0, pos=15)
+    z_best_plya_thresh_2 = tables.Float32Col(dflt=-1.0, pos=16)
+    z_best_3 = tables.Float32Col(dflt=-1.0, pos=17)
+    z_best_pz_3 = tables.Float32Col(dflt=0.0, pos=18)
+    z_best_plya_thresh_3 = tables.Float32Col(dflt=-1.0, pos=19)
+
+
+    flags = tables.Int32Col(dflt=0,pos=20)
+    review = tables.Int8Col(dflt=0,pos=21)
+    cluster_parent = tables.Int64Col(dflt=0,pos=22)
 
 
     flux_line = tables.Float32Col(dflt=UNSET_FLOAT) #actual flux not flux density
@@ -695,14 +707,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 log.critical(f"Fatal. Input elixer h5 version {elixer_h5_version} not supported.")
                 return
 
-
-        #todo: ?? should we name differently if elixer is present vs not?
-        # say "r"+shot_fn if just the shot
-        # and "re" + shot_fn if shot and elixer
-        # (or "s" and "se") ??
-
-
-        outfn = "ssr" + os.path.basename(shot_fn)
+        outfn = "ssr_" + os.path.basename(shot_fn)
 
         log.debug("Creating new SingleShot Reduction HDF5 catalog (%s)" % (outfn))
 
@@ -730,6 +735,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         fileh.root.Shot.append(shot_h5.root.Shot.read())
         fileh.root.Shot.flush()
 
+        print(f"Loading Fiber data ... ")
         #many for fibers, so iterate
         for row in shot_h5.root.Data.Fibers.read():
             new_row = fileh.root.Data.Fibers.row
@@ -770,6 +776,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
 
         if elixer_h5 is not None:
+            print(f"Importing ELiXer data ... ")
 
             fileh.create_table(fileh.root, 'Detections', Detections,
                                'Detection Summary Table')
@@ -1045,19 +1052,165 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             # done with the elixer.h5 file now
             elixer_h5.close()
 
-
     except:
         print(f"Exception building new h5 file. {traceback.format_exc()}")
 
 
 
-    #!! todo for ELiXerApertures, only keep the "selected==True" rows
-
-
-
     if fileh is not None:
         fileh.close()
+
+    return outfn
 #end build_ssr_shot_h5
+
+
+def get_max_image(image_path):
+    """
+
+    :param image_path:
+    :return: 3-tuple of (max) shape, np.array of unique 1st dimensions
+    """
+    # only first dimension is allowed to change
+    max1 = 0
+    max2 = 0
+    max3 = 0
+
+    t1 = []
+    # t2 = []
+    # t3 = []
+
+    try:
+        print("Checking image sizes ...")
+        image_fns = sorted(glob.glob(image_path))
+        for img_path in tqdm(image_fns):
+            x1,x2,x3  = np.array(Image.open(img_path)).shape
+
+            max1 = max(max1, x1)
+            max2 = max(max2, x2)
+            max3 = max(max3, x3)
+
+            t1.append(x1)
+            # t2.append(x2)
+            # t3.append(x3)
+
+    except:
+        print(f"Exception: {traceback.format_exc()}")
+
+    # print(f"x1: {np.unique(t1)}")
+    # print(f"x2: {np.unique(t2)}")
+    # print(f"x3: {np.unique(t3)}")
+    return (max1,max2,max3), sorted(np.unique(t1))
+
+def add_images(shot_h5fn,image_path,group_name,earray_name="image_data"):
+    """
+
+    :param shot_h5fn: new ssr shot h5 path and filename
+    :param image_path: path to images, include wildcards as will be used with glob
+    :return:
+    """
+
+    try:
+
+        print(f"Importing images: {image_path} to root.{group_name}.{earray_name}*")
+
+        max_shape, unique_d1 = get_max_image(image_path)
+
+        with tables.open_file(shot_h5fn,mode="r+") as h5:  #so will auto close regardless of exit
+            dtb = h5.root.Detections
+
+            image_fns = sorted(glob.glob(image_path))
+
+            # Create a group to store the images #might already exist
+            try:
+                img_group = h5.create_group(h5.root, group_name)
+            except:
+                img_group = h5.root.elixer_reports
+
+            img = Image.open(image_fns[0])
+            #img_shape = max_shape # np.array(img).shape
+            img_dtype = np.array(img).dtype
+
+            # Define atom and filters for compression (e.g., zlib, blosc)
+            atom = tables.Atom.from_dtype(img_dtype)
+            # Using 'blosc' for efficient lossless compression is common
+            filters = tables.Filters(complevel=5, complib='blosc')
+
+            # Create a resizable CArray to store the images
+            # The shape is (0, ...) to start empty, and the maxshape is (None, ...)
+            # to allow the first dimension to grow indefinitely.
+
+            all_ea = [] #in order of unique_d1
+            all_ea_idx = []
+            for d1 in unique_d1:
+                name = earray_name + "_" + str(d1)
+                img_shape = (d1,max_shape[1],max_shape[2])
+                try:
+                    image_array = h5.create_earray(img_group, name, atom,
+                                                     shape=(0,) + img_shape,
+                                                     #maxshape=(None,) + img_shape,
+                                                     #obj=img,
+                                                     filters=filters)
+
+                    all_ea.append(image_array)
+                    all_ea_idx.append(0)
+                except:
+                    #todo:
+                    print(f"todo: need to fix this ... open the correct earray {name} ... or disallow")
+                    image_array = h5.root.elixer_reports.image_data
+
+            # Iterate through all image files, resize if needed, and append to the CArray
+            for img_path in tqdm(image_fns):
+                img = Image.open(img_path)
+                # Optional: Resize images to a consistent size if necessary
+                # img = img.resize((new_width, new_height))
+                img_as_array = np.array(img)
+                d1 = img_as_array.shape[0]
+                i = list(unique_d1).index(d1)
+                # if img_as_array.shape[0] < max_shape[0]:
+                #     print(f"Resizing {os.path.basename(img_path)} from {img_as_array.shape} to {max_shape}")
+                #     img_as_array.resize(max_shape)
+
+
+                #debug:
+                #print(i,d1,img_as_array.shape,all_ea[i].name,all_ea[i]._v_chunkshape,img_path)
+
+                all_ea[i].append([img_as_array])#, dtype=img_dtype)
+
+                #now update Detections
+                did = Path(img_path).stem
+                nei = False
+                if did[-4:]=="_nei":
+                    nei = True
+                    did = did[:-4] #strip off the _nei
+                did = np.int64(did)
+
+
+                # idx =  dtb.get_where_list("detectid==did")[0] #should be exactly 1
+                # for row in dtb.iterrows(start=idx, stop=idx+1, step=1):
+                #     if nei:
+                #         row['h5_neighbor_gpcd'] = all_ea[i].name
+                #     else:
+                #         row['h5_report_gpcd'] = all_ea[i].name
+                #     row.update()
+
+
+                idx = dtb.get_where_list("detectid==did")[0]
+                row = dtb.read_where("detectid==did")  # [0]
+                if nei:
+                    row[0]['h5_neighbor_gpcd'] = all_ea[i].name
+                    row[0]['h5_neighbor_idx'] = all_ea_idx[i]
+                else:
+                    row[0]['h5_report_gpcd'] = all_ea[i].name
+                    row[0]['h5_report_idx'] = all_ea_idx[i]
+                all_ea_idx[i] += 1
+                dtb.modify_rows(start=idx, stop=idx + 1, step=1, rows=row)
+
+            dtb.flush()
+
+            print(f"Stored {len(image_fns)} images in {shot_h5fn}.")
+
+    except:
+        print(f"Exception in add_report_images(): {traceback.format_exc()}")
 
 
 
@@ -1101,7 +1254,39 @@ if "-elixer_h5" in args: #path to the shot h5 file
     del args[i+1]  # args.pop(0) #remove THIS file
     args.remove("-elixer_h5")
 
+images_path = None
+if "-images" in args:
+    i = args.index("-images")
+    try:
+        images_path = args[i+1]
+    except:
+        print(f"Invalid -images specified: {args[i+1]}")
+        exit(-1)
+
+    del args[i+1]  # args.pop(0) #remove THIS file
+    args.remove("-images")
+
 if len(args) > 0:
     print(f"Unknown remainting args: {args}")
 
-build_ssr_shot_h5(shot_h5_path, elixer_fn=elixer_h5_path)
+new_h5_fn = build_ssr_shot_h5(shot_h5_path, elixer_fn=elixer_h5_path)
+if images_path is not None:
+    add_images(new_h5_fn,os.path.join(images_path,"25*[0-9].png"),"elixer_reports")
+    add_images(new_h5_fn,os.path.join(images_path,"25*_nei.png"),"elixer_neighbors")
+
+
+
+# example code to fetch images
+# main elixer report
+# did = np.int64(25112201200666)
+# row = dtb.read_where("detectid==did")[0]
+# gp = h5.get_node(f"/elixer_reports")
+# path = gp._f_get_child(row['h5_report_gpcd'].decode())
+# idx = row['h5_report_idx']
+# Image.fromarray(path[idx]).show()
+
+# neighborhod report
+# gp = h5.get_node(f"/elixer_neighbors")
+# path = gp._f_get_child(row['h5_neighbor_gpcd'].decode())
+# idx = row['h5_neighbor_idx']
+# Image.fromarray(path[idx]).show()
