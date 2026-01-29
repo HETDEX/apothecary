@@ -431,8 +431,6 @@ class VIRUSShot(tables.IsDescription): #Shot table
 
 
 
-
-
 class VIRUSFiber(tables.IsDescription):
     """
     cloned from HETDEX_API create_shot_hdf5.py
@@ -444,17 +442,20 @@ class VIRUSFiber(tables.IsDescription):
     #obsind = tables.Int32Col() #usuall only 3 digits, but I suppose technically could be up to 9, so leave as is?
                                 #BUT this is redundant with the shot table since this is just one shot
                                 #also redundant with the multiframe string
-    multiframe = tables.StringCol((20), pos=0)
-    fiber_id = tables.StringCol((38), pos=4)
-    # fibidx = tables.Int32Col() #if this is for a single shot, the fibidx is unneccesary
-    #                            #as is the finer index table
-    fibnum = tables.Int16Col() # only runs 0(1) to 112 or 0(1) to 448
+
+    fiber_id = tables.StringCol((38), pos=0)
+    #flag = tables.Int32Col(dflt=1, pos=1)  #1 is "good" (copied from VIRUSFiberIndexWithFlags aka /FiberIndex
+    ra = tables.Float32Col(pos=1) #may still want this precision, float16 really only gives 4 decimals here
+    dec = tables.Float32Col(pos=2)
+    multiframe = tables.StringCol((20),pos=3) #this is redundant with fiber_id (which contains the multiframe)
+
+    fibnum = tables.Int8Col(pos=4) # only runs 1 to 112
+    fibidx = tables.Int8Col(pos=5)  # this the index on the amp (e.g. 0 to 111) #really redundant with fibnum-1
     ifux = tables.Float32Col()
     ifuy = tables.Float32Col()
     fpx = tables.Float32Col()
     fpy = tables.Float32Col()
-    ra = tables.Float32Col(pos=1) #may still want this precision, float16 really only gives 4 decimals here
-    dec = tables.Float32Col(pos=2)
+
 
     calfib = tables.Float16Col((1036,))
     calfibe = tables.Float16Col((1036,))
@@ -484,185 +485,92 @@ class VIRUSFiber(tables.IsDescription):
     # error1D = tables.Float16ColCol((1032,))
 
 
+class AmpStats(tables.IsDescription):
+    """
+    cloned from HETDEX_AI ampstats.py
 
-def flush_all(fileh,reindex=True):
-    # iterate over all tables and issue flush
+    keep only strictly necessary info
+    """
+    # shotid ... do not need shotid
+    multiframe = tables.StringCol(itemsize=20, pos=0)
+    expnum = tables.Int8Col(pos=1)  #
+    status = tables.Int32Col(pos=2)  # a status indicator, TBD ... could be a value or a bitmapped mask (-1 bad, 0 unchecked, 1 good?)
+    flag = tables.Int32Col(pos=3)
 
-    if fileh is not None:
-        #elixer h5 carry overs
-        vtb = fileh.root.Version
-        dtb = fileh.root.Detections
-        ltb = fileh.root.SpectraLines
-        stb = fileh.root.CalibratedSpectra
-        atb = fileh.root.Aperture
-        ctb = fileh.root.CatalogMatch
-        xtb = fileh.root.ElixerApertures
-        etb = fileh.root.ExtractedObjects
-
-
-        vtb.flush()
-        dtb.flush()
-        ltb.flush()
-        stb.flush()
-        atb.flush()
-        ctb.flush()
-        xtb.flush()
-        etb.flush()
-
-        #shot h5 carry overs
-        shtb = fileh.root.Shot
-        ftb = fileh.root.Data.Fibers #in shot h5, this is root.Data.Fibers
-
-        shtb.flush()
-        ftb.flush()
-
-
-        # try: #this table is not always create, so may not exist
-        #     ntb = fileh.root.NeighborSpectra
-        #     ntb.flush()
-        # except:
-        #     ntb = None
-        #
-        # try: #this table is not always created (only with --LyC or --deblend)
-        #     dstb = fileh.root.DeblendedSpectra
-        #     dstb.flush()
-        # except:
-        #     dstb = None
+    #the below are the base information used to set the status
+    #could re-run the reduction to recreate and keep these out, but there are no arrays here and < 1000 amps
+    # so is not that much data ... just keep it?
+    im_median = tables.Float32Col()
+    mask_fraction = tables.Float32Col()
+    avg = tables.Float32Col()
+    scale = tables.Float32Col()
+    chi2fib_med = tables.Float32Col()
+    frac_c2 = tables.Float32Col()
+    frac_0 = tables.Float32Col()
+    n_lo = tables.Int32Col()
+    avg_orig = tables.Float32Col()
+    sky_sub_rms = tables.Float32Col()
+    sky_sub_rms_rel = tables.Float32Col()
+    sky_sub_rms_median = tables.Float32Col()
+    dither_relflux = tables.Float32Col()
+    norm = tables.Float32Col()
+    kchi = tables.Float32Col()
+    n_cont = tables.Int32Col()
 
 
 
-        if not reindex:
-            return #we're done
+class CalfibDQ(tables.IsDescription):
+    """
+    cloned from HETDEX_API create_fiber_mask_hdf5.py
+    """
 
-        #remove (old) index if exists
-        #vtb does not have or need an index
-        try:
-            dtb.cols.detectid.remove_index()
-        except:
-            log.debug("Failed to remove detectid index on detections table",exc_info=True)
+    fiber_id = tables.StringCol((38), pos=0)
+    calfib_dq = tables.Int16Col((1036,),pos=1)
 
-        try:
-            dtb.cols.ra.remove_index()
-            dtb.cols.dec.remove_index()
-        except:
-            log.debug("Failed to remove ra, dec index on detections table",exc_info=True)
+class VIRUSFiberIndexWithFlags(tables.IsDescription):
+    """
+    cloned from HETDEX_API create_fiber_index_hdr5.py
 
-        try:
-            ltb.cols.detectid.remove_index()
-            stb.cols.detectid.remove_index()
-            atb.cols.detectid.remove_index()
-            ctb.cols.detectid.remove_index()
-        except:
-            log.debug("Failed to remove detectid index on multiple tables",exc_info=True)
+    remove redundant info to save space
 
-        try:
-            ftb.cols.multiframe.remove_index()
-            ftb.cols.ra.remove_index()
-            ftb.cols.dec.remove_index()
-        except:
-            log.debug("Failed to remove index on fibers table",exc_info=True)
+    note: this is the alternate form of VIRUSFiberIndex
+          it is used in the same way but (in original HETDEX) adds the flag information
+          It both forms are used to create a group/table named FiberIndex, with the Single Shot Reduction
+          using the VIRUSFiberIndexWithFlags variant instead
 
+    *** NOTE: there will likely be some code modifications needed in HETDEX_API to look for the flag in the new place
+              if it is not found in the old group/table
 
-        dtb.flush()
-        ltb.flush()
-        stb.flush()
-        atb.flush()
-        ctb.flush()
-
-        ftb.flush()
-
-        #create (new) index
-        # vtb does not have or need an index
-        try:
-            dtb.cols.detectid.create_csindex()
-        except:
-            log.debug("Index fail on detections table: detectid",exc_info=True)
-
-        try:
-            dtb.cols.ra.create_csindex()
-            dtb.cols.dec.create_csindex()
-        except:
-            log.debug("Index fail on detections table: ra and/or dec",exc_info=True)
+    """
+    #multiframe = tables.StringCol((20), pos=0) #redundant with Fibers table
+    #ra = tables.Float32Col(pos=1) #redundant with Fibers table
+    #dec = tables.Float32Col(pos=2) #redundant with Fibers table
+    fiber_id = tables.StringCol((38),) #pos=3)
+    healpix = tables.Int64Col()
+    #amp = tables.StringCol(2,pos=5) #redundant with Fibers table
+    #date = tables.Int64Col(pos=6) #redundant with Fibers table
+    #datevobs = tables.StringCol((12),pos=7) #redundant with Fibers table
+    #expnum = tables.Int32Col(pos=8) #redundant with Fibers table
+    #fibidx = tables.Int8Col() #redundant with Fibers table
+    #fibnum = tables.Int32Col(pos=10) #redundant with Fibers table
+    #fpx = tables.Float32Col(pos=11) #redundant with Fibers table
+    #fpy = tables.Float32Col(pos=12) #redundant with Fibers table
+    #ifuslot = tables.StringCol(3,pos=13) #redundant with Fibers table
+    #ifuid = tables.StringCol(3,pos=14) #redundant with Fibers table
+    #ifux = tables.Float32Col(pos=15) #redundant with Fibers table
+    #ifuy = tables.Float32Col(pos=16) #redundant with Fibers table
+    #shotid = tables.Int64Col(pos=17) #redundant with Fibers table
+    #specid = tables.StringCol(3,pos=18) #redundant with Fibers table
+    flag = tables.Int8Col(dflt=1) #was Int32 #pos=19) #1 is "good" * note: 1 IFF all others are 1, but is not (currently) a bitmap
+    flag_badamp = tables.Int8Col(dflt=1) #pos=20) #1 is "good"
+    flag_badfib = tables.Int8Col(dflt=1)#pos=21) #1 is "good"
+    flag_meteor = tables.Int8Col(dflt=1)#pos=22) #1 is "good"
+    flag_satellite = tables.Int8Col(dflt=1)#pos=23) #1 is "good"
+    flag_largegal = tables.Int8Col(dflt=1)#pos=24) #1 is "good"
+    flag_shot = tables.Int8Col(dflt=1) #pos=25) #1 is "good"
+    flag_throughput = tables.Int8Col(dflt=1) #pos=26) #1 is "good"
 
 
-        try:
-            ltb.cols.detectid.create_csindex()
-        except:
-            log.debug("Index fail on lines table",exc_info=True)
-
-        try:
-            stb.cols.detectid.create_csindex()
-        except:
-            log.debug("Index fail on spectra table",exc_info=True)
-
-        try:
-            atb.cols.detectid.create_csindex()
-        except:
-            log.debug("Index fail on apertures table",exc_info=True)
-
-        try:
-            ctb.cols.detectid.create_csindex()
-        except:
-            log.debug("Index fail on catalog match table",exc_info=True)
-
-
-        #vtb.flush() # no need to re-flush vtb
-        dtb.flush()
-        ltb.flush()
-        stb.flush()
-        atb.flush()
-        ctb.flush()
-
-        try:
-            etb.cols.detectid.remove_index()
-            etb.cols.detectid.create_csindex()
-            etb.flush()
-        except:
-            log.debug("Index fail on extracted objects table")
-
-        try:
-            xtb.cols.detectid.remove_index()
-            xtb.cols.detectid.create_csindex()
-            xtb.flush()
-        except:
-            log.debug("Index fail on elixer apertures table")
-
-        try:
-            ftb.cols.multiframe.create_csindex()
-            ftb.cols.ra.create_csindex()
-            ftb.cols.dec.create_csindex()
-        except:
-            log.debug("Index fail on Fibers table",exc_info=True)
-
-
-        ftb.flush()
-
-        #
-        # try:
-        #     if ntb is not None:
-        #         ntb.cols.detectid.remove_index()
-        #         ntb.cols.detectid.create_csindex()
-        #         ntb.flush()
-        # except:
-        #     log.debug("Index fail on neighbor spectra table")
-        #
-        # try:
-        #     if dstb is not None:
-        #         dstb.cols.detectid.remove_index()
-        #         dstb.cols.detectid.create_csindex()
-        #         dstb.flush()
-        # except:
-        #     log.debug("Index fail on deblended spectra table")
-        #
-        # try:
-        #     if vote_tb is not None:
-        #         vote_tb.cols.detectid.remove_index()
-        #         vote_tb.cols.detectid.create_csindex()
-        #         vote_tb.flush()
-        # except:
-        #     log.debug("Index fail on vote table")
-
-    return
 
 
 def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
@@ -742,8 +650,18 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         fileh.root.Shot.flush()
 
         print(f"Importing Fiber data ... ",flush=True)
+
+        #need the flags # NO ... decided for compatibility with HETDEX_API
+        # to instead keep the FiberIndex table, even with its redundant info
+        # flags = shot_h5.root.FiberIndex.read(field="flag")
+        # fiber_ids = list(shot_h5.root.FiberIndex.read(field="fiber_id"))
+        # flag_dict = dict(zip(fiber_ids,flags))
+        # del flags
+        # del fiber_ids
+
         #many for fibers, so iterate
         for row in tqdm(shot_h5.root.Data.Fibers.read()):
+        #for row in shot_h5.root.Data.Fibers.read():
             new_row = fileh.root.Data.Fibers.row
             #go over some columns individual since want to change some types
             #directy copy columns:
@@ -753,20 +671,30 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
             #special treatment, mostly float32 to float16
             #expnum (int32 to int16)
-            #fibnum (int32 to int16)
+            #fibnum (int32 to int8)
             #calfib (float32 array to float16 array) #Float16Col((1036,))
             #calfibe (float32 array to float16 array) #Float16Col((1036,))
             #calfib_ffsky (float32 array to float16 array) #Float16Col((1036,))
 
+            new_row['fibnum'] = row['fibnum'].astype(np.int8) #1 to 112
+            new_row['fibidx'] = row['fibidx'].astype(np.int8) #just 0 to 111, the index on the amp
             new_row['expnum'] = row['expnum'].astype(np.int16) #Maybe we'd have more than 15 exposures (prob not, though)
-            new_row['fibnum'] = row['fibnum'].astype(np.int16)
             new_row['calfib'] = row['calfib'].astype(np.float16)
             new_row['calfibe'] = row['calfibe'].astype(np.float16)
             new_row['calfib_ffsky'] = row['calfib_ffsky'].astype(np.float16)
 
+
+            # #need the flags ... NO, see above note about FiberIndex table
+            # try:
+            #     new_row['flag'] = flag_dict[new_row['fiber_id']]
+            # except:
+            #     log.warning("Could not retrieve fibers flag", exc_info=True)
+            #     new_row['flag'] = 1
+
             new_row.append()
 
         fileh.root.Data.Fibers.flush()
+
         #set the index
         try:
             fileh.root.Data.Fibers.cols.multiframe.create_csindex()
@@ -776,8 +704,116 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             log.debug("Index fail on fibers table",exc_info=True)
 
         fileh.root.Data.Fibers.flush()
+
+
+        #####################################
+        # CalfibDQ
+        ######################################
+
+        fileh.create_table(fileh.root, 'CalfibDQ', CalfibDQ, 'Fiber per-Wavelength Flags Table')
+        print("Importing CalfibDQ (Fiber per-wavelength flags) data ...")
+        copy_cols = fileh.root.CalfibDQ.colnames
+
+        for row in tqdm(shot_h5.root.CalfibDQ.read()):
+            # for row in shot_h5.root.Data.Fibers.read():
+            new_row = fileh.root.CalfibDQ.row
+            # go over some columns individual since want to change some types
+            # directy copy columns:
+            for col in copy_cols:
+                new_row[col] = row[col]
+
+            new_row.append()
+
+        fileh.root.CalfibDQ.flush()
+        # set the index
+        try:
+            fileh.root.CalfibDQ.cols.fiber_id.create_csindex()
+        except:
+            log.debug("Index fail on CalfibDQ table", exc_info=True)
+
+        fileh.root.CalfibDQ.flush()
+
+
+        #####################################
+        # FiberIndex
+        ######################################
+
+        fileh.create_table(fileh.root, 'FiberIndex', VIRUSFiberIndexWithFlags, 'FiberIndex Table')
+        #note, below we will create a softlink under root.Data.FiberIndex for compatibility
+
+        # many for fibers, so iterate
+        # root.Data.FiberIndex or root.FiberIndex  (root.Data.FiberIndex Does not have the flags)
+        print("Importing FiberIndex data ...")
+        for row in tqdm(shot_h5.root.FiberIndex.read()):
+            # for row in shot_h5.root.Data.Fibers.read():
+            new_row = fileh.root.FiberIndex.row
+            # go over some columns individual since want to change some types
+            # directy copy columns:
+            for col in ['fiber_id','healpix','flag_badamp','flag_badfib','flag_meteor','flag_satellite',
+                        'flag_largegal','flag_shot','flag_throughput']:
+                new_row[col] = row[col]
+
+            #changed the size of this one
+            new_row['flag'] = row['flag'].astype(np.int8)
+
+            new_row.append()
+
+        fileh.root.FiberIndex.flush()
+
+        # set the index
+        try:
+            fileh.root.FiberIndex.cols.fiber_id.create_csindex()
+            fileh.root.FiberIndex.cols.healpix.create_csindex()
+        except:
+            log.debug("Index fail on FiberIndex table", exc_info=True)
+
+        fileh.root.FiberIndex.flush()
+
+        #create a softlink for compatibility ????
+        print("Trying softlink ....")
+        shot_h5.create_soft_link(fileh.root.Data, 'FiberIndex', target=fileh.root.FiberIndex)
+
+
+        #####################################
+        # AmpStats
+        ######################################
+
+        fileh.create_table(fileh.root, 'AmpStats', AmpStats, 'Amp Stats Table')
+        print("Importing AmpStats data ...")
+        copy_cols = fileh.root.AmpStats.colnames
+        copy_cols.remove('expnum')
+
+        for row in tqdm(shot_h5.root.AmpStats.read()):
+            # for row in shot_h5.root.Data.Fibers.read():
+            new_row = fileh.root.AmpStats.row
+            # go over some columns individual since want to change some types
+            # directy copy columns:
+            for col in copy_cols:
+                new_row[col] = row[col]
+
+            # changed the size of this one
+            new_row['expnum'] = row['expnum'].astype(np.int8)
+
+            new_row.append()
+
+        fileh.root.AmpStats.flush()
+        # set the index
+        try:
+            fileh.root.AmpStats.cols.multiframe.create_csindex()
+        except:
+            log.debug("Index fail on AmpStats table", exc_info=True)
+
+        fileh.root.AmpStats.flush()
+
+
+
         #done with the shot.h5 file now
         shot_h5.close()
+
+
+
+
+
 
 
 
@@ -1113,7 +1149,7 @@ def get_max_image(image_path):
 
 
 
-def add_images(shot_h5fn,image_path,group_name,earray_name="image_data"):
+def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_data"):
     """
 
     :param shot_h5fn: new ssr shot h5 path and filename
@@ -1158,7 +1194,8 @@ def add_images(shot_h5fn,image_path,group_name,earray_name="image_data"):
             atom = tables.Atom.from_dtype(img_dtype)
             # Using 'blosc' for efficient lossless compression is common 0 = none, 1=minimum up to 9=maximum compression
             #filters = tables.Filters(complevel=9, complib='blosc')
-            filters = tables.Filters(complevel=1, complib='bzip2', bitshuffle=False, shuffle=False)
+            #filters = tables.Filters(complevel=9, complib='bzip2', bitshuffle=False, shuffle=False)
+            # filters = None #now a global COMPRESSION_FILTER
 
             # Create a resizable eArray to store the images
             # The shape is (0, ...) to start empty, and the maxshape is (None, ...)
@@ -1173,7 +1210,7 @@ def add_images(shot_h5fn,image_path,group_name,earray_name="image_data"):
                     image_array = h5.create_earray(img_group, name, atom,
                                                      shape=(0,) + img_shape,
                                                      expectedrows=img_ct,
-                                                     filters=filters)
+                                                     filters=COMPRESSION_FILTER)
 
                     all_ea.append(image_array)
                     all_ea_idx.append(0)
@@ -1265,7 +1302,7 @@ def get_image_dict(image_path):
     return (max1,max2,max3), img_dict
 
 
-def import_images(shot_h5fn,image_path,group_name,carray_name="image_data"):
+def import_images_carray(shot_h5fn,image_path,group_name,carray_name="image_data"):
     """
 
     :param shot_h5fn: new ssr shot h5 path and filename
@@ -1297,10 +1334,8 @@ def import_images(shot_h5fn,image_path,group_name,carray_name="image_data"):
             atom = tables.Atom.from_dtype(img_dtype)
             # Using 'blosc' for efficient lossless compression is common 0 = none, 1=minimum up to 9=maximum compression
             # better compression net result with shuffle=False (default is True) and bitshuffle=False (default)
-            filters = tables.Filters(complevel=1, complib='bzip2',bitshuffle=False,shuffle=False)
-            #filters = None
-
-
+            #filters = tables.Filters(complevel=1, complib='bzip2',bitshuffle=False,shuffle=False)
+            #filters = None #now a global COMPRESSION_FILTER
 
             #iterate (in decending order of 1D size) over the img_dict and pre-allocate carrays and then populate
             total_images = sum(len(img_dict[k]) for k in img_dict.keys())
@@ -1311,7 +1346,7 @@ def import_images(shot_h5fn,image_path,group_name,carray_name="image_data"):
                 try:
                     image_array = h5.create_carray(img_group, name, atom,
                                                    shape=(len(img_dict[key]),) + img_shape,
-                                                   filters=filters)
+                                                   filters=COMPRESSION_FILTER)
                 except:
                     try:
                         e1 = traceback.format_exc()
@@ -1402,6 +1437,40 @@ if "-images" in args:
     del args[i+1]  # args.pop(0) #remove THIS file
     args.remove("-images")
 
+
+#default, level 2
+COMPRESSION_FILTER = tables.Filters(complevel=1, complib='zlib', bitshuffle=False, shuffle=False)
+if "-compression" in args:
+    i = args.index("-compression")
+    try:
+        compression = int(args[i+1])
+
+        #create the filter to use
+        if compression == 1: #least compression (that is still acceptable, but fast)
+            #around 5 minutes (300s) for typical ELiXer data ~ 1000 detects and Neighbors
+            #around 3.3 GB
+            #yes, this one should be at level 9 (basically same time as level1 and a good bit better compression)
+            COMPRESSION_FILTER = tables.Filters(complevel=9, complib='blosc2', bitshuffle=False, shuffle=False)
+        elif compression == 2: #standard
+            # around 6.0 minutes (360s) for typical ELiXer data ~ 1000 detects and Neighbors
+            # around 2.6 GB
+            # leave at complevel 1 (increasing is huge time cost for very little compression improvement)
+            COMPRESSION_FILTER = tables.Filters(complevel=1, complib='zlib', bitshuffle=False, shuffle=False)
+        elif compression == 3: #maximum
+            # around 17 minutes (1000s) for typical ELiXer data ~ 1000 detects and Neighbors
+            # around 1.9 GB (1.8Gb at level 9 and 18 minutes)
+            # 1 vs 9 is arund 1015s vs 1080s (e.g. +1 minute) for about 5% better compression
+            COMPRESSION_FILTER = tables.Filters(complevel=9, complib='bzip2', bitshuffle=False, shuffle=False)
+        else:
+            print(f"Unexpected --compression value {compression}: Must be in [1,2,3], least compression to most and shortest to longest time cost")
+            exit(-1)
+    except:
+        print(f"Invalid -compression specified: {args[i+1]}")
+        exit(-1)
+
+    del args[i+1]  # args.pop(0) #remove THIS file
+    args.remove("-compression")
+
 if len(args) > 0:
     print(f"Unknown remainting args: {args}")
 
@@ -1409,17 +1478,17 @@ start_time = time.perf_counter()
 
 new_h5_fn = build_ssr_shot_h5(shot_h5_path, elixer_fn=elixer_h5_path)
 if images_path is not None:
-    #pass
+    #print("Skipping images import")
     #using the earray and growing
-    add_images(new_h5_fn,os.path.join(images_path,"25*[0-9].png"),"elixer_reports")
-    add_images(new_h5_fn,os.path.join(images_path,"25*_nei.png"),"elixer_neighbors")
+    import_images_earray(new_h5_fn,os.path.join(images_path,"25*[0-9].png"),"elixer_reports")
+    import_images_earray(new_h5_fn,os.path.join(images_path,"25*_nei.png"),"elixer_neighbors")
 
     #pre-allocating with carray
-    #import_images(new_h5_fn,os.path.join(images_path,"25*[0-9].png"),"elixer_reports")
-    #import_images(new_h5_fn,os.path.join(images_path,"25*_nei.png"),"elixer_neighbors")
+    #import_images_carray(new_h5_fn,os.path.join(images_path,"25*[0-9].png"),"elixer_reports")
+    #import_images_carray(new_h5_fn,os.path.join(images_path,"25*_nei.png"),"elixer_neighbors")
 
 
-print(f"Elapsed time: {time.perf_counter() - start_time}")
+print(f"Elapsed time: {time.perf_counter() - start_time :0.1f}s")
 
 # example code to fetch images
 # main elixer report
