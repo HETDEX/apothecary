@@ -1451,16 +1451,19 @@ if "-compression" in args:
             #around 3.3 GB
             #yes, this one should be at level 9 (basically same time as level1 and a good bit better compression)
             COMPRESSION_FILTER = tables.Filters(complevel=9, complib='blosc2', bitshuffle=False, shuffle=False)
+            print(f"Using type 1 compression: blosc2 at complvl 9 . Limited compression (lossless), low CPU + time")
         elif compression == 2: #standard
             # around 6.0 minutes (360s) for typical ELiXer data ~ 1000 detects and Neighbors
             # around 2.6 GB
             # leave at complevel 1 (increasing is huge time cost for very little compression improvement)
             COMPRESSION_FILTER = tables.Filters(complevel=1, complib='zlib', bitshuffle=False, shuffle=False)
+            print(f"Using type 2 compression: zlib at complvl 1 . Good compression, moderate CPU + time")
         elif compression == 3: #maximum
             # around 17 minutes (1000s) for typical ELiXer data ~ 1000 detects and Neighbors
             # around 1.9 GB (1.8Gb at level 9 and 18 minutes)
             # 1 vs 9 is arund 1015s vs 1080s (e.g. +1 minute) for about 5% better compression
             COMPRESSION_FILTER = tables.Filters(complevel=9, complib='bzip2', bitshuffle=False, shuffle=False)
+            print(f"Using type 3 compression: bzip2 at complvl 9 . Maximum compression, maximum CPU + time")
         else:
             print(f"Unexpected --compression value {compression}: Must be in [1,2,3], least compression to most and shortest to longest time cost")
             exit(-1)
@@ -1470,6 +1473,8 @@ if "-compression" in args:
 
     del args[i+1]  # args.pop(0) #remove THIS file
     args.remove("-compression")
+else:
+    print(f"Using [default] type 2 compression: zlib at complvl 1 . Good compression, moderate CPU + time")
 
 if len(args) > 0:
     print(f"Unknown remainting args: {args}")
