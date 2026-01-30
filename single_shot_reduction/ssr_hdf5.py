@@ -252,7 +252,7 @@ class SpectraLines(tables.IsDescription):
     continuum_err = tables.Float32Col(dflt=UNSET_FLOAT)
 
 
-class CalibratedSpectra(tables.IsDescription):
+class CalibratedSpectra16(tables.IsDescription):
     detectid = tables.Int64Col(pos=0)  # unique HETDEX detection ID 1e9+
     #wavelength = tables.Float32Col(shape=(1036,),pos=1) #skip it
     flux = tables.Float16Col(shape=(1036,),pos=2 )  #from Float32Col
@@ -262,6 +262,18 @@ class CalibratedSpectra(tables.IsDescription):
     aperture_radius = tables.Float16Col(dflt=UNSET_FLOAT,pos=5) #from Float32Col
     sky_background = tables.Int8Col(dflt=UNSET_INT,pos=6) #from Int32  ... basically 0 for local 1 for ffsky
     num_fibers = tables.Int16Col(dflt=UNSET_INT,pos=7) #Int8 should actually be enough, but just incase a big aperture comes in ....
+
+class CalibratedSpectra32(tables.IsDescription):
+    detectid = tables.Int64Col(pos=0)  # unique HETDEX detection ID 1e9+
+    #wavelength = tables.Float32Col(shape=(1036,),pos=1) #skip it
+    flux = tables.Float32Col(shape=(1036,),pos=2 )  #from Float32Col
+    flux_err = tables.Float32Col(shape=(1036,),pos=3)  #from Float32Col
+    #new 0.9.0
+    dust_corr = tables.Float16Col(shape=(1036,),pos=4) #from Float32Col #dust multiplier (normally already applied) to flux and flux_err
+    aperture_radius = tables.Float16Col(dflt=UNSET_FLOAT,pos=5) #from Float32Col
+    sky_background = tables.Int8Col(dflt=UNSET_INT,pos=6) #from Int32  ... basically 0 for local 1 for ffsky
+    num_fibers = tables.Int16Col(dflt=UNSET_INT,pos=7) #Int8 should actually be enough, but just incase a big aperture comes in ....
+
 
 class Aperture(tables.IsDescription):
     #one entry per aperture photometry collected
@@ -431,7 +443,7 @@ class VIRUSShot(tables.IsDescription): #Shot table
 
 
 
-class VIRUSFiber(tables.IsDescription):
+class VIRUSFiber16(tables.IsDescription): #uses Float16 where possibly
     """
     cloned from HETDEX_API create_shot_hdf5.py
 
@@ -483,6 +495,58 @@ class VIRUSFiber(tables.IsDescription):
     # sky_subtracted = tables.Float16ColCol((1032,))
     # sky_spectrum = tables.Float16ColCol((1032,))
     # error1D = tables.Float16ColCol((1032,))
+
+class VIRUSFiber32(tables.IsDescription): #same as VIRUSFiber but uses Float32 instead of Float16 if needed
+        """
+        cloned from HETDEX_API create_shot_hdf5.py
+
+        remove redundant columns (for this purpose ... single shot only)
+        reduce the unneccesary precision to save space
+
+        """
+        # obsind = tables.Int32Col() #usuall only 3 digits, but I suppose technically could be up to 9, so leave as is?
+        # BUT this is redundant with the shot table since this is just one shot
+        # also redundant with the multiframe string
+
+        fiber_id = tables.StringCol((38), pos=0)
+        # flag = tables.Int32Col(dflt=1, pos=1)  #1 is "good" (copied from VIRUSFiberIndexWithFlags aka /FiberIndex
+        ra = tables.Float32Col(pos=1)  # may still want this precision, float16 really only gives 4 decimals here
+        dec = tables.Float32Col(pos=2)
+        multiframe = tables.StringCol((20), pos=3)  # this is redundant with fiber_id (which contains the multiframe)
+
+        fibnum = tables.Int8Col(pos=4)  # only runs 1 to 112
+        fibidx = tables.Int8Col(pos=5)  # this the index on the amp (e.g. 0 to 111) #really redundant with fibnum-1
+        ifux = tables.Float32Col()
+        ifuy = tables.Float32Col()
+        fpx = tables.Float32Col()
+        fpy = tables.Float32Col()
+
+        calfib = tables.Float32Col((1036,))
+        calfibe = tables.Float32Col((1036,))
+        calfib_ffsky = tables.Float32Col((1036,))  # could consider dropping this tone too
+
+        ifuslot = tables.StringCol(3)
+        ifuid = tables.StringCol(3)
+        specid = tables.StringCol(3)
+        contid = tables.StringCol(8)
+        amp = tables.StringCol(2)
+        expnum = tables.Int32Col()
+
+        # consider removing these to save longterm storage
+        # if needed, would re-run
+        # spectrum = tables.Float16ColCol((1032,))
+        # wavelength = tables.Float16ColCol((1032,))
+        # fiber_to_fiber = tables.Float16ColCol((1032,))
+        #
+        # chi2 = tables.Float16ColCol((1032,))
+        # rms = tables.Float16ColCol((1032,))
+        # calfib_counts = tables.Float16ColCol((1036,))
+        # calfibe_counts = tables.Float16ColCol((1036,))
+        #
+        # trace = tables.Float16ColCol((1032,))
+        # sky_subtracted = tables.Float16ColCol((1032,))
+        # sky_spectrum = tables.Float16ColCol((1032,))
+        # error1D = tables.Float16ColCol((1032,))
 
 
 class AmpStats(tables.IsDescription):
@@ -640,8 +704,30 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                            'Shot Summary Table')
 
         #put under "Data" for some compatibility with pathing in HETDEX_API
-        group_data = fileh.create_group(fileh.root, "Data", "VIRUS Fiber Data")
-        fileh.create_table(group_data, 'Fibers', VIRUSFiber, 'Fiber Summary Table')
+        _ = fileh.create_group(fileh.root, "Data", "VIRUS Fiber Data") # was assigned to group_data previously
+
+        use32 = False
+        mx = np.abs(shot_h5.root.Data.Fibers.read(field="calfib")).max()
+        if mx > 65000.0:
+            use32 = True
+        else:
+            mx = np.abs(shot_h5.root.Data.Fibers.read(field="calfib_ffsky")).max()
+            if mx > 65000.0:
+                use32 = True
+            else:
+                mx = np.max(shot_h5.root.Data.Fibers.read(field="calfibe"))  # can only be positive
+                if mx > 65000.0:
+                    use32 = True
+        if use32:
+            print("Using Float32 for VIRUSFibers")
+            fileh.create_table(fileh.root, 'Fibers', VIRUSFiber32, 'Fiber Summary Table')
+        else:
+            print("Using Float16 for VIRUSFibers")
+            fileh.create_table(fileh.root, 'Fibers', VIRUSFiber16, 'Fiber Summary Table')
+
+        #this will also be softlinked to root.Data.Fibers
+        #fileh.create_table(group_data, 'Fibers', VIRUSFiber, 'Fiber Summary Table')
+       # fileh.create_table(fileh.root, 'Fibers', VIRUSFiber16, 'Fiber Summary Table')
 
         #iterate over shot's info (shot table and fiber table) and populate
 
@@ -662,7 +748,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         #many for fibers, so iterate
         for row in tqdm(shot_h5.root.Data.Fibers.read()):
         #for row in shot_h5.root.Data.Fibers.read():
-            new_row = fileh.root.Data.Fibers.row
+            new_row = fileh.root.Fibers.row
             #go over some columns individual since want to change some types
             #directy copy columns:
             for col in ['multiframe','fiber_id','ifux','ifuy','fpx','fpy','ra','dec',
@@ -679,9 +765,14 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             new_row['fibnum'] = row['fibnum'].astype(np.int8) #1 to 112
             new_row['fibidx'] = row['fibidx'].astype(np.int8) #just 0 to 111, the index on the amp
             new_row['expnum'] = row['expnum'].astype(np.int16) #Maybe we'd have more than 15 exposures (prob not, though)
-            new_row['calfib'] = row['calfib'].astype(np.float16)
-            new_row['calfibe'] = row['calfibe'].astype(np.float16)
-            new_row['calfib_ffsky'] = row['calfib_ffsky'].astype(np.float16)
+            if use32:
+                new_row['calfib'] = row['calfib'].astype(np.float32)
+                new_row['calfibe'] = row['calfibe'].astype(np.float32)
+                new_row['calfib_ffsky'] = row['calfib_ffsky'].astype(np.float32)
+            else:
+                new_row['calfib'] = row['calfib'].astype(np.float16)
+                new_row['calfibe'] = row['calfibe'].astype(np.float16)
+                new_row['calfib_ffsky'] = row['calfib_ffsky'].astype(np.float16)
 
 
             # #need the flags ... NO, see above note about FiberIndex table
@@ -693,17 +784,20 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
             new_row.append()
 
-        fileh.root.Data.Fibers.flush()
+        fileh.root.Fibers.flush()
 
         #set the index
         try:
-            fileh.root.Data.Fibers.cols.multiframe.create_csindex()
-            fileh.root.Data.Fibers.cols.ra.create_csindex()
-            fileh.root.Data.Fibers.cols.dec.create_csindex()
+            fileh.root.Fibers.cols.multiframe.create_csindex()
+            fileh.root.Fibers.cols.ra.create_csindex()
+            fileh.root.Fibers.cols.dec.create_csindex()
         except:
             log.debug("Index fail on fibers table",exc_info=True)
 
-        fileh.root.Data.Fibers.flush()
+        fileh.root.Fibers.flush()
+
+        print("Trying softlink ....")
+        shot_h5.create_soft_link(fileh.root.Data, 'Fibers', target=fileh.root.Fibers)
 
 
         #####################################
@@ -715,7 +809,6 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         copy_cols = fileh.root.CalfibDQ.colnames
 
         for row in tqdm(shot_h5.root.CalfibDQ.read()):
-            # for row in shot_h5.root.Data.Fibers.read():
             new_row = fileh.root.CalfibDQ.row
             # go over some columns individual since want to change some types
             # directy copy columns:
@@ -784,7 +877,6 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         copy_cols.remove('expnum')
 
         for row in tqdm(shot_h5.root.AmpStats.read()):
-            # for row in shot_h5.root.Data.Fibers.read():
             new_row = fileh.root.AmpStats.row
             # go over some columns individual since want to change some types
             # directy copy columns:
@@ -826,8 +918,9 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             fileh.create_table(fileh.root, 'SpectraLines', SpectraLines,
                                'Identified SpectraLines Table')
 
-            fileh.create_table(fileh.root, 'CalibratedSpectra', CalibratedSpectra,
-                               'PSF Weighted Spectra Table')
+            #since there is a choice about 16 or 32 bit, this is moved later
+            # fileh.create_table(fileh.root, 'CalibratedSpectra', CalibratedSpectra,
+            #                    'PSF Weighted Spectra Table')
 
             fileh.create_table(fileh.root, 'Aperture', Aperture,
                                'Aperture Photometry Table') # mostly a g and r aperture, sometimes more
@@ -885,13 +978,37 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             #############################################################################
             # CalibratedSpectra
             #############################################################################
+
+            #need to check for maximum size of flux or flux_err
+            use32 = False
+            mx = np.abs(elixer_h5.root.CalibratedSpectra.read(field="flux")).max()
+            if mx > 65000.0:
+                use32 = True
+            else:
+                mx = np.max(elixer_h5.root.CalibratedSpectra.read(field="flux_err")) #can only be positive
+                if mx > 65000.0:
+                    use32 = True
+
+            if use32:
+                print("Using float32 for CalibratedSpectra")
+                fileh.create_table(fileh.root, 'CalibratedSpectra', CalibratedSpectra32,
+                               'PSF Weighted Spectra Table')
+            else:
+                print("Using float16 for CalibratedSpectra")
+                fileh.create_table(fileh.root, 'CalibratedSpectra', CalibratedSpectra16,
+                               'PSF Weighted Spectra Table')
+
             for row in elixer_h5.root.CalibratedSpectra.read():
                 new_row = fileh.root.CalibratedSpectra.row
 
                 new_row['detectid'] = row['detectid']
                 # skip wavelength entirely and set the float32 to float16
-                new_row['flux'] = row['flux'].astype(np.float16)
-                new_row['flux_err'] = row['flux_err'].astype(np.float16)
+                if use32:
+                    new_row['flux'] = row['flux'].astype(np.float32)
+                    new_row['flux_err'] = row['flux_err'].astype(np.float32)
+                else:
+                    new_row['flux'] = row['flux'].astype(np.float16)
+                    new_row['flux_err'] = row['flux_err'].astype(np.float16)
                 new_row['dust_corr'] = row['dust_corr'].astype(np.float16)
                 new_row['aperture_radius'] = row['aperture_radius'].astype(np.float16)
                 new_row['sky_background'] = row['sky_background'].astype(np.int8)
