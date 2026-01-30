@@ -463,6 +463,9 @@ class VIRUSFiber16(tables.IsDescription): #uses Float16 where possibly
 
     fibnum = tables.Int8Col(pos=4) # only runs 1 to 112
     fibidx = tables.Int8Col(pos=5)  # this the index on the amp (e.g. 0 to 111) #really redundant with fibnum-1
+    healpix = tables.Int64Col(pos=6) # from VIRUSFiberIndex
+
+
     ifux = tables.Float32Col()
     ifuy = tables.Float32Col()
     fpx = tables.Float32Col()
@@ -480,11 +483,23 @@ class VIRUSFiber16(tables.IsDescription): #uses Float16 where possibly
     amp = tables.StringCol(2)
     expnum = tables.Int32Col()
 
+    #cloned from VIRUSFiberIndex
+    flag = tables.Int8Col(dflt=1) #was Int32 #pos=19) #1 is "good" * note: 1 IFF all others are 1, but is not (currently) a bitmap
+    flag_badamp = tables.Int8Col(dflt=1) #pos=20) #1 is "good"
+    flag_badfib = tables.Int8Col(dflt=1)#pos=21) #1 is "good"
+    flag_meteor = tables.Int8Col(dflt=1)#pos=22) #1 is "good"
+    flag_satellite = tables.Int8Col(dflt=1)#pos=23) #1 is "good"
+    flag_largegal = tables.Int8Col(dflt=1)#pos=24) #1 is "good"
+    flag_shot = tables.Int8Col(dflt=1) #pos=25) #1 is "good"
+    flag_throughput = tables.Int8Col(dflt=1) #pos=26) #1 is "good"
+
     #consider removing these to save longterm storage
     #if needed, would re-run
     # spectrum = tables.Float16ColCol((1032,))
     # wavelength = tables.Float16ColCol((1032,))
-    # fiber_to_fiber = tables.Float16ColCol((1032,))
+
+    fiber_to_fiber = tables.Float16Col((1032,)) #re-extraction in HETDEX_API needs it
+
     #
     # chi2 = tables.Float16ColCol((1032,))
     # rms = tables.Float16ColCol((1032,))
@@ -516,6 +531,8 @@ class VIRUSFiber32(tables.IsDescription): #same as VIRUSFiber but uses Float32 i
 
         fibnum = tables.Int8Col(pos=4)  # only runs 1 to 112
         fibidx = tables.Int8Col(pos=5)  # this the index on the amp (e.g. 0 to 111) #really redundant with fibnum-1
+        healpix = tables.Int64Col(pos=6)  # from VIRUSFiberIndex
+
         ifux = tables.Float32Col()
         ifuy = tables.Float32Col()
         fpx = tables.Float32Col()
@@ -532,11 +549,23 @@ class VIRUSFiber32(tables.IsDescription): #same as VIRUSFiber but uses Float32 i
         amp = tables.StringCol(2)
         expnum = tables.Int32Col()
 
+        # cloned from VIRUSFiberIndex
+        flag = tables.Int8Col(dflt=1)  # was Int32 #pos=19) #1 is "good" * note: 1 IFF all others are 1, but is not (currently) a bitmap
+        flag_badamp = tables.Int8Col(dflt=1)  # pos=20) #1 is "good"
+        flag_badfib = tables.Int8Col(dflt=1)  # pos=21) #1 is "good"
+        flag_meteor = tables.Int8Col(dflt=1)  # pos=22) #1 is "good"
+        flag_satellite = tables.Int8Col(dflt=1)  # pos=23) #1 is "good"
+        flag_largegal = tables.Int8Col(dflt=1)  # pos=24) #1 is "good"
+        flag_shot = tables.Int8Col(dflt=1)  # pos=25) #1 is "good"
+        flag_throughput = tables.Int8Col(dflt=1)  # pos=26) #1 is "good"
+
         # consider removing these to save longterm storage
         # if needed, would re-run
         # spectrum = tables.Float16ColCol((1032,))
         # wavelength = tables.Float16ColCol((1032,))
-        # fiber_to_fiber = tables.Float16ColCol((1032,))
+
+        fiber_to_fiber = tables.Float32Col((1032,)) #re-extraction in HETDEX_API needs it
+
         #
         # chi2 = tables.Float16ColCol((1032,))
         # rms = tables.Float16ColCol((1032,))
@@ -591,48 +620,49 @@ class CalfibDQ(tables.IsDescription):
     fiber_id = tables.StringCol((38), pos=0)
     calfib_dq = tables.Int16Col((1036,),pos=1)
 
-class VIRUSFiberIndexWithFlags(tables.IsDescription):
-    """
-    cloned from HETDEX_API create_fiber_index_hdr5.py
-
-    remove redundant info to save space
-
-    note: this is the alternate form of VIRUSFiberIndex
-          it is used in the same way but (in original HETDEX) adds the flag information
-          It both forms are used to create a group/table named FiberIndex, with the Single Shot Reduction
-          using the VIRUSFiberIndexWithFlags variant instead
-
-    *** NOTE: there will likely be some code modifications needed in HETDEX_API to look for the flag in the new place
-              if it is not found in the old group/table
-
-    """
-    #multiframe = tables.StringCol((20), pos=0) #redundant with Fibers table
-    #ra = tables.Float32Col(pos=1) #redundant with Fibers table
-    #dec = tables.Float32Col(pos=2) #redundant with Fibers table
-    fiber_id = tables.StringCol((38),) #pos=3)
-    healpix = tables.Int64Col()
-    #amp = tables.StringCol(2,pos=5) #redundant with Fibers table
-    #date = tables.Int64Col(pos=6) #redundant with Fibers table
-    #datevobs = tables.StringCol((12),pos=7) #redundant with Fibers table
-    #expnum = tables.Int32Col(pos=8) #redundant with Fibers table
-    #fibidx = tables.Int8Col() #redundant with Fibers table
-    #fibnum = tables.Int32Col(pos=10) #redundant with Fibers table
-    #fpx = tables.Float32Col(pos=11) #redundant with Fibers table
-    #fpy = tables.Float32Col(pos=12) #redundant with Fibers table
-    #ifuslot = tables.StringCol(3,pos=13) #redundant with Fibers table
-    #ifuid = tables.StringCol(3,pos=14) #redundant with Fibers table
-    #ifux = tables.Float32Col(pos=15) #redundant with Fibers table
-    #ifuy = tables.Float32Col(pos=16) #redundant with Fibers table
-    #shotid = tables.Int64Col(pos=17) #redundant with Fibers table
-    #specid = tables.StringCol(3,pos=18) #redundant with Fibers table
-    flag = tables.Int8Col(dflt=1) #was Int32 #pos=19) #1 is "good" * note: 1 IFF all others are 1, but is not (currently) a bitmap
-    flag_badamp = tables.Int8Col(dflt=1) #pos=20) #1 is "good"
-    flag_badfib = tables.Int8Col(dflt=1)#pos=21) #1 is "good"
-    flag_meteor = tables.Int8Col(dflt=1)#pos=22) #1 is "good"
-    flag_satellite = tables.Int8Col(dflt=1)#pos=23) #1 is "good"
-    flag_largegal = tables.Int8Col(dflt=1)#pos=24) #1 is "good"
-    flag_shot = tables.Int8Col(dflt=1) #pos=25) #1 is "good"
-    flag_throughput = tables.Int8Col(dflt=1) #pos=26) #1 is "good"
+# now combined with Fibers
+# class VIRUSFiberIndexWithFlags(tables.IsDescription):
+#     """
+#     cloned from HETDEX_API create_fiber_index_hdr5.py
+#
+#     remove redundant info to save space
+#
+#     note: this is the alternate form of VIRUSFiberIndex
+#           it is used in the same way but (in original HETDEX) adds the flag information
+#           It both forms are used to create a group/table named FiberIndex, with the Single Shot Reduction
+#           using the VIRUSFiberIndexWithFlags variant instead
+#
+#     *** NOTE: there will likely be some code modifications needed in HETDEX_API to look for the flag in the new place
+#               if it is not found in the old group/table
+#
+#     """
+#     #multiframe = tables.StringCol((20), pos=0) #redundant with Fibers table
+#     #ra = tables.Float32Col(pos=1) #redundant with Fibers table
+#     #dec = tables.Float32Col(pos=2) #redundant with Fibers table
+#     fiber_id = tables.StringCol((38),) #pos=3)
+#     healpix = tables.Int64Col()
+#     #amp = tables.StringCol(2,pos=5) #redundant with Fibers table
+#     #date = tables.Int64Col(pos=6) #redundant with Fibers table
+#     #datevobs = tables.StringCol((12),pos=7) #redundant with Fibers table
+#     #expnum = tables.Int32Col(pos=8) #redundant with Fibers table
+#     #fibidx = tables.Int8Col() #redundant with Fibers table
+#     #fibnum = tables.Int32Col(pos=10) #redundant with Fibers table
+#     #fpx = tables.Float32Col(pos=11) #redundant with Fibers table
+#     #fpy = tables.Float32Col(pos=12) #redundant with Fibers table
+#     #ifuslot = tables.StringCol(3,pos=13) #redundant with Fibers table
+#     #ifuid = tables.StringCol(3,pos=14) #redundant with Fibers table
+#     #ifux = tables.Float32Col(pos=15) #redundant with Fibers table
+#     #ifuy = tables.Float32Col(pos=16) #redundant with Fibers table
+#     #shotid = tables.Int64Col(pos=17) #redundant with Fibers table
+#     #specid = tables.StringCol(3,pos=18) #redundant with Fibers table
+#     flag = tables.Int8Col(dflt=1) #was Int32 #pos=19) #1 is "good" * note: 1 IFF all others are 1, but is not (currently) a bitmap
+#     flag_badamp = tables.Int8Col(dflt=1) #pos=20) #1 is "good"
+#     flag_badfib = tables.Int8Col(dflt=1)#pos=21) #1 is "good"
+#     flag_meteor = tables.Int8Col(dflt=1)#pos=22) #1 is "good"
+#     flag_satellite = tables.Int8Col(dflt=1)#pos=23) #1 is "good"
+#     flag_largegal = tables.Int8Col(dflt=1)#pos=24) #1 is "good"
+#     flag_shot = tables.Int8Col(dflt=1) #pos=25) #1 is "good"
+#     flag_throughput = tables.Int8Col(dflt=1) #pos=26) #1 is "good"
 
 
 
@@ -718,6 +748,10 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 mx = np.max(shot_h5.root.Data.Fibers.read(field="calfibe"))  # can only be positive
                 if mx > 65000.0:
                     use32 = True
+                else:
+                    mx = np.max(shot_h5.root.Data.Fibers.read(field="fiber_to_fiber"))
+                    if mx > 65000.0:
+                        use32 = True
         if use32:
             print("Using Float32 for VIRUSFibers")
             fileh.create_table(fileh.root, 'Fibers', VIRUSFiber32, 'Fiber Summary Table')
@@ -737,7 +771,10 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
         print(f"Importing Fiber data ... ",flush=True)
 
-        #need the flags # NO ... decided for compatibility with HETDEX_API
+        #need the flags
+        # Combine with FiberIndex and then make a softlink
+        fi_dict = dict(zip(shot_h5.root.FiberIndex.read(field="fiber_id"), shot_h5.root.FiberIndex.read()))
+
         # to instead keep the FiberIndex table, even with its redundant info
         # flags = shot_h5.root.FiberIndex.read(field="flag")
         # fiber_ids = list(shot_h5.root.FiberIndex.read(field="fiber_id"))
@@ -752,7 +789,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             #go over some columns individual since want to change some types
             #directy copy columns:
             for col in ['multiframe','fiber_id','ifux','ifuy','fpx','fpy','ra','dec',
-                        'ifuslot','ifuid','specid','contid','amp']:
+                        'ifuslot','ifuid','specid','contid','amp','fiber_to_fiber']:
                 new_row[col] = row[col]
 
             #special treatment, mostly float32 to float16
@@ -775,6 +812,14 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 new_row['calfib_ffsky'] = row['calfib_ffsky'].astype(np.float16)
 
 
+            #add in the corresponding FiberIndex
+            fi_row = fi_dict[new_row['fiber_id']]
+
+            for col in ['healpix','flag','flag_badamp','flag_badfib','flag_meteor','flag_satellite',
+                        'flag_largegal','flag_shot','flag_throughput']:
+                new_row[col] = fi_row[col]
+
+
             # #need the flags ... NO, see above note about FiberIndex table
             # try:
             #     new_row['flag'] = flag_dict[new_row['fiber_id']]
@@ -791,6 +836,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             fileh.root.Fibers.cols.multiframe.create_csindex()
             fileh.root.Fibers.cols.ra.create_csindex()
             fileh.root.Fibers.cols.dec.create_csindex()
+            fileh.root.Fibers.cols.healpix.create_csindex()
         except:
             log.debug("Index fail on fibers table",exc_info=True)
 
@@ -798,6 +844,49 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
         print("Trying softlink ....")
         shot_h5.create_soft_link(fileh.root.Data, 'Fibers', target=fileh.root.Fibers)
+        shot_h5.create_soft_link(fileh.root.Data, 'FiberIndex', target=fileh.root.Fibers)
+        shot_h5.create_soft_link(fileh.root, 'FiberIndex', target=fileh.root.Fibers)
+
+
+        #####################################
+        # FiberIndex  -- !!! see above ... now combined with Fibers Table and softlinks
+        ######################################
+        #
+        # fileh.create_table(fileh.root, 'FiberIndex', VIRUSFiberIndexWithFlags, 'FiberIndex Table')
+        # #note, below we will create a softlink under root.Data.FiberIndex for compatibility
+        #
+        # # many for fibers, so iterate
+        # # root.Data.FiberIndex or root.FiberIndex  (root.Data.FiberIndex Does not have the flags)
+        # print("Importing FiberIndex data ...")
+        # for row in tqdm(shot_h5.root.FiberIndex.read()):
+        #     # for row in shot_h5.root.Data.Fibers.read():
+        #     new_row = fileh.root.FiberIndex.row
+        #     # go over some columns individual since want to change some types
+        #     # directy copy columns:
+        #     for col in ['fiber_id','healpix','flag_badamp','flag_badfib','flag_meteor','flag_satellite',
+        #                 'flag_largegal','flag_shot','flag_throughput']:
+        #         new_row[col] = row[col]
+        #
+        #     #changed the size of this one
+        #     new_row['flag'] = row['flag'].astype(np.int8)
+        #
+        #     new_row.append()
+        #
+        # fileh.root.FiberIndex.flush()
+        #
+        # # set the index
+        # try:
+        #     fileh.root.FiberIndex.cols.fiber_id.create_csindex()
+        #     fileh.root.FiberIndex.cols.healpix.create_csindex()
+        # except:
+        #     log.debug("Index fail on FiberIndex table", exc_info=True)
+        #
+        # fileh.root.FiberIndex.flush()
+        #
+        # #create a softlink for compatibility ????
+        # print("Trying softlink ....")
+        # shot_h5.create_soft_link(fileh.root.Data, 'FiberIndex', target=fileh.root.FiberIndex)
+
 
 
         #####################################
@@ -826,45 +915,6 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
         fileh.root.CalfibDQ.flush()
 
-
-        #####################################
-        # FiberIndex
-        ######################################
-
-        fileh.create_table(fileh.root, 'FiberIndex', VIRUSFiberIndexWithFlags, 'FiberIndex Table')
-        #note, below we will create a softlink under root.Data.FiberIndex for compatibility
-
-        # many for fibers, so iterate
-        # root.Data.FiberIndex or root.FiberIndex  (root.Data.FiberIndex Does not have the flags)
-        print("Importing FiberIndex data ...")
-        for row in tqdm(shot_h5.root.FiberIndex.read()):
-            # for row in shot_h5.root.Data.Fibers.read():
-            new_row = fileh.root.FiberIndex.row
-            # go over some columns individual since want to change some types
-            # directy copy columns:
-            for col in ['fiber_id','healpix','flag_badamp','flag_badfib','flag_meteor','flag_satellite',
-                        'flag_largegal','flag_shot','flag_throughput']:
-                new_row[col] = row[col]
-
-            #changed the size of this one
-            new_row['flag'] = row['flag'].astype(np.int8)
-
-            new_row.append()
-
-        fileh.root.FiberIndex.flush()
-
-        # set the index
-        try:
-            fileh.root.FiberIndex.cols.fiber_id.create_csindex()
-            fileh.root.FiberIndex.cols.healpix.create_csindex()
-        except:
-            log.debug("Index fail on FiberIndex table", exc_info=True)
-
-        fileh.root.FiberIndex.flush()
-
-        #create a softlink for compatibility ????
-        print("Trying softlink ....")
-        shot_h5.create_soft_link(fileh.root.Data, 'FiberIndex', target=fileh.root.FiberIndex)
 
 
         #####################################
@@ -1010,8 +1060,16 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                     new_row['flux'] = row['flux'].astype(np.float16)
                     new_row['flux_err'] = row['flux_err'].astype(np.float16)
                 new_row['dust_corr'] = row['dust_corr'].astype(np.float16)
-                new_row['aperture_radius'] = row['aperture_radius'].astype(np.float16)
-                new_row['sky_background'] = row['sky_background'].astype(np.int8)
+
+                #aperture needs help too (not -10000)
+                if row['aperture_radius'] < 0:
+                    new_row['aperture_radius'] = -1.0
+                else:
+                    new_row['aperture_radius'] = row['aperture_radius'].astype(np.float16)
+                if row['sky_background'] < 0:
+                    new_row['sky_background'] = -1
+                else:
+                    new_row['sky_background'] = 1 if row['sky_background'] > 0 else 0 #really a boolean
                 new_row['num_fibers'] = row['num_fibers'].astype(np.int16)
 
                 new_row.append()
@@ -1276,7 +1334,7 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
 
     try:
 
-        print(f"Importing images: {image_path} to root.{group_name}.{earray_name}*")
+        print(f"Importing images: {image_path} to root.{group_name}.{earray_name}*",flush=True)
 
         #max_shape, unique_d1, unique_ct = get_max_image(image_path)
 
@@ -1414,7 +1472,7 @@ def get_image_dict(image_path):
                 img_dict[x1] = [img_path]
 
     except:
-        print(f"Exception: {traceback.format_exc()}")
+        print(f"Exception: {traceback.format_exc()}",flush=True)
 
     return (max1,max2,max3), img_dict
 
@@ -1429,7 +1487,7 @@ def import_images_carray(shot_h5fn,image_path,group_name,carray_name="image_data
 
     try:
 
-        print(f"Importing images: {image_path} to root.{group_name}.{carray_name}*")
+        print(f"Importing images: {image_path} to root.{group_name}.{carray_name}*",flush=True)
 
         max_shape, img_dict = get_image_dict(image_path)
 
@@ -1469,7 +1527,7 @@ def import_images_carray(shot_h5fn,image_path,group_name,carray_name="image_data
                         e1 = traceback.format_exc()
                         image_array = h5.get_node(img_group)._f_get_child(name)
                     except:
-                        print(f"Cannot import images.\nException #1: {e1}\nException #2: {traceback.format_exc()}")
+                        print(f"Cannot import images.\nException #1: {e1}\nException #2: {traceback.format_exc()}",flush=True)
 
                 #print(f"Importing ID:{key} ...")
                 for i, img_path in enumerate(tqdm(img_dict[key])):
