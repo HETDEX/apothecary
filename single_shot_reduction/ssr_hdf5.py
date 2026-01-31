@@ -578,6 +578,33 @@ class VIRUSFiber32(tables.IsDescription): #same as VIRUSFiber but uses Float32 i
         # error1D = tables.Float16ColCol((1032,))
 
 
+# VIRUSImage, very expensive ... more than half total shot.h5 is wrapped up here. Will skip.
+# class VIRUSImage16(tables.IsDescription):
+#     obsind = tables.Int32Col()
+#     multiframe = tables.StringCol((20), pos=0)
+#     image = tables.Float16Col((1032, 1032))
+#     error = tables.Float16Col((1032, 1032))
+#     clean_image = tables.Float16Col((1032, 1032))
+#     ifuslot = tables.StringCol(3)
+#     ifuid = tables.StringCol(3)
+#     specid = tables.StringCol(3)
+#     contid = tables.StringCol(8)
+#     amp = tables.StringCol(2)
+#     expnum = tables.Int16Col()
+#
+# class VIRUSImage32(tables.IsDescription):
+#     obsind = tables.Int32Col()
+#     multiframe = tables.StringCol((20), pos=0)
+#     image = tables.Float32Col((1032, 1032))
+#     error = tables.Float32Col((1032, 1032))
+#     clean_image = tables.Float32Col((1032, 1032))
+#     ifuslot = tables.StringCol(3)
+#     ifuid = tables.StringCol(3)
+#     specid = tables.StringCol(3)
+#     contid = tables.StringCol(8)
+#     amp = tables.StringCol(2)
+#     expnum = tables.Int16Col()
+
 class AmpStats(tables.IsDescription):
     """
     cloned from HETDEX_AI ampstats.py
@@ -730,8 +757,23 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         row.append()
         vtb.flush()
 
-        fileh.create_table(fileh.root, 'Shot', VIRUSShot,
-                           'Shot Summary Table')
+        #######################################
+        # Shot Table
+        #######################################
+
+        fileh.create_table(fileh.root, 'Shot', VIRUSShot, 'Shot Summary Table')
+
+        #just one row for Shot table, so just do a direct copy
+        fileh.root.Shot.append(shot_h5.root.Shot.read())
+        fileh.root.Shot.flush()
+
+
+
+        #######################################
+        # Fibers (also FiberIndex)
+        #######################################
+
+        print(f"Importing Fiber data ... ", flush=True)
 
         #put under "Data" for some compatibility with pathing in HETDEX_API
         _ = fileh.create_group(fileh.root, "Data", "VIRUS Fiber Data") # was assigned to group_data previously
@@ -763,13 +805,6 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         #fileh.create_table(group_data, 'Fibers', VIRUSFiber, 'Fiber Summary Table')
        # fileh.create_table(fileh.root, 'Fibers', VIRUSFiber16, 'Fiber Summary Table')
 
-        #iterate over shot's info (shot table and fiber table) and populate
-
-        #just one row for Shot table, so just do a direct copy
-        fileh.root.Shot.append(shot_h5.root.Shot.read())
-        fileh.root.Shot.flush()
-
-        print(f"Importing Fiber data ... ",flush=True)
 
         #need the flags
         # Combine with FiberIndex and then make a softlink
@@ -888,6 +923,70 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         # shot_h5.create_soft_link(fileh.root.Data, 'FiberIndex', target=fileh.root.FiberIndex)
 
 
+
+        # ##################################
+        # # VIRUSImages
+        # # ... VERY expensive (more than half the total size of the shot.h5
+        # #      will skip. Does not impact re-extraction, BUT you cannot build elixer reports without them
+        ##                    and without other data.
+        # ##################################
+        #
+        # print(f"Importing VIRUS CCD image data ... ", flush=True)
+        #
+        # use32 = False
+        # mx = np.abs(shot_h5.root.Data.Images.read(field="image")).max()
+        # if mx > 65000.0:
+        #     use32 = True
+        #     log.debug(f"Data.Images.image requires float32: mx {mx}")
+        # else:
+        #     mx = np.abs(shot_h5.root.Data.Images.read(field="clean_image")).max()
+        #     if mx > 65000.0:
+        #         use32 = True
+        #         log.debug(f"Data.Images.clean_image requires float32: mx {mx}")
+        #     else:
+        #         mx = np.max(shot_h5.root.Data.Images.read(field="error"))  # can only be positive
+        #         if mx > 65000.0:
+        #             use32 = True
+        #             log.debug(f"Data.Images.error requires float32: mx {mx}")
+        #
+        # if use32:
+        #     print("Using Float32 for VIRUSImages")
+        #     fileh.create_table(fileh.root.Data, 'Images', VIRUSImage32, 'VIRUS CCD Image Data')
+        # else:
+        #     print("Using Float16 for VIRUSImages")
+        #     fileh.create_table(fileh.root.Data, 'Images', VIRUSImage16, 'VIRUS CCD Image Data')
+        #
+        # for row in tqdm(shot_h5.root.Data.Images.read()):
+        #     # for row in shot_h5.root.Data.Fibers.read():
+        #     new_row = fileh.root.Data.Images.row
+        #     # go over some columns individual since want to change some types
+        #     # directy copy columns:
+        #     for col in ['obsind', 'multiframe', 'ifuslot', 'ifuid', 'specid', 'contid', 'amp']:
+        #         new_row[col] = row[col]
+        #
+        #     # special treatment, mostly float32 to float16
+        #     new_row['expnum'] = row['expnum'].astype(np.int16)  # Maybe we'd have more than 15 exposures (prob not, though)
+        #     if use32:
+        #         new_row['image'] = row['image'].astype(np.float32)
+        #         new_row['error'] = row['error'].astype(np.float32)
+        #         new_row['clean_image'] = row['clean_image'].astype(np.float32)
+        #     else:
+        #         new_row['image'] = row['image'].astype(np.float16)
+        #         new_row['error'] = row['error'].astype(np.float16)
+        #         new_row['clean_image'] = row['clean_image'].astype(np.float16)
+        #
+        #
+        #     new_row.append()
+        #
+        # fileh.root.Data.Images.flush()
+        #
+        # # set the index
+        # try:
+        #     fileh.root.Data.Images.cols.multiframe.create_csindex()
+        # except:
+        #     log.debug("Index fail on Data.Images table", exc_info=True)
+        #
+        # fileh.root.Data.Images.flush()
 
         #####################################
         # CalfibDQ
@@ -1660,12 +1759,12 @@ new_h5_fn = build_ssr_shot_h5(shot_h5_path, elixer_fn=elixer_h5_path)
 if images_path is not None:
     #print("Skipping images import")
     #using the earray and growing
-    import_images_earray(new_h5_fn,os.path.join(images_path,"25*[0-9].png"),"elixer_reports")
-    import_images_earray(new_h5_fn,os.path.join(images_path,"25*_nei.png"),"elixer_neighbors")
+    import_images_earray(new_h5_fn,os.path.join(images_path,"*[0-9].png"),"elixer_reports")
+    import_images_earray(new_h5_fn,os.path.join(images_path,"*_nei.png"),"elixer_neighbors")
 
     #pre-allocating with carray
-    #import_images_carray(new_h5_fn,os.path.join(images_path,"25*[0-9].png"),"elixer_reports")
-    #import_images_carray(new_h5_fn,os.path.join(images_path,"25*_nei.png"),"elixer_neighbors")
+    #import_images_carray(new_h5_fn,os.path.join(images_path,"*[0-9].png"),"elixer_reports")
+    #import_images_carray(new_h5_fn,os.path.join(images_path,"*_nei.png"),"elixer_neighbors")
 
 
 print(f"Elapsed time: {time.perf_counter() - start_time :0.1f}s")
