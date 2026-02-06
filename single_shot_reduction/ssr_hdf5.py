@@ -1862,7 +1862,7 @@ if images_path is not None:
     #import_images_carray(new_h5_fn,os.path.join(images_path,"*_nei.png"),"elixer_neighbors")
 
 
-print(f"{os.path.basename(shot_h5_path).replace('.h5','')} Elapsed time: {time.perf_counter() - start_time :0.1f}s")
+print(f"[{os.path.basename(shot_h5_path).replace('.h5','')}] Elapsed time: {time.perf_counter() - start_time :0.1f}s")
 wait_to_run(Max_Simultaneous_Shots, datevshot=datevshot,clean_up=True)
 
 # example code to fetch images
