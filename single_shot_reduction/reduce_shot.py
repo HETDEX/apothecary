@@ -318,7 +318,7 @@ if "-help" in args:
 
 len_args = len(args)
 queue_elixer = False
-prep_compress = False
+prep_compress = 0 #not just a boolean, use as the max simultaneous shots to process
 
 if "-queue_elixer" in args:
     # this is option is to be used on its own call, not part of a normal reduction
@@ -339,10 +339,19 @@ if "-prep_compress" in args:
     # e.g. it just makes it simpler to call sbatch on already created slurm jobs
     #      it shoud be executed from the normal login node
     print("Hidden switch : preparing default SSR compression calls that match datevshot ...")
-    print("Usage: python reduce_shot.py --prep_compress <datevshot>")
+    print("Usage: python reduce_shot.py --prep_compress [max_simultaneous, default=3] <datevshot>")
     print("Usage: wildcards allowed, but DO NOT prefix with 'sci' ")
+
+    i = args.index("-prep_compress")
+    try:
+        prep_compress = int(args[i+1])
+    except:
+        print(f"Invalid -prep_compress specified")
+        exit(-1)
+
+    del args[i + 1]
     args.remove("-prep_compress")
-    prep_compress = True
+
 
 if "-clean" in args:
     i = args.index("-clean")
@@ -448,7 +457,7 @@ if len(args) != 1:
         print(f"exititing....")
         exit(-1)
 else:
-    if not queue_elixer:
+    if not (queue_elixer or prep_compress):
         try:
             #might have 'v' or 'd' or 's' as the separator between date and shot number
             cfg.shotid = int(args[0].replace("v","").replace("s","").replace("d",""))
@@ -520,13 +529,13 @@ def run_queue_elixer(cfg):
 
     os.chdir(cwd)
 
-def run_prep_compress(cfg):
+def run_prep_compress(cfg,max_simultaneous=3):
     """
 
     :param cfg:
     :return:
     """
-
+    bg = max_simultaneous #run in the background
     cwd = os.getcwd()
     fns = glob.glob(f"sci{cfg.datevshot}")
     print(f"Attempting to prepare default SSR compression using pattern: {cfg.datevshot}")
@@ -534,21 +543,27 @@ def run_prep_compress(cfg):
 
     for cpath in fns: #fn is the full path to the sciXXX directory, not the files
         try:
+            datevshot = os.path.basename(cpath).replace("sci","")
+
             cmd = f"python ssr_hdf5.py --compression 2"
-            fn = os.path.join(cpath,f"{cfg.datevshot}.h5")
+            if bg:
+                cmd += f" --bg {bg}"
+
+            fn = os.path.join(cpath,f"{datevshot}.h5")
             if os.path.exists(fn):
                 cmd += f" --shot_h5 {fn}"
             else: # we are done, cannot build out this one
+                print(f"[{fn}] not found.")
                 continue
 
             #elixer h5
             elixer = True
-            fn = os.path.join(cpath, f"elixer/out/elixer_{cfg.datevshot}_cat.h5")
+            fn = os.path.join(cpath, f"elixer/out/elixer_{datevshot}_cat.h5")
             if os.path.exists(fn):
                 cmd += f" --elixer_h5 {fn}"
             else: # we can run without elixer, but should warn
                 elixer = False
-                print(f"[{cfg.datevshot}] !WARNING! No correspondig elixer_*_cat.h5 file found. Not fatal, but "
+                print(f"[{datevshot}] !WARNING! No correspondig elixer_*_cat.h5 file found. Not fatal, but "
                       f"there will be no ELiXer data or reports in the output.")
 
             if elixer:
@@ -556,9 +571,11 @@ def run_prep_compress(cfg):
                 if os.path.exists(fn):
                     cmd += f" --images {fn}"
                 else:  # we can run without elixer report images, but should warn
-                    print(f"[{cfg.datevshot}] !WARNING! No correspondig report images found. Not fatal, but "
+                    print(f"[{datevshot}] !WARNING! No correspondig report images found. Not fatal, but "
                           f"there will be no ELiXer reports in the output.")
 
+            if bg:
+                cmd += " &"
             with open("compress.run","a") as f:
                 print("compress.run << ",cmd,flush=True)
                 cmd += "\n"
@@ -4901,6 +4918,10 @@ if cfg.update_only:
 
 if queue_elixer:
     run_queue_elixer(cfg)
+    exit(0)
+
+if prep_compress:
+    run_prep_compress(cfg)
     exit(0)
 
 if cfg.clean_only:

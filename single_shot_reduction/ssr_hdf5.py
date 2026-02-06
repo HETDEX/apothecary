@@ -7,6 +7,8 @@ Based on the elixer_hdf5.py code AND the HETDEX_API shot h5 code
 
 This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 
+#note: for vm-small, 3 shots at a time seems to be about the memory limit
+
 """
 
 
@@ -24,12 +26,19 @@ from tqdm import tqdm
 import traceback
 import time
 
+try:
+    from filelock import FileLock
+except:
+    print("You need to install filelock (e.g.: pip install --user filelock) ")
+    exit(-1)
+
 
 UNSET_FLOAT = -999.999
 UNSET_INT = -99999
 UNSET_STR = ""
 UNSET_NAN = np.nan
 SUPPORTED_ELIXER_H5_VERSIONS = [b"0.9.2",]
+SHOW_TQDM = True
 
 #logging will just be prints
 #this is all single threaded, no real management needed
@@ -66,6 +75,69 @@ class PrintLog:
 # end class def
 
 log = PrintLog('h5_merge.log')
+
+Lock_tmp_mutex_fn = "tmp_ssrcompress.mutex"
+Lock_tmp_ct_fn = "tmp_ssrcompress.ct"
+Max_Simultaneous_Shots = 3
+
+SafeActiveShotsSleep = 30.0 # recheck every xx seconds
+
+def wait_to_run(max_procs=3,datevshot="???",clean_up=False): #,safelimit=0):
+    """
+
+    use filelock and counts to limit the number of SSR build running simultaneously
+
+    :param max_procs: how many can run at time
+
+    """
+    sleep_secs = 1.0 if clean_up else SafeActiveShotsSleep
+
+    try:
+        lock = FileLock(Lock_tmp_mutex_fn)
+
+        if max_procs > 0:
+            redlight = True
+            print(f"[{datevshot}] checking if safe to start ...")
+
+            while redlight:
+                with lock:
+                    #how many are active?
+                    with open(Lock_tmp_ct_fn,"a+") as f:
+                        f.seek(0)
+                        ct = f.readline()
+                        try:
+                            ct = int(ct)
+                        except:
+                            ct = 0
+
+                        f.seek(0)
+                        if clean_up: #we are done and need to remove THIS runner
+                            ct = max(0,ct-1)
+                            f.truncate()
+                            f.write(f"{ct}\n")
+                            redlight = False
+                        else:
+                            if ct < max_procs:
+                                ct +=1
+                                f.truncate()
+                                f.write(f"{ct}\n")
+                                redlight = False
+                            else:
+                                #still need to wait
+                                pass
+
+
+                if not redlight:
+                    if clean_up:
+                        print(f"[{datevshot}] Done.")
+                    else:
+                        print(f"[{datevshot}] cleared to start.")
+                else:
+                    #print(f"[{datevshot}] too many active shots. Must wait ...")
+                    time.sleep(sleep_secs)
+        # lock auto releases
+    except:
+        print(f"[{datevshot}] Exception! in wait_to_run()",traceback.format_exc())
 
 #make a class for each table
 class Version(tables.IsDescription):
@@ -711,6 +783,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
     fileh = None
     shot_h5 = None
     elixer_h5 = None
+    datevshot = None
 
     try:
         #check that the one or two input files exist and can be opened
@@ -742,6 +815,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 log.critical(f"Fatal. Input elixer h5 version {elixer_h5_version} not supported.")
                 return
 
+        datevshot = os.path.basename(shot_fn).replace(".h5","")
         outfn = "ssr_" + os.path.basename(shot_fn)
 
         log.debug("Creating new SingleShot Reduction HDF5 catalog (%s)" % (outfn))
@@ -773,7 +847,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         # Fibers (also FiberIndex)
         #######################################
 
-        print(f"Importing Fiber data ... ", flush=True)
+        print(f"[{datevshot}] Importing Fiber data ... ", flush=True)
 
         #put under "Data" for some compatibility with pathing in HETDEX_API
         _ = fileh.create_group(fileh.root, "Data", "VIRUS Fiber Data") # was assigned to group_data previously
@@ -795,10 +869,10 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                     if mx > 65000.0:
                         use32 = True
         if use32:
-            print("Using Float32 for VIRUSFibers")
+            print(f"[{datevshot}] Using Float32 for VIRUSFibers",flush=True)
             fileh.create_table(fileh.root, 'Fibers', VIRUSFiber32, 'Fiber Summary Table')
         else:
-            print("Using Float16 for VIRUSFibers")
+            print(f"[{datevshot}] Using Float16 for VIRUSFibers",flush=True)
             fileh.create_table(fileh.root, 'Fibers', VIRUSFiber16, 'Fiber Summary Table')
 
         #this will also be softlinked to root.Data.Fibers
@@ -818,7 +892,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         # del fiber_ids
 
         #many for fibers, so iterate
-        for row in tqdm(shot_h5.root.Data.Fibers.read()):
+        for row in tqdm(shot_h5.root.Data.Fibers.read(),disable=not SHOW_TQDM):
         #for row in shot_h5.root.Data.Fibers.read():
             new_row = fileh.root.Fibers.row
             #go over some columns individual since want to change some types
@@ -873,7 +947,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             fileh.root.Fibers.cols.dec.create_csindex()
             fileh.root.Fibers.cols.healpix.create_csindex()
         except:
-            log.debug("Index fail on fibers table",exc_info=True)
+            log.debug(f"[{datevshot}] Index fail on fibers table",exc_info=True)
 
         fileh.root.Fibers.flush()
 
@@ -993,10 +1067,10 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         ######################################
 
         fileh.create_table(fileh.root, 'CalfibDQ', CalfibDQ, 'Fiber per-Wavelength Flags Table')
-        print("Importing CalfibDQ (Fiber per-wavelength flags) data ...")
+        print(f"[{datevshot}] Importing CalfibDQ (Fiber per-wavelength flags) data ...",flush=True)
         copy_cols = fileh.root.CalfibDQ.colnames
 
-        for row in tqdm(shot_h5.root.CalfibDQ.read()):
+        for row in tqdm(shot_h5.root.CalfibDQ.read(),disable=not SHOW_TQDM):
             new_row = fileh.root.CalfibDQ.row
             # go over some columns individual since want to change some types
             # directy copy columns:
@@ -1010,7 +1084,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         try:
             fileh.root.CalfibDQ.cols.fiber_id.create_csindex()
         except:
-            log.debug("Index fail on CalfibDQ table", exc_info=True)
+            log.debug(f"[{datevshot}] Index fail on CalfibDQ table", exc_info=True)
 
         fileh.root.CalfibDQ.flush()
 
@@ -1021,11 +1095,11 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         ######################################
 
         fileh.create_table(fileh.root, 'AmpStats', AmpStats, 'Amp Stats Table')
-        print("Importing AmpStats data ...")
+        print(f"[{datevshot}] Importing AmpStats data ...",flush=True)
         copy_cols = fileh.root.AmpStats.colnames
         copy_cols.remove('expnum')
 
-        for row in tqdm(shot_h5.root.AmpStats.read()):
+        for row in tqdm(shot_h5.root.AmpStats.read(),disable=not SHOW_TQDM):
             new_row = fileh.root.AmpStats.row
             # go over some columns individual since want to change some types
             # directy copy columns:
@@ -1042,7 +1116,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         try:
             fileh.root.AmpStats.cols.multiframe.create_csindex()
         except:
-            log.debug("Index fail on AmpStats table", exc_info=True)
+            log.debug(f"[{datevshot}] Index fail on AmpStats table", exc_info=True)
 
         fileh.root.AmpStats.flush()
 
@@ -1059,7 +1133,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
 
         if elixer_h5 is not None:
-            print(f"Importing ELiXer data ... ")
+            print(f"[{datevshot}] Importing ELiXer data ... ",flush=True)
 
             fileh.create_table(fileh.root, 'Detections', Detections,
                                'Detection Summary Table')
@@ -1106,7 +1180,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 fileh.root.Detections.cols.ra.create_csindex()
                 fileh.root.Detections.cols.dec.create_csindex()
             except:
-                log.debug("Index fail on Detections table", exc_info=True)
+                log.debug(f"[{datevshot}] Index fail on Detections table", exc_info=True)
 
             fileh.root.Detections.flush()
 
@@ -1120,7 +1194,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             try:
                 fileh.root.SpectraLines.cols.detectid.create_csindex()
             except:
-                log.debug("Index fail on SpectraLines table", exc_info=True)
+                log.debug(f"[{datevshot}] Index fail on SpectraLines table", exc_info=True)
 
             fileh.root.SpectraLines.flush()
 
@@ -1139,11 +1213,11 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                     use32 = True
 
             if use32:
-                print("Using float32 for CalibratedSpectra")
+                print(f"[{datevshot}] Using float32 for CalibratedSpectra",flush=True)
                 fileh.create_table(fileh.root, 'CalibratedSpectra', CalibratedSpectra32,
                                'PSF Weighted Spectra Table')
             else:
-                print("Using float16 for CalibratedSpectra")
+                print(f"[{datevshot}] Using float16 for CalibratedSpectra",flush=True)
                 fileh.create_table(fileh.root, 'CalibratedSpectra', CalibratedSpectra16,
                                'PSF Weighted Spectra Table')
 
@@ -1178,7 +1252,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             try:
                 fileh.root.CalibratedSpectra.cols.detectid.create_csindex()
             except:
-                log.debug("Index fail on CalibratedSpectra table", exc_info=True)
+                log.debug(f"[{datevshot}] Index fail on CalibratedSpectra table", exc_info=True)
 
             fileh.root.CalibratedSpectra.flush()
 
@@ -1220,7 +1294,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             try:
                 fileh.root.Aperture.cols.detectid.create_csindex()
             except:
-                log.debug("Index fail on Aperture table", exc_info=True)
+                log.debug(f"[{datevshot}] Index fail on Aperture table", exc_info=True)
 
             fileh.root.Aperture.flush()
 
@@ -1261,7 +1335,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             try:
                 fileh.root.ElixerApertures.cols.detectid.create_csindex()
             except:
-                log.debug("Index fail on ElixerApertures table", exc_info=True)
+                log.debug(f"[{datevshot}] Index fail on ElixerApertures table", exc_info=True)
 
             fileh.root.ElixerApertures.flush()
 
@@ -1316,7 +1390,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             try:
                 fileh.root.ExtractedObjects.cols.detectid.create_csindex()
             except:
-                log.debug("Index fail on ExtractedObjects table", exc_info=True)
+                log.debug(f"[{datevshot}] Index fail on ExtractedObjects table", exc_info=True)
 
             fileh.root.ExtractedObjects.flush()
 
@@ -1359,7 +1433,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             try:
                 fileh.root.CatalogMatch.cols.detectid.create_csindex()
             except:
-                log.debug("Index fail on CatalogMatch table", exc_info=True)
+                log.debug(f"[{datevshot}] Index fail on CatalogMatch table", exc_info=True)
 
             fileh.root.CatalogMatch.flush()
 
@@ -1369,7 +1443,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             elixer_h5.close()
 
     except:
-        print(f"Exception building new h5 file. {traceback.format_exc()}")
+        print(f"[{datevshot}] Exception building new h5 file. {traceback.format_exc()}")
 
 
 
@@ -1380,7 +1454,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 #end build_ssr_shot_h5
 
 
-def get_max_image(image_path):
+def get_max_image(image_path,datevshot="???"):
     """
 
     :param image_path:
@@ -1396,9 +1470,9 @@ def get_max_image(image_path):
     # t3 = []
 
     try:
-        print("Checking image sizes ...",flush=True)
+        print(f"[{datevshot}] Checking image sizes ...",flush=True)
         image_fns = sorted(glob.glob(image_path))
-        for img_path in tqdm(image_fns):
+        for img_path in tqdm(image_fns,disable=not SHOW_TQDM):
             x1,x2,x3  = np.array(Image.open(img_path)).shape
 
             max1 = max(max1, x1)
@@ -1410,7 +1484,7 @@ def get_max_image(image_path):
             # t3.append(x3)
 
     except:
-        print(f"Exception: {traceback.format_exc()}")
+        print(f"[{datevshot}] Exception: {traceback.format_exc()}")
 
     # print(f"x1: {np.unique(t1)}")
     # print(f"x2: {np.unique(t2)}")
@@ -1433,12 +1507,17 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
 
     try:
 
-        print(f"Importing images: {image_path} to root.{group_name}.{earray_name}*",flush=True)
+        datevshot = os.path.basename(shot_h5fn).replace(".h5", "")
 
-        #max_shape, unique_d1, unique_ct = get_max_image(image_path)
+        print(f"[{datevshot}] Importing images: {image_path} to root.{group_name}.{earray_name}*",flush=True)
 
-        max_shape, img_dict = get_image_dict(image_path)
+        #max_shape, unique_d1, unique_ct = get_max_image(image_path,datevshot)
+
+        max_shape, img_dict = get_image_dict(image_path,datevshot)
         unique_d1 = img_dict.keys()
+        if unique_d1 is None or len(unique_d1) < 1:
+            print(f"[{datevshot}] No matching report images found.")
+            return
         unique_ct = np.array([len(img_dict[k]) for k in img_dict.keys()])
 
         #sort
@@ -1493,12 +1572,12 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
                         e1 = traceback.format_exc()
                         image_array = h5.get_node(img_group)._f_get_child(name)
                     except:
-                        print(f"Cannot import images.\nException #1: {e1}\nException #2: {traceback.format_exc()}")
+                        print(f"[{datevshot}] Cannot import images.\nException #1: {e1}\nException #2: {traceback.format_exc()}")
 
             # Iterate through all image files, resize if needed, and append to the eArray
             total_images = len(image_fns)
-            print(f"Importing {total_images} images ... ",flush=True)
-            for img_path in tqdm(image_fns):
+            print(f"[{datevshot}] Importing {total_images} images ... ",flush=True)
+            for img_path in tqdm(image_fns,disable=not SHOW_TQDM):
                 img = Image.open(img_path)
                 # Optional: Resize images to a consistent size if necessary
                 # img = img.resize((new_width, new_height))
@@ -1536,13 +1615,13 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
 
             dtb.flush()
 
-            print(f"Stored {total_images} images in {shot_h5fn}.")
+            print(f"[{datevshot}] Stored {total_images} images in {shot_h5fn}.")
 
     except:
-        print(f"Exception in add_report_images(): {traceback.format_exc()}")
+        print(f"[{datevshot}] Exception in add_report_images(): {traceback.format_exc()}")
 
 
-def get_image_dict(image_path):
+def get_image_dict(image_path,datevshot="???"):
     """
 
     :param image_path:
@@ -1556,9 +1635,9 @@ def get_image_dict(image_path):
     img_dict = {}
 
     try:
-        print("Checking image sizes ...",flush=True)
+        print(f"[{datevshot}] Checking image sizes ...",flush=True)
         image_fns = sorted(glob.glob(image_path))
-        for img_path in tqdm(image_fns):
+        for img_path in tqdm(image_fns,disable=not SHOW_TQDM):
             x1,x2,x3  = np.array(Image.open(img_path)).shape
 
             max1 = max(max1, x1)
@@ -1571,7 +1650,7 @@ def get_image_dict(image_path):
                 img_dict[x1] = [img_path]
 
     except:
-        print(f"Exception: {traceback.format_exc()}",flush=True)
+        print(f"[{datevshot}] Exception: {traceback.format_exc()}",flush=True)
 
     return (max1,max2,max3), img_dict
 
@@ -1585,10 +1664,10 @@ def import_images_carray(shot_h5fn,image_path,group_name,carray_name="image_data
     """
 
     try:
+        datevshot = os.path.basename(shot_h5fn).replace(".h5", "")
+        print(f"[{datevshot}] Importing images: {image_path} to root.{group_name}.{carray_name}*",flush=True)
 
-        print(f"Importing images: {image_path} to root.{group_name}.{carray_name}*",flush=True)
-
-        max_shape, img_dict = get_image_dict(image_path)
+        max_shape, img_dict = get_image_dict(image_path,datevshot)
 
         with tables.open_file(shot_h5fn,mode="r+") as h5:  #so will auto close regardless of exit
 
@@ -1613,7 +1692,7 @@ def import_images_carray(shot_h5fn,image_path,group_name,carray_name="image_data
 
             #iterate (in decending order of 1D size) over the img_dict and pre-allocate carrays and then populate
             total_images = sum(len(img_dict[k]) for k in img_dict.keys())
-            print(f"Importing {total_images} images ... ",flush=True)
+            print(f"[{datevshot}] Importing {total_images} images ... ",flush=True)
             for key in sorted(img_dict.keys())[::-1]:
                 name = carray_name + "_" + str(key)
                 img_shape = (key, max_shape[1], max_shape[2])
@@ -1626,10 +1705,10 @@ def import_images_carray(shot_h5fn,image_path,group_name,carray_name="image_data
                         e1 = traceback.format_exc()
                         image_array = h5.get_node(img_group)._f_get_child(name)
                     except:
-                        print(f"Cannot import images.\nException #1: {e1}\nException #2: {traceback.format_exc()}",flush=True)
+                        print(f"[{datevshot}] Cannot import images.\nException #1: {e1}\nException #2: {traceback.format_exc()}",flush=True)
 
                 #print(f"Importing ID:{key} ...")
-                for i, img_path in enumerate(tqdm(img_dict[key])):
+                for i, img_path in enumerate(tqdm(img_dict[key],disable=not SHOW_TQDM)):
                     img_as_array = np.array(Image.open(img_path))
                     image_array[i] = [img_as_array]
 
@@ -1654,10 +1733,10 @@ def import_images_carray(shot_h5fn,image_path,group_name,carray_name="image_data
 
             dtb.flush()
 
-            print(f"Stored {total_images} images in {shot_h5fn}.")
+            print(f"[{datevshot}] Stored {total_images} images in {shot_h5fn}.")
 
     except:
-        print(f"Exception in add_report_images(): {traceback.format_exc()}")
+        print(f"[{datevshot}] Exception in add_report_images(): {traceback.format_exc()}")
 
 ########################################################################
 ########################################################################
@@ -1686,7 +1765,6 @@ if "-shot_h5" in args: #path to the shot h5 file
 else:
     print("Fatal. Must supply --shot_h5 <path to the shot hdf5 file>")
 
-
 elixer_h5_path = None
 if "-elixer_h5" in args: #path to the shot h5 file
     i = args.index("-elixer_h5")
@@ -1711,6 +1789,16 @@ if "-images" in args:
     del args[i+1]  # args.pop(0) #remove THIS file
     args.remove("-images")
 
+if "-bg" in args:
+    SHOW_TQDM = False
+    i = args.index("-bg")
+    try:
+        Max_Simultaneous_Shots = int(args[i+1])
+    except:
+        print(f"Invalid -bg argument specified: {args[i + 1]}")
+        exit(-1)
+    del args[i + 1]
+    args.remove("-bg")
 
 #default, level 2
 COMPRESSION_FILTER = tables.Filters(complevel=1, complib='zlib', bitshuffle=False, shuffle=False)
@@ -1753,6 +1841,10 @@ else:
 if len(args) > 0:
     print(f"Unknown remainting args: {args}")
 
+
+datevshot = os.path.basename(shot_h5_path).replace(".h5","")
+wait_to_run(Max_Simultaneous_Shots, datevshot=datevshot,clean_up=False)
+
 start_time = time.perf_counter()
 
 new_h5_fn = build_ssr_shot_h5(shot_h5_path, elixer_fn=elixer_h5_path)
@@ -1767,7 +1859,8 @@ if images_path is not None:
     #import_images_carray(new_h5_fn,os.path.join(images_path,"*_nei.png"),"elixer_neighbors")
 
 
-print(f"Elapsed time: {time.perf_counter() - start_time :0.1f}s")
+print(f"{os.path.basename(shot_h5_path).replace('.h5','')} Elapsed time: {time.perf_counter() - start_time :0.1f}s")
+wait_to_run(Max_Simultaneous_Shots, datevshot=datevshot,clean_up=True)
 
 # example code to fetch images
 # main elixer report
