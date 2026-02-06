@@ -97,7 +97,10 @@ def wait_to_run(max_procs=3,datevshot="???",clean_up=False): #,safelimit=0):
 
         if max_procs > 0:
             redlight = True
-            print(f"[{datevshot}] checking if safe to start ...")
+            if clean_up:
+                print(f"[{datevshot}] cleaning up ...")
+            else:
+                print(f"[{datevshot}] checking if safe to start ...")
 
             while redlight:
                 with lock:
