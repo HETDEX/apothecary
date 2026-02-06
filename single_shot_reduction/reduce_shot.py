@@ -318,6 +318,7 @@ if "-help" in args:
 
 len_args = len(args)
 queue_elixer = False
+prep_compress = False
 
 if "-queue_elixer" in args:
     # this is option is to be used on its own call, not part of a normal reduction
@@ -326,10 +327,22 @@ if "-queue_elixer" in args:
     # e.g. it just makes it simpler to call sbatch on already created slurm jobs
     #      it shoud be executed from the normal login node
     print("Hidden switch : queueing elixer slurm jobs that match datevshot ...")
-    print("Usage: python reduce_shot.py <datevshot>")
+    print("Usage: python reduce_shot.py --queue_elixer <datevshot>")
     print("Usage: wildcards allowed, but DO NOT prefix with 'sci' ")
     args.remove("-queue_elixer")
     queue_elixer = True
+
+if "-prep_compress" in args:
+    # this is option is to be used on its own call, not part of a normal reduction
+    # it looks for the shot under the current directory (reduction must already be completed in a previous run)
+    #  and calls sbatch for the line and conts (again, which should have been previously created)
+    # e.g. it just makes it simpler to call sbatch on already created slurm jobs
+    #      it shoud be executed from the normal login node
+    print("Hidden switch : preparing default SSR compression calls that match datevshot ...")
+    print("Usage: python reduce_shot.py --prep_compress <datevshot>")
+    print("Usage: wildcards allowed, but DO NOT prefix with 'sci' ")
+    args.remove("-prep_compress")
+    prep_compress = True
 
 if "-clean" in args:
     i = args.index("-clean")
@@ -502,6 +515,54 @@ def run_queue_elixer(cfg):
                         system_command(cfg,cmd)
 
                     os.chdir(cwd)
+        except:
+            print(traceback.format_exc())
+
+    os.chdir(cwd)
+
+def run_prep_compress(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+
+    cwd = os.getcwd()
+    fns = glob.glob(f"sci{cfg.datevshot}")
+    print(f"Attempting to prepare default SSR compression using pattern: {cfg.datevshot}")
+    print(f"  matches: {fns}")
+
+    for cpath in fns: #fn is the full path to the sciXXX directory, not the files
+        try:
+            cmd = f"python ssr_hdf5.py --compression 2"
+            fn = os.path.join(cpath,f"{cfg.datevshot}.h5")
+            if os.path.exists(fn):
+                cmd += f" --shot_h5 {fn}"
+            else: # we are done, cannot build out this one
+                continue
+
+            #elixer h5
+            elixer = True
+            fn = os.path.join(cpath, f"elixer/out/elixer_{cfg.datevshot}_cat.h5")
+            if os.path.exists(fn):
+                cmd += f" --elixer_h5 {fn}"
+            else: # we can run without elixer, but should warn
+                elixer = False
+                print(f"[{cfg.datevshot}] !WARNING! No correspondig elixer_*_cat.h5 file found. Not fatal, but "
+                      f"there will be no ELiXer data or reports in the output.")
+
+            if elixer:
+                fn = os.path.join(cpath, f"elixer/out/all_pngs")
+                if os.path.exists(fn):
+                    cmd += f" --images {fn}"
+                else:  # we can run without elixer report images, but should warn
+                    print(f"[{cfg.datevshot}] !WARNING! No correspondig report images found. Not fatal, but "
+                          f"there will be no ELiXer reports in the output.")
+
+            with open("compress.run","a") as f:
+                print("compress.run << ",cmd,flush=True)
+                cmd += "\n"
+                f.write(cmd)
         except:
             print(traceback.format_exc())
 

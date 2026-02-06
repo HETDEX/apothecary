@@ -564,7 +564,7 @@ class VIRUSFiber32(tables.IsDescription): #same as VIRUSFiber but uses Float32 i
         # spectrum = tables.Float16ColCol((1032,))
         # wavelength = tables.Float16ColCol((1032,))
 
-        fiber_to_fiber = tables.Float32Col((1032,)) #re-extraction in HETDEX_API needs it
+        fiber_to_fiber = tables.Float32Col((1032,)) #re-extraction in HETDEX_API needs it as part of the masking
 
         #
         # chi2 = tables.Float16ColCol((1032,))
