@@ -954,7 +954,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
         fileh.root.Fibers.flush()
 
-        print("Trying softlink ....")
+        #print("Trying softlink ....")
         shot_h5.create_soft_link(fileh.root.Data, 'Fibers', target=fileh.root.Fibers)
         shot_h5.create_soft_link(fileh.root.Data, 'FiberIndex', target=fileh.root.Fibers)
         shot_h5.create_soft_link(fileh.root, 'FiberIndex', target=fileh.root.Fibers)
@@ -1507,11 +1507,10 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
     :param image_path: path to images, include wildcards as will be used with glob
     :return:
     """
-
+    datevshot = shot_h5fn
     try:
 
-        datevshot = os.path.basename(shot_h5fn).replace(".h5", "")
-
+        datevshot = os.path.basename(shot_h5fn).replace(".h5", "").replace("ssr_","")
         print(f"[{datevshot}] Importing images: {image_path} to root.{group_name}.{earray_name}*",flush=True)
 
         #max_shape, unique_d1, unique_ct = get_max_image(image_path,datevshot)
@@ -1666,8 +1665,9 @@ def import_images_carray(shot_h5fn,image_path,group_name,carray_name="image_data
     :return:
     """
 
+    datevshot = shot_h5fn
     try:
-        datevshot = os.path.basename(shot_h5fn).replace(".h5", "")
+        datevshot = os.path.basename(shot_h5fn).replace(".h5", "").replace("ssr_", "")
         print(f"[{datevshot}] Importing images: {image_path} to root.{group_name}.{carray_name}*",flush=True)
 
         max_shape, img_dict = get_image_dict(image_path,datevshot)
@@ -1768,6 +1768,8 @@ if "-shot_h5" in args: #path to the shot h5 file
 else:
     print("Fatal. Must supply --shot_h5 <path to the shot hdf5 file>")
 
+datevshot = os.path.basename(shot_h5_path).replace(".h5","")
+
 elixer_h5_path = None
 if "-elixer_h5" in args: #path to the shot h5 file
     i = args.index("-elixer_h5")
@@ -1816,36 +1818,36 @@ if "-compression" in args:
             #around 3.3 GB
             #yes, this one should be at level 9 (basically same time as level1 and a good bit better compression)
             COMPRESSION_FILTER = tables.Filters(complevel=9, complib='blosc2', bitshuffle=False, shuffle=False)
-            print(f"Using type 1 compression: blosc2 at complvl 9 . Limited compression (lossless), low CPU + time")
+            print(f"[{datevshot}] Using type 1 compression: blosc2 at complvl 9 . Limited compression (lossless), low CPU + time")
         elif compression == 2: #standard
             # around 6.0 minutes (360s) for typical ELiXer data ~ 1000 detects and Neighbors
             # around 2.6 GB
             # leave at complevel 1 (increasing is huge time cost for very little compression improvement)
             COMPRESSION_FILTER = tables.Filters(complevel=1, complib='zlib', bitshuffle=False, shuffle=False)
-            print(f"Using type 2 compression: zlib at complvl 1 . Good compression, moderate CPU + time")
+            print(f"[{datevshot}] Using type 2 compression: zlib at complvl 1 . Good compression, moderate CPU + time")
         elif compression == 3: #maximum
             # around 17 minutes (1000s) for typical ELiXer data ~ 1000 detects and Neighbors
             # around 1.9 GB (1.8Gb at level 9 and 18 minutes)
             # 1 vs 9 is arund 1015s vs 1080s (e.g. +1 minute) for about 5% better compression
             COMPRESSION_FILTER = tables.Filters(complevel=9, complib='bzip2', bitshuffle=False, shuffle=False)
-            print(f"Using type 3 compression: bzip2 at complvl 9 . Maximum compression, maximum CPU + time")
+            print(f"[{datevshot}] Using type 3 compression: bzip2 at complvl 9 . Maximum compression, maximum CPU + time")
         else:
-            print(f"Unexpected --compression value {compression}: Must be in [1,2,3], least compression to most and shortest to longest time cost")
+            print(f"[{datevshot}] Unexpected --compression value {compression}: Must be in [1,2,3], least compression to most and shortest to longest time cost")
             exit(-1)
     except:
-        print(f"Invalid -compression specified: {args[i+1]}")
+        print(f"[{datevshot}] Invalid -compression specified: {args[i+1]}")
         exit(-1)
 
     del args[i+1]  # args.pop(0) #remove THIS file
     args.remove("-compression")
 else:
-    print(f"Using [default] type 2 compression: zlib at complvl 1 . Good compression, moderate CPU + time")
+    print(f"[{datevshot}] Using [default] type 2 compression: zlib at complvl 1 . Good compression, moderate CPU + time")
 
 if len(args) > 0:
-    print(f"Unknown remainting args: {args}")
+    print(f"[{datevshot}] Unknown remainting args: {args}")
 
 
-datevshot = os.path.basename(shot_h5_path).replace(".h5","")
+
 wait_to_run(Max_Simultaneous_Shots, datevshot=datevshot,clean_up=False)
 
 start_time = time.perf_counter()
