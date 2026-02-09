@@ -517,10 +517,66 @@ def run_queue_elixer(cfg):
                 slurm_path = os.path.join(fn, f"elixer/{dettype}")
                 if safe_cd(slurm_path):
                     if os.path.exists("elixer.slurm"):
+
+                        if os.path.exists("elixer.run"):
+                            #check the paths and fix as needed
+                            #e.g. from
+                            # --shot_h5 /scratch/03261/polonius/parallel/shela/sci20240929v020/20240929v020.h5
+                            # to
+                            # --shot_h5 /scratch/03261/polonius/parallel/shela/set_xab/sci20240929v020/20240929v020.h5
+                            # so, check the paths (--shot_h5 , --diagnose) specifically
+                            # -OR-
+                            # get the base path for --shot_h5 compare that to the current workind dir and
+                            #  if they do not match, string repace all instanaces of the existing old basepath
+                            #    with the current working dir
+                            #      as there will be multiple lines and multiple paths in each line of the .run file
+                            #
+                            #  NOT exactly, be smarter ... probaby over kill, but may need to do this line by line
+                            #     in case this is a combination of run files? And/or there are different include paths
+                            #       different lines
+                            #  1. check --shot_h5, --diagnose (and any other)
+                            #      IF the file does not exist, reaplce the base path with the current basebase
+                            #        up to "elixer/out" and try again
+                            #  2. if the NEW path DOES exist, we are good, replace and move on
+                            with open("elixer.run","r") as f:
+                                #todo: open another file to receive the write? then rename??
+                                # may be cleaner than trying to overwrite in place, since this is line by line
+                                # NOTE: if not line by line, could run a global replace with AWK as I do elsewhere
+
+                                # todo: test ... make a copy of elixer.run as a backup
+                                #  modify this code to NOT actually issue the slurm command below, just print
+                                #     that it would be exectued
+                                #  then run this as a test and compare the new elixer.run to the saved one
+                                #
+                                # system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits")
+                                # cd dispatch_0001 ; /usr/bin/python /work/03261/polonius/maverick/science/sciscripts/elixer.test/elixer/elixer.py  -f --slurm 0 --nodes 1 --log info --shot_h5 /scratch/03261/polonius/parallel/shela/sci20241005v013/20241005v013.h5 --diagnose /scratch/03261/polonius/parallel/shela/sci20241005v013/diagnose_classifications.tab --png --error 3.0 --neighborhood 10.0 --ntasks_per_node 25 --timex 0.8 --post_merge 2 --merge_name elixer_20241005v013_cat.h5 --email dustin@astro.as.utexas.edu --name out --dets line.dets --hdf5 /scratch/03261/polonius/parallel/shela/sci20241005v013/20241005v013_line.h5 --dispatch dispatch_0001 -f ; cd ..
+                                #
+
+                                #get the first row and assume everything else is much the same
+                                line = f.readline()
+                                line = line.split(";")[1]
+                                toks = line.split()
+                                idx = toks.index("--shot_h5")
+                                idx += 1
+                                if not os.path.exists(toks[idx]):
+                                    #assume we have changed directories
+                                    old_path = os.path.dirname(toks[idx])
+                                    shot_fn = os.path.basename(toks[idx])
+                                    leaf_dir = os.path.basename(os.path.dirname(toks[idx]))
+
+                                    new_path = os.path.join(cwd,leaf_dir,shot_fn)
+                                    if os.path.exists(new_path):
+                                        #do the update
+                                        new_path = os.path.dirname(new_path) #strip off the file at the end
+                                        print(f"[{shot_fn.replace('.h5','')}] changing to new path ....")
+                                        system_command(cfg,"cp elixer.run elixer.run.original_path")
+                                        system_command(cfg, f"sed -i s#{old_path}#{new_path}#g elixer.run")
+
                         #don't need the cd commands anymore since using safe_cd() above
                         #cmd = f"cd {slurm_path} ; sbatch elixer.slurm ; cd {cwd}"
                         cmd = f"sbatch elixer.slurm"
                         #print(f"Sending cmd to shell: {cmd}")
+                        #print(f"TESTING DUMMY: >> {cmd}")
                         system_command(cfg,cmd)
 
                     os.chdir(cwd)
