@@ -94,6 +94,7 @@ def wait_to_run(max_procs=3,datevshot="???",clean_up=False): #,safelimit=0):
 
     try:
         lock = FileLock(Lock_tmp_mutex_fn)
+        abort = False
 
         if max_procs > 0:
             redlight = True
@@ -113,6 +114,11 @@ def wait_to_run(max_procs=3,datevshot="???",clean_up=False): #,safelimit=0):
                         except:
                             ct = 0
 
+                        if ct < 0 and not clean_up: #this is the signal to abort and exit
+                            print(f"[{datevshot}] recieved mutex count abort. Exiting ...")
+                            abort = True
+
+
                         f.seek(0)
                         if clean_up: #we are done and need to remove THIS runner
                             ct = max(0,ct-1)
@@ -120,7 +126,7 @@ def wait_to_run(max_procs=3,datevshot="???",clean_up=False): #,safelimit=0):
                             f.write(f"{ct}\n")
                             redlight = False
                         else:
-                            if ct < max_procs:
+                            if ct < max_procs and not abort:
                                 ct +=1
                                 f.truncate()
                                 f.write(f"{ct}\n")
@@ -133,8 +139,10 @@ def wait_to_run(max_procs=3,datevshot="???",clean_up=False): #,safelimit=0):
                 if not redlight:
                     if clean_up:
                         print(f"[{datevshot}] Done.")
-                    else:
+                    elif not abort:
                         print(f"[{datevshot}] cleared to start.")
+                    else:
+                        exit(-1)
                 else:
                     #print(f"[{datevshot}] too many active shots. Must wait ...")
                     time.sleep(sleep_secs)
