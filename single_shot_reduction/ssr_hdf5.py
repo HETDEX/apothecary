@@ -40,15 +40,17 @@ UNSET_NAN = np.nan
 SUPPORTED_ELIXER_H5_VERSIONS = [b"0.9.2",b"0.10.0"]
 SHOW_TQDM = True
 
-StdFloatCol = tables.Float32Col #tables.Float16Col #could change to float32 if needed
-SmallFloatCol = tables.Float16Col
-BigFloatCol = tables.Float32Col
-DblFloatCol = tables.Float64Col
 
-StdFloat = np.float32 #np.float16  #could change to float32 if needed
-SmallFloat = np.float16
-BigFloat = np.float32
+HalfFloatCol = tables.Float16Col
+FullFloatCol = tables.Float32Col
+DblFloatCol = tables.Float64Col
+StdFloatCol = HalfFloatCol #tables.Float16Col #could change to float32 if needed
+
+
+HalfFloat = np.float16
+FullFloat = np.float32
 DblFloat = np.float64
+StdFloat = HalfFloat #np.float16  #could change to float32 if needed
 
 threshold_16 = 1e4 #if abs value greater than this, go with float32 (just due to precision loss)
                        #float16 can sort of represent up to about 65K
@@ -368,8 +370,8 @@ class CalibratedSpectra16(tables.IsDescription):
     flux = StdFloatCol(shape=(1036,),pos=2 )  #from Float32Col
     flux_err = StdFloatCol(shape=(1036,),pos=3)  #from Float32Col
     #new 0.9.0
-    dust_corr = SmallFloatCol(shape=(1036,),pos=4) #from Float32Col #dust multiplier (normally already applied) to flux and flux_err
-    aperture_radius = SmallFloatCol(dflt=UNSET_FLOAT,pos=5) #from Float32Col
+    dust_corr = HalfFloatCol(shape=(1036,), pos=4) #from Float32Col #dust multiplier (normally already applied) to flux and flux_err
+    aperture_radius = HalfFloatCol(dflt=UNSET_FLOAT, pos=5) #from Float32Col
     sky_background = tables.Int8Col(dflt=UNSET_INT,pos=6) #from Int32  ... basically 0 for local 1 for ffsky
     num_fibers = tables.Int16Col(dflt=UNSET_INT,pos=7) #Int8 should actually be enough, but just incase a big aperture comes in ....
 
@@ -392,12 +394,12 @@ class Aperture(tables.IsDescription):
     dec = tables.Float32Col(pos=2,dflt=UNSET_FLOAT) #was aperture_dec
     catalog_name = tables.StringCol(itemsize=16)
     filter_name = tables.StringCol(itemsize=16)
-    image_depth_mag = SmallFloatCol(dflt=99.9)
+    image_depth_mag = HalfFloatCol(dflt=99.9)
     pixel_scale = StdFloatCol(dflt=UNSET_FLOAT)
     radius = StdFloatCol(dflt=UNSET_FLOAT) #in arcsec , #was aperture_radius
-    mag = SmallFloatCol(dflt=UNSET_FLOAT) #was aperture_mag
-    mag_err = SmallFloatCol(dflt=UNSET_FLOAT) #was  aperture_mag_err
-    mag_dered = SmallFloatCol(dflt=UNSET_FLOAT) # #added 0.9.2
+    mag = HalfFloatCol(dflt=UNSET_FLOAT) #was aperture_mag
+    mag_err = HalfFloatCol(dflt=UNSET_FLOAT) #was  aperture_mag_err
+    mag_dered = HalfFloatCol(dflt=UNSET_FLOAT) # #added 0.9.2
     aperture_area_pix = tables.Float32Col(dflt=UNSET_FLOAT) #pixels  #leave at 32
     sky_area_pix = tables.Float32Col(dflt=UNSET_FLOAT) #pixels  #leave at 32
     eqw_rest_lya = StdFloatCol(dflt=UNSET_FLOAT) #was  aperture_eqw_rest_lya
@@ -416,13 +418,13 @@ class ElixerApertures(tables.IsDescription): #perhaps keep just the selected one
     dec = tables.Float32Col(pos=2,dflt=UNSET_FLOAT)
     catalog_name = tables.StringCol(itemsize=16)
     filter_name = tables.StringCol(itemsize=16)
-    image_depth_mag = SmallFloatCol(dflt=99.9)
+    image_depth_mag = HalfFloatCol(dflt=99.9)
     pixel_scale = StdFloatCol(dflt=UNSET_FLOAT) #arcsec/pixel
     selected = tables.BoolCol(dflt=False) #if True this is the object used for the aperture PLAE/OII, etc (see above table)
     radius = StdFloatCol(dflt=UNSET_FLOAT) #major axis (diameter) 'a' in arcsec
-    mag = SmallFloatCol(dflt=UNSET_FLOAT)
-    mag_err = SmallFloatCol(dflt=UNSET_FLOAT)
-    mag_dered = SmallFloatCol(dflt=UNSET_FLOAT)  #added 0.9.2
+    mag = HalfFloatCol(dflt=UNSET_FLOAT)
+    mag_err = HalfFloatCol(dflt=UNSET_FLOAT)
+    mag_dered = HalfFloatCol(dflt=UNSET_FLOAT)  #added 0.9.2
     background_cts = tables.Float32Col(dflt=UNSET_FLOAT) #sky_average
     background_err = tables.Float32Col(dflt=UNSET_FLOAT)
     flux_cts = tables.Float32Col(dflt=UNSET_FLOAT)
@@ -438,15 +440,15 @@ class ExtractedObjects(tables.IsDescription): #keep all, I think
     dec = tables.Float32Col(pos=2,dflt=UNSET_FLOAT)
     catalog_name = tables.StringCol(itemsize=16)
     filter_name = tables.StringCol(itemsize=16)
-    image_depth_mag = SmallFloatCol(dflt=99.9)
+    image_depth_mag = HalfFloatCol(dflt=99.9)
     pixel_scale = StdFloatCol(dflt=UNSET_FLOAT) #arcsec/pixel
     selected = tables.BoolCol(dflt=False) #if True this is the object used for the aperture PLAE/OII, etc (see above table)
     major = StdFloatCol(dflt=UNSET_FLOAT) #major axis (diameter) 'a' in arcsec
     minor = StdFloatCol(dflt=UNSET_FLOAT) #'b'
     theta = StdFloatCol(dflt=0.0) #radians counter-clockwise from x-axis
-    mag = SmallFloatCol(dflt=UNSET_FLOAT)
-    mag_err = SmallFloatCol(dflt=UNSET_FLOAT)
-    mag_dered = SmallFloatCol(dflt=UNSET_FLOAT)  #added 0.9.2
+    mag = HalfFloatCol(dflt=UNSET_FLOAT)
+    mag_err = HalfFloatCol(dflt=UNSET_FLOAT)
+    mag_dered = HalfFloatCol(dflt=UNSET_FLOAT)  #added 0.9.2
 
     background_cts = tables.Float32Col(dflt=UNSET_FLOAT)
     background_err = tables.Float32Col(dflt=UNSET_FLOAT)
@@ -487,13 +489,13 @@ class CatalogMatch(tables.IsDescription):
     filter_name = tables.StringCol(itemsize=16)
     match_num = tables.Int16Col(dflt=-1)
     separation = StdFloatCol(dflt=UNSET_FLOAT) #in arcsec
-    prob_match = SmallFloatCol(dflt=UNSET_FLOAT) #in arcsec
-    specz = SmallFloatCol(dflt=UNSET_FLOAT) #was cat_specz
-    photz = SmallFloatCol(dflt=UNSET_FLOAT) #was cat_photz
+    prob_match = HalfFloatCol(dflt=UNSET_FLOAT) #in arcsec
+    specz = HalfFloatCol(dflt=UNSET_FLOAT) #was cat_specz
+    photz = HalfFloatCol(dflt=UNSET_FLOAT) #was cat_photz
     flux = tables.Float32Col(dflt=UNSET_FLOAT) #was  cat_flux
     flux_err = tables.Float32Col(dflt=UNSET_FLOAT) #was cat_flux_err
-    mag = SmallFloatCol(dflt=UNSET_FLOAT) #was  cat_mag
-    mag_err = SmallFloatCol(dflt=UNSET_FLOAT) #was cat_mag_err
+    mag = HalfFloatCol(dflt=UNSET_FLOAT) #was  cat_mag
+    mag_err = HalfFloatCol(dflt=UNSET_FLOAT) #was cat_mag_err
     eqw_rest_lya = StdFloatCol(dflt=UNSET_FLOAT) #was cat_eqw_rest_lya
     eqw_rest_lya_err = StdFloatCol(dflt=UNSET_FLOAT) #was cat_eqw_rest_lya_err
     plae = StdFloatCol(dflt=UNSET_FLOAT) #was  cat_plae
@@ -890,22 +892,25 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         #put under "Data" for some compatibility with pathing in HETDEX_API
         _ = fileh.create_group(fileh.root, "Data", "VIRUS Fiber Data") # was assigned to group_data previously
 
-        use32 = False
-        mx = np.abs(shot_h5.root.Data.Fibers.read(field="calfib")).max()
-        if mx > threshold_16:
+        if StdFloatCol == FullFloatCol:
             use32 = True
         else:
-            mx = np.abs(shot_h5.root.Data.Fibers.read(field="calfib_ffsky")).max()
+            use32 = False
+            mx = np.abs(shot_h5.root.Data.Fibers.read(field="calfib")).max()
             if mx > threshold_16:
                 use32 = True
             else:
-                mx = np.max(shot_h5.root.Data.Fibers.read(field="calfibe"))  # can only be positive
+                mx = np.abs(shot_h5.root.Data.Fibers.read(field="calfib_ffsky")).max()
                 if mx > threshold_16:
                     use32 = True
                 else:
-                    mx = np.max(shot_h5.root.Data.Fibers.read(field="fiber_to_fiber"))
+                    mx = np.max(shot_h5.root.Data.Fibers.read(field="calfibe"))  # can only be positive
                     if mx > threshold_16:
                         use32 = True
+                    else:
+                        mx = np.max(shot_h5.root.Data.Fibers.read(field="fiber_to_fiber"))
+                        if mx > threshold_16:
+                            use32 = True
         if use32:
             print(f"[{datevshot}] Using Float32 for VIRUSFibers",flush=True)
             fileh.create_table(fileh.root, 'Fibers', VIRUSFiber32, 'Fiber Summary Table')
@@ -1268,14 +1273,18 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             #############################################################################
 
             #need to check for maximum size of flux or flux_err
-            use32 = False
-            mx = np.abs(elixer_h5.root.CalibratedSpectra.read(field="flux")).max()
-            if mx > threshold_16:
+
+            if StdFloatCol == FullFloatCol:
                 use32 = True
             else:
-                mx = np.max(elixer_h5.root.CalibratedSpectra.read(field="flux_err")) #can only be positive
+                use32 = False
+                mx = np.abs(elixer_h5.root.CalibratedSpectra.read(field="flux")).max()
                 if mx > threshold_16:
                     use32 = True
+                else:
+                    mx = np.max(elixer_h5.root.CalibratedSpectra.read(field="flux_err")) #can only be positive
+                    if mx > threshold_16:
+                        use32 = True
 
             if use32:
                 print(f"[{datevshot}] Using float32 for CalibratedSpectra",flush=True)
@@ -1333,12 +1342,12 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 new_row['dec'] = row['dec']
                 new_row['catalog_name'] = row['catalog_name']
                 new_row['filter_name'] = row['filter_name']
-                new_row['image_depth_mag'] = row['image_depth_mag'].astype(SmallFloat)
+                new_row['image_depth_mag'] = row['image_depth_mag'].astype(HalfFloat)
                 new_row['pixel_scale'] = row['pixel_scale'].astype(StdFloat)
                 new_row['radius'] = row['radius'].astype(StdFloat)
-                new_row['mag'] = row['mag'].astype(SmallFloat)
-                new_row['mag_err'] = row['mag_err'].astype(SmallFloat)
-                new_row['mag_dered'] = row['mag_dered'].astype(SmallFloat)
+                new_row['mag'] = row['mag'].astype(HalfFloat)
+                new_row['mag_err'] = row['mag_err'].astype(HalfFloat)
+                new_row['mag_dered'] = row['mag_dered'].astype(HalfFloat)
 
                 new_row['aperture_area_pix'] = row['aperture_area_pix'] #.astype(np.float16) #could be very many pix
                 new_row['sky_area_pix'] = row['sky_area_pix'] #.astype(np.float16) #could be very many pix
@@ -1377,13 +1386,13 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 new_row['dec'] = row['dec']
                 new_row['catalog_name'] = row['catalog_name']
                 new_row['filter_name'] = row['filter_name']
-                new_row['image_depth_mag'] = row['image_depth_mag'].astype(SmallFloat)
+                new_row['image_depth_mag'] = row['image_depth_mag'].astype(HalfFloat)
                 new_row['pixel_scale'] = row['pixel_scale'].astype(StdFloat)
                 new_row['selected'] = row['selected']
                 new_row['radius'] = row['radius'].astype(StdFloat)
-                new_row['mag'] = row['mag'].astype(SmallFloat)
-                new_row['mag_err'] = row['mag_err'].astype(SmallFloat)
-                new_row['mag_dered'] = row['mag_dered'].astype(SmallFloat)
+                new_row['mag'] = row['mag'].astype(HalfFloat)
+                new_row['mag_err'] = row['mag_err'].astype(HalfFloat)
+                new_row['mag_dered'] = row['mag_dered'].astype(HalfFloat)
 
                 new_row['background_cts'] = row['background_cts'] #.astype(np.float16) #could be very many pix
                 new_row['background_err'] = row['background_err'] #.astype(np.float16) #could be very many pix
@@ -1417,16 +1426,16 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 new_row['dec'] = row['dec']
                 new_row['catalog_name'] = row['catalog_name']
                 new_row['filter_name'] = row['filter_name']
-                new_row['image_depth_mag'] = row['image_depth_mag'].astype(SmallFloat)
+                new_row['image_depth_mag'] = row['image_depth_mag'].astype(HalfFloat)
                 new_row['pixel_scale'] = row['pixel_scale'].astype(StdFloat)
                 new_row['selected'] = row['selected']
 
                 new_row['major'] = row['major'].astype(StdFloat)
                 new_row['minor'] = row['minor'].astype(StdFloat)
                 new_row['theta'] = row['theta'].astype(StdFloat)
-                new_row['mag'] = row['mag'].astype(SmallFloat)
-                new_row['mag_err'] = row['mag_err'].astype(SmallFloat)
-                new_row['mag_dered'] = row['mag_dered'].astype(SmallFloat)
+                new_row['mag'] = row['mag'].astype(HalfFloat)
+                new_row['mag_err'] = row['mag_err'].astype(HalfFloat)
+                new_row['mag_dered'] = row['mag_dered'].astype(HalfFloat)
 
                 new_row['background_cts'] = row['background_cts'] #.astype(np.float16) #could be very many pix
                 new_row['background_err'] = row['background_err'] #.astype(np.float16) #could be very many pix
@@ -1440,9 +1449,9 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 new_row['image_flags'] = row['image_flags']
 
                 new_row['fixed_aper_radius'] = row['fixed_aper_radius'].astype(StdFloat)
-                new_row['fixed_aper_mag'] = row['fixed_aper_mag'].astype(SmallFloat)
-                new_row['fixed_aper_mag_err'] = row['fixed_aper_mag_err'].astype(SmallFloat)
-                new_row['fixed_aper_mag_dered'] = row['fixed_aper_mag_dered'].astype(SmallFloat)
+                new_row['fixed_aper_mag'] = row['fixed_aper_mag'].astype(HalfFloat)
+                new_row['fixed_aper_mag_err'] = row['fixed_aper_mag_err'].astype(HalfFloat)
+                new_row['fixed_aper_mag_dered'] = row['fixed_aper_mag_dered'].astype(HalfFloat)
 
                 new_row['fixed_aper_flux_cts'] = row['fixed_aper_flux_cts']
                 new_row['fixed_aper_flux_err'] = row['fixed_aper_flux_err']
@@ -1476,15 +1485,15 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
                 new_row['match_num'] = row['match_num'].astype(np.int16)
                 new_row['separation'] = row['separation'].astype(StdFloat)
-                new_row['prob_match'] = row['prob_match'].astype(SmallFloat)
-                new_row['specz'] = row['specz'].astype(SmallFloat)
-                new_row['photz'] = row['photz'].astype(SmallFloat)
+                new_row['prob_match'] = row['prob_match'].astype(HalfFloat)
+                new_row['specz'] = row['specz'].astype(HalfFloat)
+                new_row['photz'] = row['photz'].astype(HalfFloat)
 
                 new_row['flux'] = row['flux']
                 new_row['flux_err'] = row['flux_err']
 
-                new_row['mag'] = row['mag'].astype(SmallFloat)
-                new_row['mag_err'] = row['mag_err'].astype(SmallFloat)
+                new_row['mag'] = row['mag'].astype(HalfFloat)
+                new_row['mag_err'] = row['mag_err'].astype(HalfFloat)
                 new_row['eqw_rest_lya'] = row['eqw_rest_lya'].astype(StdFloat)
                 new_row['eqw_rest_lya_err'] = row['eqw_rest_lya_err'].astype(StdFloat)
                 new_row['plae'] = row['plae'].astype(StdFloat)
