@@ -879,8 +879,8 @@ def post_clean(cfg):
         if cfg.clean >= 2:  #more aggressive
 
             if safe_cd(cfg.cwd):
-                system_command(cfg, f"rm 20250828011_stats.pickle")
-                system_command(cfg, f"rm 20250828011_ampstats.fits")
+                system_command(cfg, f"rm {cfg.datevshot.replace('v','')}_stats.pickle")
+                system_command(cfg, f"rm {cfg.datevshot.replace('v','')}_ampstats.fits")
 
             #########################
             # vdrp
@@ -2259,10 +2259,13 @@ def initial_setup(cfg):
            rta_date, rta_shot, rta_ra, rta_dec, rta_v = np.loadtxt(os.path.join(karlgettar,f"rta.{cfg.datevshot[0:6]}"),
                                                                 usecols=[1,2,3,4,5],unpack=True,dtype=str)
         else:
-            if 202407 < int(cfg.datevshot[0:6]) <= 202412:
+            date_year = int(cfg.datevshot[0:4])
+            #if 202407 < int(cfg.datevshot[0:6]) <= 202412:
+            if date_year == 2024:
                 rtafn = os.path.join(karlgettar,f"rta.202488")
-            elif int(cfg.datevshot[0:6]) >= 202500:
-                rtafn = os.path.join(karlgettar, f"rta.202500")
+            elif date_year >= 2025:
+                rtafn = os.path.join(karlgettar, f"rta.{date_year}00")
+                #rtafn = os.path.join(karlgettar, f"rta.202500")
             else:
                 #should not happen
                 rtafn = None #just to turn off warning
@@ -2512,12 +2515,16 @@ def vdrp_check_norms(cfg):
         except:
             fns = glob.glob(os.path.join(vdrp_path, "20*v???"))
 
-        fns = sorted(fns)
-        for fn in fns:
-            norms = np.loadtxt(os.path.join(fn, "norm.dat"))  # one line, 3 values
-            if np.count_nonzero(abs(1 - norms) > 0.5) > 0 or np.any(np.isnan(norms)):
-                print("Possible bad dither norm:", os.path.basename(fn), norms)
-                rc = -1
+        if len(fns) == 0:
+            rc = -1
+            print(f"[{cfg.datevshot}] vdrp : check norms ... no matches found")
+        else:
+            fns = sorted(fns)
+            for fn in fns:
+                norms = np.loadtxt(os.path.join(fn, "norm.dat"))  # one line, 3 values
+                if np.count_nonzero(abs(1 - norms) > 0.5) > 0 or np.any(np.isnan(norms)):
+                    print("Possible bad dither norm:", os.path.basename(fn), norms)
+                    rc = -1
 
         if rc < 0:
             print("check norms ... fail")
@@ -2551,6 +2558,9 @@ def vdrp_check_shout_ifu(cfg):
     paths = glob.glob(f"{path}{wildcard}*v???")
 
     print(f"[{cfg.datevshot}] vdrp : checking {len(paths)} directories ... ")
+    if len(paths) == 0:
+        rc = -1
+        print(f"[{cfg.datevshot}] vdrp : check shout ifu ... no matches found for: {path}{wildcard}*v??? ")
 
     # for path in tqdm(paths):
     for path in paths:

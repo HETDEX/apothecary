@@ -759,6 +759,22 @@ class CalfibDQ(tables.IsDescription):
     fiber_id = tables.StringCol((38), pos=0)
     calfib_dq = tables.Int16Col((1036,),pos=1)
 
+# for reference, these are the bitmapped mask values
+# class CALFIB_DQ(BitFlagNameMap):
+#     MAIN = 1                  # 0x0001
+#     FTF = 2                   # 0x0002
+#     CHI2FIB = 4               # 0x0004
+#     BADPIX = 8                # 0x0008
+#     BADAMP = 16               # 0x0010
+#     LARGEGAL = 32             # 0x0020
+#     METEOR = 64               # 0x0040
+#     BADSHOT = 128             # 0x0080
+#     THROUGHPUT = 256          # 0x0100
+#     BADFIB = 512              # 0x0200
+#     SATELLITE = 1024          # 0x0400
+#     BADCAL = 2048             # 0x0800
+#     PIXMASK = 4096            # 0x1000
+
 # now combined with Fibers
 # class VIRUSFiberIndexWithFlags(tables.IsDescription):
 #     """
