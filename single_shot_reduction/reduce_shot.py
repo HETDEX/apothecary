@@ -253,6 +253,7 @@ class Config:
     special = 0 #do some special, direct edit code stuff
     hetdex_original = False #set to True if this shot is in the original hetdex data
                             ## (vs the 'hetdex' member which is true if --hetdex is specified to allow this)
+    multifits_only = False  #stop once the mutli*fits files have been generated
 
 
 
@@ -319,6 +320,15 @@ if "-help" in args:
 len_args = len(args)
 queue_elixer = False
 prep_compress = 0 #not just a boolean, use as the max simultaneous shots to process
+
+if "-clear_mutex" in args:
+    print("Hidden switch: clearing mutex, resetting allowed concurrent active processes.")
+    print("This takes priority over all other switches and will terminate with this action.")
+    fns = glob.glob(f"{Node_basedir}/*.sync")
+    print(f"Clearing {len(fns)} active sync files.\n{[os.path.basename(x) for x in fns]}")
+    os.system(f"rm {Node_basedir}/*.sync")
+    print("Done. Exiting.")
+    exit(0)
 
 if "-queue_elixer" in args:
     # this is option is to be used on its own call, not part of a normal reduction
@@ -397,6 +407,11 @@ if "-overwrite" in args:
 if "-shot_only" in args:
     cfg.shot_only = True
     args.remove("-shot_only")
+    #note: reminder, if you want the multi*fits, they are in the ../reductions directory for temporary holding
+
+if "-multifits_only" in args:
+    cfg.multifits_only = True
+    args.remove("-multifits_only")
 
 if "-resume" in args: #opposide of --overwite ... do NOT touch the (intermediate) output of the working directory
     cfg.resume = True
@@ -5116,6 +5131,12 @@ if s01_run1s and not dtprog["s01_run1s"]:
     progress_update(cfg,dtprog,"s01_run1s")
 else:
     print(f"[{cfg.datevshot}] Skipping run1s")
+
+if cfg.multifits_only:
+    print(f"[{cfg.datevshot}] multi*fits files generated. "
+          f"Check paths under ./reductions/{cfg.datevshot[0:8]}/virus/virus*{cfg.datevshot[-3]}/")
+    Quit(cfg, 0, f"Done. Enforcing --multifits_only switch. {cfg.datevshot}", write_status=False)
+
 
 ###########
 # step2
