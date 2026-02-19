@@ -12,7 +12,7 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 """
 
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
 
 import numpy as np
