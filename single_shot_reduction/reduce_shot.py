@@ -298,6 +298,9 @@ if "-help" in args:
     
     --hetdex : if present, overrides the restriction on running existing HETDEX shots
     
+    --multifits_only : if present, stops processing and terminates after the multi*fits files have been created.
+                       Can be combined with --exp to limit which exposures to process.
+                        
     --nolimit : if present, overrides the in-code limiting of simultaneous active shots per node
              
     --overwrite : removes the shot working directory completely and (re)starts fresh. 
