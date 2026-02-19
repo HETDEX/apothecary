@@ -11,6 +11,9 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 
 """
 
+# 0.1.0 long running baseline without notes
+# 0.1.1 added FullSkyModel groups with reduced precision from float64 to float32
+
 
 __version__ = '0.1.1'
 
@@ -1861,6 +1864,8 @@ def import_images_carray(shot_h5fn,image_path,group_name,carray_name="image_data
 args = list(sys.argv) #python3 map is no longer a list, so need to cast here
 del args[0] #args.pop(0) #remove THIS file
 args = [x.replace("--","-") for x in args]
+
+print(f"version {__version__}")
 
 shot_h5_path = None
 if "-shot_h5" in args: #path to the shot h5 file
