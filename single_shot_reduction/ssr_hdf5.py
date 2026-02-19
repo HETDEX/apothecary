@@ -898,6 +898,27 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         fileh.root.Shot.flush()
 
 
+        #######################################
+        # FullSkyModel (1 per exposure)
+        #######################################
+        #notice: these are different from the others are are separate groups, each
+        # with a single 2D array
+        # We do, however, want to reduce from float64 to float32
+        # the array is wave (which needs float32) and counts (which could be float16 and be okay)
+        #  but we can't mix types this way unless we change the format
+
+        print(f"[{datevshot}] Importing FullSkyModels ... ", flush=True)
+
+        groupFullSkyModel = fileh.create_group(fileh.root, 'FullSkyModel', 'FullSkyModel')
+        #node_names = [node.name for node in shot_h5.root.FullSkyModel._f_list_nodes()]
+        for node in shot_h5.root.FullSkyModel:
+            n = shot_h5.get_node(node)
+            sky_array = n.read().astype(np.float32)
+            fileh.create_array(groupFullSkyModel,n.name,sky_array)
+
+        fileh.flush()
+
+
 
         #######################################
         # Fibers (also FiberIndex)
