@@ -58,6 +58,8 @@ StdFloat = HalfFloat #np.float16  #could change to float32 if needed
 threshold_16 = 1e4 #if abs value greater than this, go with float32 (just due to precision loss)
                        #float16 can sort of represent up to about 65K
 
+FATAL_EXIT = 0 #global flag to terminate
+elixer_h5_force = False #if True (set later) ignore the version constraint and try anyway
 
 #logging will just be prints
 #this is all single threaded, no real management needed
@@ -839,10 +841,18 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
     :return:
     """
 
+    global FATAL_EXIT, elixer_h5_force
+
     fileh = None
     shot_h5 = None
     elixer_h5 = None
     datevshot = None
+    outfn = None
+
+    try:
+        datevshot = os.path.basename(shot_fn).replace(".h5", "")
+    except:
+        pass
 
     try:
         #check that the one or two input files exist and can be opened
@@ -850,34 +860,39 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             try:
                 shot_h5 = tables.open_file(shot_fn,mode='r')
             except:
-                log.critical(f"Failed to open input shot.h5 file: {shot_fn}",exc_info=True)
+                log.critical(f"[{datevshot}] Failed to open input shot.h5 file: {shot_fn}",exc_info=True)
                 return
 
         if shot_h5 is None: #this MUST always be provided
-            log.critical(f"Fatal. Cannot open shot.h5 file: {shot_fn}")
+            log.critical(f"[{datevshot}] Fatal. Cannot open shot.h5 file: {shot_fn}")
             return
 
         if elixer_fn is not None:
             try:
                 elixer_h5 = tables.open_file(elixer_fn,mode='r')
             except:
-                log.critical(f"Fatal. Failed to open input elixer.h5 file: {elixer_fn}",exc_info=True)
+                log.critical(f"[{datevshot}] Fatal. Failed to open input elixer.h5 file: {elixer_fn}",exc_info=True)
                 return
 
             if elixer_h5 is None:
-                log.critical(f"Fatal. Failed to open input elixer.h5 file: {elixer_fn}", exc_info=True)
+                log.critical(f"[{datevshot}] Fatal. Failed to open input elixer.h5 file: {elixer_fn}", exc_info=True)
                 return
 
             #check supported version
             elixer_h5_version = elixer_h5.root.Version.read(field='version')[0]
             if elixer_h5_version not in SUPPORTED_ELIXER_H5_VERSIONS:
-                log.critical(f"Fatal. Input elixer h5 version {elixer_h5_version} not supported.")
-                return
+                if elixer_h5_force:
+                    log.critical(f"[{datevshot}] WARNING! Input elixer h5 version {elixer_h5_version} not supported."
+                                 f" Forcing attempt to build ssr h5 anyway. {elixer_fn} ")
+                else:
+                    log.critical(f"[{datevshot}] Fatal. Input elixer h5 version {elixer_h5_version} not supported. {elixer_fn} ")
+                    FATAL_EXIT = 1
+                    return
 
-        datevshot = os.path.basename(shot_fn).replace(".h5","")
+
         outfn = "ssr_" + os.path.basename(shot_fn)
 
-        log.debug("Creating new SingleShot Reduction HDF5 catalog (%s)" % (outfn))
+        log.debug(f"[{datevshot}] Creating new SingleShot Reduction HDF5 catalog (%s)" % (outfn))
 
         fileh = tables.open_file(outfn, 'w', 'SingleShot Reduction Catalog')
 
@@ -1387,7 +1402,10 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 new_row['radius'] = row['radius'].astype(StdFloat)
                 new_row['mag'] = row['mag'].astype(HalfFloat)
                 new_row['mag_err'] = row['mag_err'].astype(HalfFloat)
-                new_row['mag_dered'] = row['mag_dered'].astype(HalfFloat)
+                try:
+                    new_row['mag_dered'] = row['mag_dered'].astype(HalfFloat)
+                except:
+                    new_row['mag_dered'] = 99.9
 
                 new_row['aperture_area_pix'] = row['aperture_area_pix'] #.astype(np.float16) #could be very many pix
                 new_row['sky_area_pix'] = row['sky_area_pix'] #.astype(np.float16) #could be very many pix
@@ -1432,7 +1450,10 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 new_row['radius'] = row['radius'].astype(StdFloat)
                 new_row['mag'] = row['mag'].astype(HalfFloat)
                 new_row['mag_err'] = row['mag_err'].astype(HalfFloat)
-                new_row['mag_dered'] = row['mag_dered'].astype(HalfFloat)
+                try:
+                    new_row['mag_dered'] = row['mag_dered'].astype(HalfFloat)
+                except:
+                    new_row['mag_dered'] = 99.9
 
                 new_row['background_cts'] = row['background_cts'] #.astype(np.float16) #could be very many pix
                 new_row['background_err'] = row['background_err'] #.astype(np.float16) #could be very many pix
@@ -1475,7 +1496,10 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 new_row['theta'] = row['theta'].astype(StdFloat)
                 new_row['mag'] = row['mag'].astype(HalfFloat)
                 new_row['mag_err'] = row['mag_err'].astype(HalfFloat)
-                new_row['mag_dered'] = row['mag_dered'].astype(HalfFloat)
+                try:
+                    new_row['mag_dered'] = row['mag_dered'].astype(HalfFloat)
+                except:
+                    new_row['mag_dered'] = -99.9
 
                 new_row['background_cts'] = row['background_cts'] #.astype(np.float16) #could be very many pix
                 new_row['background_err'] = row['background_err'] #.astype(np.float16) #could be very many pix
@@ -1491,7 +1515,10 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 new_row['fixed_aper_radius'] = row['fixed_aper_radius'].astype(StdFloat)
                 new_row['fixed_aper_mag'] = row['fixed_aper_mag'].astype(HalfFloat)
                 new_row['fixed_aper_mag_err'] = row['fixed_aper_mag_err'].astype(HalfFloat)
-                new_row['fixed_aper_mag_dered'] = row['fixed_aper_mag_dered'].astype(HalfFloat)
+                try:
+                    new_row['fixed_aper_mag_dered'] = row['fixed_aper_mag_dered'].astype(HalfFloat)
+                except:
+                    new_row['fixed_aper_mag_dered'] = 99.9
 
                 new_row['fixed_aper_flux_cts'] = row['fixed_aper_flux_cts']
                 new_row['fixed_aper_flux_err'] = row['fixed_aper_flux_err']
@@ -1895,6 +1922,11 @@ if "-elixer_h5" in args: #path to the shot h5 file
     del args[i+1]  # args.pop(0) #remove THIS file
     args.remove("-elixer_h5")
 
+elixer_h5_force = False
+if "-elixer_h5_force" in args: #path to the shot h5 file
+    elixer_h5_force = True
+    args.remove("-elixer_h5_force")
+
 images_path = None
 if "-images" in args:
     i = args.index("-images")
@@ -1966,7 +1998,7 @@ wait_to_run(Max_Simultaneous_Shots, datevshot=datevshot,clean_up=False)
 start_time = time.perf_counter()
 
 new_h5_fn = build_ssr_shot_h5(shot_h5_path, elixer_fn=elixer_h5_path)
-if images_path is not None:
+if images_path is not None and not FATAL_EXIT and new_h5_fn is not None:
     #print("Skipping images import")
     #using the earray and growing
     import_images_earray(new_h5_fn,os.path.join(images_path,"*[0-9].png"),"elixer_reports")

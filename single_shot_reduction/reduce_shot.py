@@ -341,7 +341,7 @@ if "-queue_elixer" in args:
     #      it shoud be executed from the normal login node
     print("Hidden switch : queueing elixer slurm jobs that match datevshot ...")
     print("Usage: python reduce_shot.py --queue_elixer <datevshot>")
-    print("Usage: wildcards allowed, but DO NOT prefix with 'sci' ")
+    print("Usage: wildcards allowed, but put in quotes and DO NOT prefix with 'sci ")
     args.remove("-queue_elixer")
     queue_elixer = True
 
@@ -353,7 +353,7 @@ if "-prep_compress" in args:
     #      it shoud be executed from the normal login node
     print("Hidden switch : preparing default SSR compression calls that match datevshot ...")
     print("Usage: python reduce_shot.py --prep_compress [max_simultaneous, default=3] <datevshot>")
-    print("Usage: wildcards allowed, but DO NOT prefix with 'sci' ")
+    print("Usage: wildcards allowed, but put in quotes and DO NOT prefix with 'sci ")
 
     i = args.index("-prep_compress")
     try:
@@ -490,6 +490,10 @@ else:
     else:
         cfg.datevshot = args[0] #as is ... wildcards and all
 
+#check datevshot ... can only be numeric or in datevshot format, but could be truncated
+
+print(f"Evaluating with datevshot = {cfg.datevshot}")
+
 ########################################################################
 # worker functions
 ########################################################################
@@ -612,7 +616,7 @@ def run_prep_compress(cfg,max_simultaneous=3):
     bg = max_simultaneous #run in the background
     cwd = os.getcwd()
     fns = glob.glob(f"sci{cfg.datevshot}")
-    print(f"Attempting to prepare default SSR compression using pattern: {cfg.datevshot}")
+    print(f"Attempting to prepare default SSR compression using pattern: sci{cfg.datevshot}")
     print(f"  matches: {fns}")
 
     for cpath in fns: #fn is the full path to the sciXXX directory, not the files
