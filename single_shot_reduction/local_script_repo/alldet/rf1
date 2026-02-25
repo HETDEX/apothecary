@@ -1,3 +1,9 @@
+if [[ -f ${SSR_fitradecsp} ]]; then
+  fitradecsp=${SSR_fitradecsp}
+else
+  fitradecsp="~gebhardt/bin/fitradecsp"
+fi
+
 dir1=$(pwd)
 resdir=$dir1"/detect_out"
 mkdir -p $resdir
@@ -26,7 +32,7 @@ cp ${dir1}/../detect/20*v???/norm.dat norm.dat
 cp ${dir1}/../detect/20*v???/fwhm.out fwhm.use
 ln -s ${dir1}/../detect/20*v???.dithall local.dithall
 ln -s ${dir1}/../../reductions reductions
-~gebhardt/bin/fitradecsp << eof
+$fitradecsp << eof
 ${ra} ${dec} ${step} ${nstep} ${wv} 3 ${ifit1}
 ${f2} ${rap} ${wv} ${wr}
 eof

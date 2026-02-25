@@ -1,3 +1,9 @@
+if [[ -f ${SSR_fitradecsp} ]]; then
+  fitradecsp=${SSR_fitradecsp}
+else
+  fitradecsp="~gebhardt/bin/fitradecsp"
+fi
+
 dir1=$(pwd)
 datadir="/scratch/projects/hetdex/"
 ra=$1
@@ -14,7 +20,7 @@ step=${11}
 nstep=${12}
 ifit1=${13}
 
-~gebhardt/bin/fitradecsp << eof
+$fitradecsp << eof
 ${ra} ${dec} ${step} ${nstep} ${wv} 3 ${ifit1}
 ${f2} ${rap} ${wv} ${wr}
 eof
