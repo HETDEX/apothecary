@@ -2038,7 +2038,8 @@ def update_only(cfg):
 
 def set_fitradecsp(cfg):
     try:
-        os.environ['SSR_fitradecsp'] = f"{cfg.scriptdir} / fitradecsp"
+        os.environ['SSR_fitradecsp'] = f"{cfg.scriptdir}/fitradecsp"
+        print(f"[{cfg.datevshot}] Set SSR_fitradecsp to {os.getenv('SSR_fitradecsp')}")
     except:
         print(f"Exception in set_fitradecsp: {traceback.format_exc()}")
 
@@ -2124,7 +2125,7 @@ def initial_setup(cfg):
             print("Using main script repo (may be remote) ...")
             cfg.scriptdir = os.path.join(ScriptRepo,"science_reductions")
 
-    set_fitradecsp()
+    set_fitradecsp(cfg)
     os.chdir(workdir)
     cfg.cwd = os.getcwd() #now under the sci<shot> directory
 
