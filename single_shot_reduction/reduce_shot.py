@@ -289,6 +289,9 @@ if "-help" in args:
                       5 = removes EVERYTHING except the shot h5 file
             !!! Notice: elixer content is only removed with (-1) to (-5) or 5 as it is a post-run manual SLURM queue
                       
+    --clear_mutex : Special operation - clears the concurrency mutex, resetting allowed concurrent active processes.
+                    This takes priority over all other switches and will terminate with this action.
+                    
     --exp <integer> : will operate on only the specified exposure (e.g. in a multi-exposure observation, can select
                       exactly one to reduce). If not present or set to (0), will use all exposures for the observation. 
                       
@@ -305,6 +308,15 @@ if "-help" in args:
              
     --overwrite : removes the shot working directory completely and (re)starts fresh. 
               !!! Notice: --resume has priority over --overwrite
+    
+    --prep_compress : Special operation - creats an executable script to create the ssr_<shot>.h5 files, but does not
+                                          execute that script. Takes a single integer parameter to set the maximum
+                                          concurrent processes to use followed by the shots to include (wildcards
+                                          allowed but the string should be in quotes).
+    
+    --queue_elixer : Special operation - Inserts provided shots (wildcard allowed, but should be in quotes)
+                                         into SLURM queue as previously designated. Updates elixer slurm scripts,
+                                         if needed, to adjust to path changes.
     
     --resume : (re)starts roughly at the last completed step (see sciXXXX/progress.dat)
            !!! Notice: This does NOT re-run steps that completed with failures, it only re-runs incomplete steps.
@@ -4309,7 +4321,7 @@ def check_detid_counter(cfg,cont,nominal_max):
 
     :param cfg:
     :param cont: if True, check the continuum h5, else check the line h5 file
-    :return:
+    :return: 0 if okay (has not exceeded the limit) 1 if exceeded limit, -1 is error
     """
 
     try:
@@ -4318,20 +4330,23 @@ def check_detid_counter(cfg,cont,nominal_max):
         else:
             which = "line"
 
-        h5 = tables.open_file(f"{cfg.datevshot}_{which}.h5")
-        ids = h5.root.Detections.read(field="detectid")
-        if ids is not None and len(ids) > 0:
-            maxid = np.max(ids)
+        if os.path.exists(f"{cfg.datevshot}_{which}.h5"):
+            h5 = tables.open_file(f"{cfg.datevshot}_{which}.h5")
+            ids = h5.root.Detections.read(field="detectid")
+            if ids is not None and len(ids) > 0:
+                maxid = np.max(ids)
 
-            if maxid > nominal_max:
-                rc = len(ids)
+                if maxid > nominal_max:
+                    rc = len(ids)
+                else:
+                    rc = 0
             else:
-                rc = 0
+                print(f"[{cfg.datevshot}] Warning! No detections found in {cfg.datevshot}_{which}.h5")
+                rc = -1 #it is not reasonable that there should not be any detections
+                        #this is not fatal, but it will print an error
         else:
-            print(f"[{cfg.datevshot}] Warning! No detections found in {cfg.datevshot}_{which}.h5")
-            rc = -1 #it is not reasonable that there should not be any detections
-                    #this is not fatal, but it will print an error
-
+            print(f"[{cfg.datevshot}] Warning! File does not exist: {cfg.datevshot}_{which}.h5")
+            return -1 #the file should exist
     except:
         rc = -1
         print(f"[{cfg.datevshot}] Exception in check_detid_counter()",traceback.format_exc())
