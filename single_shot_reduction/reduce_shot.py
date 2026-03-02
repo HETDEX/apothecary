@@ -254,7 +254,8 @@ class Config:
     hetdex_original = False #set to True if this shot is in the original hetdex data
                             ## (vs the 'hetdex' member which is true if --hetdex is specified to allow this)
     multifits_only = False  #stop once the mutli*fits files have been generated
-    sub_shot = -1 #special case useage, use this shotnum instead of that from the datevshoot for some IFU lookups
+    sub_shot = None #special case useage, use this shotnum instead of that from the datevshoot for some IFU lookups
+    ifuslot = None
 
 
 
@@ -300,6 +301,9 @@ if "-help" in args:
         
     --help : display this help text and exit
     
+    --ifuslot <str(3)> : Special operation - work with ONLY this IFUSlot
+                         only used in conjuection with --multifits_only
+    
     --hetdex : if present, overrides the restriction on running existing HETDEX shots
     
     --multifits_only : if present, stops processing and terminates after the multi*fits files have been created.
@@ -325,7 +329,7 @@ if "-help" in args:
            
     --shot_only : ONLY (re)build the shot h5 file. Do NOT run detections or elixer.
                
-    --sub_shot <str(3)> : substitute this shot number for that of the datevshot for the gettar lookup 
+    --sub_shot <str(3)> : Special operation - substitute this shot number for that of the datevshot for the gettar lookup 
                           only used in conjunction with --multifits_only
                
     --update : removes and re-fetches the local_script_depo prior to running
@@ -493,6 +497,20 @@ if "-sub_shot" in args:
 
     del args[i+1]  # args.pop(0) #remove THIS file
     args.remove("-sub_shot")
+
+if "-ifuslot" in args:
+    i = args.index("-ifuslot")
+    try:
+        cfg.ifuslot = args[i+1]
+        if len(cfg.ifuslot) !=3 and 1 <= int(cfg.ifuslot) <= 999:
+            print(f"Invalid -ifuslot specified: {args[i + 1]}")
+            exit(-1)
+    except:
+        print(f"Invalid -ifuslot specified: {args[i+1]}")
+        exit(-1)
+
+    del args[i+1]  # args.pop(0) #remove THIS file
+    args.remove("-ifuslot")
 
 #whatever is left should be the shot
 if len(args) != 1:
@@ -2523,12 +2541,24 @@ def run_run1s(cfg):
         system_command(cfg,f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# run2s")  # use '#' as sed separator rather than "/"
         #system_command(cfg,f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# rtaremc")  # use '#' as sed separator rather than "/"
 
-        if cfg.multifits_only and cfg.sub_shot:
-            print(f"[{cfg.datevshot}] substituting shot {cfg.sub_shot} for gettar lookup ...")
-            system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 {cfg.sub_shot} $3'# run1s")
-            system_command(cfg, f"sed -i s#'$1,$2,$3,$4'#'$1,$2,\"{cfg.datevshot[-3:]}\",$4'# run1s")
-            system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 {cfg.sub_shot} $3'# run2s")
-            system_command(cfg, f"sed -i s#'$1,$2,$3,$4'#'$1,$2,\"{cfg.datevshot[-3:]}\",$4'# run2s")
+        if cfg.multifits_only:
+            if cfg.sub_shot is not None:
+                if cfg.ifuslot is not None:
+                    print(f"[{cfg.datevshot}] substituting shot {cfg.sub_shot} for gettar lookup and using only IFUSlot {cfg.ifuslot}...")
+                    system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 {cfg.sub_shot} $3 \"{cfg.ifuslot}\"'# run1s")
+                    system_command(cfg, f"sed -i s#'$1,$2,$3,$4'#'$1,$2,\"{cfg.datevshot[-3:]}\",$4'# run1s")
+                    system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 {cfg.sub_shot} $3 \"{cfg.ifuslot}\"'# run2s")
+                    system_command(cfg, f"sed -i s#'$1,$2,$3,$4'#'$1,$2,\"{cfg.datevshot[-3:]}\",$4'# run2s")
+                else:
+                    print(f"[{cfg.datevshot}] substituting shot {cfg.sub_shot} for gettar lookup ...")
+                    system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 {cfg.sub_shot} $3'# run1s")
+                    system_command(cfg, f"sed -i s#'$1,$2,$3,$4'#'$1,$2,\"{cfg.datevshot[-3:]}\",$4'# run1s")
+                    system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 {cfg.sub_shot} $3'# run2s")
+                    system_command(cfg, f"sed -i s#'$1,$2,$3,$4'#'$1,$2,\"{cfg.datevshot[-3:]}\",$4'# run2s")
+            elif cfg.ifuslot is not None:
+                print(f"[{cfg.datevshot}] using only IFUSlot {cfg.ifuslot}...")
+                system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 $2 $3 \"{cfg.ifuslot}\"'# run1s")
+                system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 $2 $3 \"{cfg.ifuslot}\"'# run2s")
 
         #cmd = "sed -i s#\${scriptdir}"+f"#{cfg.scriptdir}/sciscripts/# run1s"
         #scripts have already been copied to shot workding dir
