@@ -254,6 +254,7 @@ class Config:
     hetdex_original = False #set to True if this shot is in the original hetdex data
                             ## (vs the 'hetdex' member which is true if --hetdex is specified to allow this)
     multifits_only = False  #stop once the mutli*fits files have been generated
+    sub_shot = -1 #special case useage, use this shotnum instead of that from the datevshoot for some IFU lookups
 
 
 
@@ -323,6 +324,9 @@ if "-help" in args:
            !!! Notice: --resume has priority over --overwrite
            
     --shot_only : ONLY (re)build the shot h5 file. Do NOT run detections or elixer.
+               
+    --sub_shot <str(3)> : substitute this shot number for that of the datevshot for the gettar lookup 
+                          only used in conjunction with --multifits_only
                
     --update : removes and re-fetches the local_script_depo prior to running
                on a --resume, also updates the scripts already in the shot working directory
@@ -476,6 +480,19 @@ if "-special" in args:
     args.remove("-special")
     print(f"*** --special condition invoked. Condition = {cfg.special}")
 
+if "-sub_shot" in args:
+    i = args.index("-sub_shot")
+    try:
+        cfg.sub_shot = args[i+1]
+        if len(cfg.sub_shot) !=3 and 1 <= int(cfg.sub_shot) <= 999:
+            print(f"Invalid -sub_shot specified: {args[i + 1]}")
+            exit(-1)
+    except:
+        print(f"Invalid -sub_shot specified: {args[i+1]}")
+        exit(-1)
+
+    del args[i+1]  # args.pop(0) #remove THIS file
+    args.remove("-sub_shot")
 
 #whatever is left should be the shot
 if len(args) != 1:
@@ -1206,7 +1223,7 @@ def Quit(cfg,rc,msg=None,write_status=True):
         print(f"[{cfg.datevshot}] ({rc})")
 
 
-    if rc >=0:
+    if rc >=0 and not cfg.multifits_only:
         write_summary(cfg)
 
    # if cfg.orig_stdout:
@@ -2502,10 +2519,16 @@ def run_run1s(cfg):
     for exp in exps:
         #example run1s 20240730 009 exp01 202407
 
-
         system_command(cfg,f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# run1s") #use '#' as sed separator rather than "/"
         system_command(cfg,f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# run2s")  # use '#' as sed separator rather than "/"
         #system_command(cfg,f"sed -i s#../runsChangeMe#{cfg.gettar_fn}# rtaremc")  # use '#' as sed separator rather than "/"
+
+        if cfg.multifits_only and cfg.sub_shot:
+            print(f"[{cfg.datevshot}] substituting shot {cfg.sub_shot} for gettar lookup ...")
+            system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 {cfg.sub_shot} $3'# run1s")
+            system_command(cfg, f"sed -i s#'$1,$2,$3,$4'#'$1,$2,\"{cfg.datevshot[-3:]}\",$4'# run1s")
+            system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 {cfg.sub_shot} $3'# run2s")
+            system_command(cfg, f"sed -i s#'$1,$2,$3,$4'#'$1,$2,\"{cfg.datevshot[-3:]}\",$4'# run2s")
 
         #cmd = "sed -i s#\${scriptdir}"+f"#{cfg.scriptdir}/sciscripts/# run1s"
         #scripts have already been copied to shot workding dir
@@ -5045,7 +5068,7 @@ if rc < 0:
 
 cfg.numexp, cfg.gettar_fn = num_exposures_in_shot(cfg.shotid)
 
-if cfg.numexp <= 0:
+if cfg.numexp <= 0 and not cfg.multifits_only:
     Quit(cfg, -1, f"FATAL! Could not find shot {cfg.datevshot}",write_status=False)
 
 
@@ -5078,7 +5101,11 @@ else:
                 print(f"WARNING! {cfg.datevshot} appears to be an original HETDEX observation.")
                 print(f"         Attempting to use only one exposure may not generate the expected results.")
     else:
-        Quit(cfg, -1, f"Invalid exposure. Requesting exp #{cfg.exp} but {cfg.datevshot} has only {cfg.numexp}",write_status=False)
+        if cfg.multifits_only: #asssume the user knows what is going on and just let the requested exposure number stand
+            if cfg.numexp == 0:
+                cfg.numexp = cfg.exp
+        else:
+            Quit(cfg, -1, f"Invalid exposure. Requesting exp #{cfg.exp} but {cfg.datevshot} has only {cfg.numexp}",write_status=False)
 
 rc = initial_setup(cfg)
 
