@@ -2545,9 +2545,9 @@ def run_run1s(cfg):
             if cfg.sub_shot is not None:
                 if cfg.ifuslot is not None:
                     print(f"[{cfg.datevshot}] substituting shot {cfg.sub_shot} for gettar lookup and using only IFUSlot {cfg.ifuslot}...")
-                    system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 {cfg.sub_shot} $3 \"{cfg.ifuslot}\"'# run1s")
+                    system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 {cfg.sub_shot} $3 {cfg.ifuslot}'# run1s")
                     system_command(cfg, f"sed -i s#'$1,$2,$3,$4'#'$1,$2,\"{cfg.datevshot[-3:]}\",$4'# run1s")
-                    system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 {cfg.sub_shot} $3 \"{cfg.ifuslot}\"'# run2s")
+                    system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 {cfg.sub_shot} $3 {cfg.ifuslot}'# run2s")
                     system_command(cfg, f"sed -i s#'$1,$2,$3,$4'#'$1,$2,\"{cfg.datevshot[-3:]}\",$4'# run2s")
                 else:
                     print(f"[{cfg.datevshot}] substituting shot {cfg.sub_shot} for gettar lookup ...")
@@ -2557,8 +2557,8 @@ def run_run1s(cfg):
                     system_command(cfg, f"sed -i s#'$1,$2,$3,$4'#'$1,$2,\"{cfg.datevshot[-3:]}\",$4'# run2s")
             elif cfg.ifuslot is not None:
                 print(f"[{cfg.datevshot}] using only IFUSlot {cfg.ifuslot}...")
-                system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 $2 $3 \"{cfg.ifuslot}\"'# run1s")
-                system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 $2 $3 \"{cfg.ifuslot}\"'# run2s")
+                system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 $2 $3 {cfg.ifuslot}'# run1s")
+                system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 $2 $3 {cfg.ifuslot}'# run2s")
 
         #cmd = "sed -i s#\${scriptdir}"+f"#{cfg.scriptdir}/sciscripts/# run1s"
         #scripts have already been copied to shot workding dir
