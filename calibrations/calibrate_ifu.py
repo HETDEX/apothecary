@@ -1,0 +1,1156 @@
+"""
+
+Calibrate a single IFU for a given time period (typically over one calendar month)
+
+This is based on the HETDEX Calibration proceedure (see notes_calibration.odt) but operates on a single IFU
+  and is self-contained (e.g. this script runs the full calibration with automated checks along the way)
+
+
+
+This follows the same basic layout as ../single_shot_reducetion/reduce_shot.py
+"""
+
+
+import numpy as np
+import sys
+import os
+import glob
+import shutil
+from pathlib import Path
+from dataclasses import dataclass
+import tarfile as tar
+import json
+from datetime import datetime, timedelta
+import multiprocessing
+import subprocess
+
+try:
+    from filelock import FileLock
+except:
+    print("You need to install filelock (e.g.: pip install --user filelock) ")
+    exit(-1)
+
+import tables
+from astropy.table import Table, join, Column, MaskedColumn # unique, vstack, hstack
+from astropy.io import fits
+# noinspection PyUnresolvedReferences
+from h5tools import amp_stats as AmpStats
+# noinspection PyUnresolvedReferences
+import hetdex_tools.fof_kdtree as fof
+
+# noinspection PyUnresolvedReferences
+from elixer import global_config as G
+# noinspection PyUnresolvedReferences
+from elixer import spectrum_utilities as SU
+# noinspection PyUnresolvedReferences
+from elixer import utilities as Utils
+
+
+#just want the path for hetdex_api (see later)
+import importlib.util
+
+import traceback
+import psutil
+import time
+import matplotlib
+matplotlib.use('agg')
+
+import matplotlib.pyplot as plt
+plt.style.use('default')
+
+########################################################################
+# CONFIGURATION
+########################################################################
+EchoCmds = True  #if True echo system commands to the log
+FilterDetsOnBadAmps = True # if True, do NOT pass detections that are on reported bad amps to elixer for processing
+DefaultClean = 1 #clean 0 does nothing, 1 cleans script files and temporary stuff, 2,3,4,5 are increasingly agressive
+FutureShotDateLimit = 20490101000  # do not allow shots after this dave+shot
+LastKnownFplane = "fp20240731"
+ElixerSnrThresh = 4.5 #do not run elixer on line sources where the S/N < 4.5
+GuiderFWHM_ALL = True #if True and using the GUIDER FWHM, use all within the observation timeframe
+                      #if False, just use the two nearest in time to the end of the observation
+
+#if we know the number of active shots, use these limits / # of active shots
+MaxTotalProcs_mp_rcal = 60 #flux calibration
+MaxTotalProcs_mp_rf1 = 40 #line detections, 4 is about right (on averaged) to avoid memory issues on lonestar6
+
+#10 seems to be the max for a vm-small
+MaxPerShotProcs_mp_rcal = 10 #even if more Total processes are available, limit to this for any given shot
+MaxPerShotProcs_mp_rf1 = 10  #even if more Total processes are available, limit to this for any given shot
+
+#with no information, use these limite
+NumProcs_mp_rcal = 6 #flux calibration
+NumProcs_mp_rf1 = 4 #line detections, 4 is about right (on averaged) to avoid memory issues on lonestar6
+
+
+ScriptRepo = "/work/03261/polonius/hetdex/calibrations/calscripts.single_ifu"
+LocalScriptRepo = "./local_script_repo" #useful if running multiple single shots ... can copy remotely once
+                                        #then copy locally from here for each shot
+                                        #set to None if you do NOT want to use a local script dir cache
+                                        #  and force a copy from the main repo each time
+
+Lock_mutex_fn = "lsr.lock"  #all instaces under this directory share this
+Node_basedir = "/tmp/hetcal"
+Lock_tmp_mutex_fn = "/tmp/tmp_hetcal.mutex" #all instaces on one node (common /tmp) share this
+WorkDirRoot = "./"
+#user specific
+red1path = None # if None, will use the local (cwd) as the basepath, otherwise user can edit and specify one here
+                # "/scratch/03261/polonius/red1/reductions/"
+
+HETRaw_archive = "/corral-repl/utexas/Hobby-Eberly-Telesco/het_raw/"
+#HETDEXSurvey = "/corral-repl/utexas/Hobby-Eberly-Telesco/hdr5/survey/survey_hdr5.h5"
+HETDEXSurvey = "/scratch/projects/hetdex/hdr5/survey/survey_hdr5.h5"
+HET_by_date = "/work/03946/hetdex/maverick/"
+karlgettar = "/work/00115/gebhardt/maverick/gettar/"
+karlfplane = "/work/00115/gebhardt/maverick/fplane/"
+karlhome = "/home1/00115/gebhardt"
+tarlist_home = "/work/00115/gebhardt/lib_calib/tarlists/"
+hetdex_projects_path = "/scratch/projects/hetdex/"
+
+hetdex_api_path = os.path.dirname(importlib.util.find_spec("hetdex_api").origin)
+#there is an extra "hetdex_api" at the end that points into the lower level directory for that.
+#h5tools is actually a sibling
+hetdex_api_path = "/".join(hetdex_api_path.split("/")[0:-1])
+
+
+#since this is done outside (that is, the SLURM sets this up) it is not useful here, in this code, to know this
+# A way to deal with it here, would be to change the mutex to a sempahore and have a resource count
+#   and then throttle any use, regardless of SLURM ... e.g for a given /tmp/ only allow 1 shot to run for vm-small
+#   or 10-12 or so for normal .. any additionals would wait on the semaphore
+AssumedMemFootprint = 20.0  # GB assumption
+SafeActiveShotsSleep = 30.0 # recheck every xx seconds
+try:
+    ApproxBaseRAM = psutil.virtual_memory()[0] / (1024**3) #in GB (e.g. ~32GB for vm small, 256 GB for normal on LS6)
+    #need somewhere around 20GB for normal big shots (once IFU is full)
+    #varies depending also on the number of exposures, but 20GB is a safe rule of thumb
+    MaxSafeActiveShots = int(ApproxBaseRAM//AssumedMemFootprint)
+    print(f"*** setting MaxSafeActiveShots to {MaxSafeActiveShots}. "
+          f"BaseRAM {ApproxBaseRAM:0.1f}GB, Footprint ~ {AssumedMemFootprint}GB")
+except:
+    ApproxBaseRAM = -1
+    MaxSafeActiveShots = 0
+
+
+########################################################################
+# !!! DO NOT MODIFY BELOW
+#     unless you REALLY known
+#     what you are doing !!!
+########################################################################
+
+@dataclass
+class Config:
+
+    clean: int = 0  # post run clean level; 0 = do not clean
+    clean_only: bool = False  # if True, do nothing except for -clean
+    clean_done: bool = False  # set to True if the post_clean() has been performed
+    # simul : int = 0 #number of simultaneous shots being run (e.g. tasks per node), 0 is unset
+    update_local_repo: bool = False
+    update_only: bool = False
+    overwrite: bool = False
+
+    resume: bool = False
+
+    email: str = ""
+
+    cwd_orig: str = os.getcwd()
+    cwd: str = os.getcwd()
+    virus_tar_path: str = None
+    # red1dir: str = f"{os.getcwd()}" #e.g. <path>/red1/reductions
+    # BUT "reductions" is added later, so stop at the "red1" equivalent; so is same as just cwd_orig here
+    scriptdir: str = ""
+    gettar_fn: str = ""  # the runs* or runt* file from karlgettar folder with the date, shot, exp data
+
+    orig_stdout = None
+    orig_stderr = None
+    file_stdout = None
+
+
+    special = 0  # do some special, direct edit code stuff
+    ifuslot = None
+    ifuid = None
+    specid = None
+    ifu_fqid = None
+    log_id = None
+
+
+########################################################################
+# Basic user input
+########################################################################
+
+args = list(sys.argv)  # python3 map is no longer a list, so need to cast here
+del args[0]  # args.pop(0) #remove THIS file
+args = [x.replace("--", "-") for x in args]
+
+cfg = Config()
+
+if "-help" in args:
+    # do NOTHING else except print the help
+    help = """
+
+    usage: python reduce_shot.py <shot> [switches]
+           where <shot> is YYYYMMDDSSS or YYYYMMDDvSSS
+
+    switches (all optional):
+    --clean <integer> : todo clean help
+
+    --clear_mutex : Special operation - clears the concurrency mutex, resetting allowed concurrent active processes.
+                    This takes priority over all other switches and will terminate with this action.
+
+    --email <str> : if provided will attach to the elixer slurm job so this email address will get notifications
+
+    --help : display this help text and exit
+
+    --ifuslot <str(3)> : work with this IFUSlot. If there is only one matching IFU for the selected date range
+                         this is sufficent
+                         
+                         
+    --multi <str(11)> : work with this fully qualified IFU as: <spec>_<slot>_<ifuid>
+                         
+    --nolimit : if present, overrides the in-code limiting of simultaneous active shots per node
+
+    --overwrite : removes the shot working directory completely and (re)starts fresh. 
+              !!! Notice: --resume has priority over --overwrite
+
+
+    --resume : (re)starts roughly at the last completed step (see sciXXXX/progress.dat)
+           !!! Notice: This does NOT re-run steps that completed with failures, it only re-runs incomplete steps.
+           !!! Notice: --resume has priority over --overwrite
+
+
+    --update : removes and re-fetches the local_script_depo prior to running
+               on a --resume, also updates the scripts already in the shot working directory
+               
+    --yyyymm : the year and month to calibrate, 6 digits
+
+    """
+
+    print(help)
+    exit(0)
+
+len_args = len(args)
+queue_elixer = False
+prep_compress = 0  # not just a boolean, use as the max simultaneous shots to process
+
+if "-clear_mutex" in args:
+    print("Hidden switch: clearing mutex, resetting allowed concurrent active processes.")
+    print("This takes priority over all other switches and will terminate with this action.")
+    fns = glob.glob(f"{Node_basedir}/*.sync")
+    print(f"Clearing {len(fns)} active sync files.\n{[os.path.basename(x) for x in fns]}")
+    os.system(f"rm {Node_basedir}/*.sync")
+    print("Done. Exiting.")
+    exit(0)
+
+
+if "-clean" in args:
+    i = args.index("-clean")
+    try:
+        cfg.clean = int(args[i + 1])
+        if cfg.clean < 0:  # negative values are the same, but force just the clean operation (e.g. to be used on an old run)
+            cfg.clean *= -1
+            cfg.clean_only = True
+    except:
+        print(f"Invalid -clean specified")
+        exit(-1)
+
+    del args[i + 1]  # args.pop(0) #remove THIS file
+    args.remove("-clean")
+else:
+    cfg.clean = DefaultClean  # usually this is level 1
+
+
+
+if "-update" in args:
+    cfg.update_local_repo = True
+    args.remove("-update")
+
+if "-overwrite" in args:
+    cfg.overwrite = True
+    args.remove("-overwrite")
+
+
+if "-resume" in args:  # opposide of --overwite ... do NOT touch the (intermediate) output of the working directory
+    cfg.resume = True
+    args.remove("-resume")
+
+
+if "-email" in args:
+    i = args.index("-email")
+    try:
+        cfg.email = args[i + 1]
+        # really basic sanity check
+        if '@' not in cfg.email:
+            print(f"Invalid -email format specified: {cfg.email}")
+            exit(-1)
+    except:
+        print(f"Invalid -email specified: {args[i + 1]}")
+        exit(-1)
+
+    del args[i + 1]  # args.pop(0) #remove THIS file
+    args.remove("-email")
+
+
+if "-nolimit" in args:
+    MaxSafeActiveShots = 0
+    print("*** --nolimit Override. Do NOT enforce simultaneous active shot limit per node.")
+    args.remove("-nolimit")
+
+if "-special" in args:
+    i = args.index("-special")
+    cfg.special = int(args[i + 1])
+    del args[i + 1]
+    args.remove("-special")
+    print(f"*** --special condition invoked. Condition = {cfg.special}")
+
+if "-ifuslot" in args:
+    i = args.index("-ifuslot")
+    try:
+        cfg.ifuslot = args[i + 1]
+        if len(cfg.ifuslot) != 3 and 1 <= int(cfg.ifuslot) <= 999:
+            print(f"Invalid -ifuslot specified: {args[i + 1]}")
+            exit(-1)
+    except:
+        print(f"Invalid -ifuslot specified: {args[i + 1]}")
+        exit(-1)
+
+    del args[i + 1]  # args.pop(0) #remove THIS file
+    args.remove("-ifuslot")
+
+if "-multi" in args:
+    i = args.index("-multi")
+    try:
+        ifustr = args[i + 1]
+        if len(ifustr) != 11:
+            print(f"Invalid -multi specified: {args[i + 1]}")
+            exit(-1)
+
+        #spec slot ifuid
+        toks = ifustr.split("_")
+        if len(toks) != 3:
+            print(f"Invalid -multi specified: {args[i + 1]}")
+            exit(-1)
+
+        cfg.specid = str(int(toks[0])).zfill(3)
+        cfg.ifuslot = str(int(toks[1])).zfill(3)
+        cfg.ifuid = str(int(toks[2])).zfill(3)
+        cfg.ifu_fqid = f"{cfg.specid}_{cfg.ifuslot}_{cfg.ifuid}"
+
+    except:
+        print(f"Invalid -multi specified: {args[i + 1]}")
+        exit(-1)
+
+    del args[i + 1]  # args.pop(0) #remove THIS file
+    args.remove("-multi")
+
+if "-yyyymm" in args:
+    i = args.index("-yyyymm")
+    try:
+        cfg.yyyymm = args[i + 1]
+        if len(cfg.yyyymm) != 6 and not (2017 <= int(cfg.yyyymm[0:4]) <= 2050) and not (1 <= int(cfg.yyyymm[-2:]) <= 12):
+            print(f"Invalid -yyyymm specified: {args[i + 1]}")
+            exit(-1)
+    except:
+        print(f"Invalid -yyyymm specified: {args[i + 1]}")
+        exit(-1)
+
+    del args[i + 1]  # args.pop(0) #remove THIS file
+    args.remove("-yyyymm")
+
+# whatever is left should be the shot
+if len(args) > 0:
+    #extra, unexpected arguments??
+    print(f"Fatal: Unexpected additional args: {args}")
+    print(f"exititing....")
+    exit(-1)
+
+
+#set a simple log identifier
+cfg.log_id = f"ifu{cfg.ifuslot}_{cfg.yyyymm}"
+
+# check datevshot ... can only be numeric or in datevshot format, but could be truncated
+print(f"[{cfg.log_id}] Initializing calibration ...")
+
+
+########################################################################
+# worker functions
+########################################################################
+
+def safe_cd(path):
+    """
+    attempt to cd and return True only if new cwd() matches
+
+    this fails for ".." for example
+    so is only useful, in its current form for non wildcard or special paths
+
+    :param path:
+    :return:
+    """
+
+    try:
+        orig = os.getcwd()
+        os.chdir(path)
+        if os.getcwd()[-1 * len(path):] == path:
+            return True
+        else:
+            os.chdir(orig)
+            print(f"!!!!! WARNING. Failed to cd to {path} ")
+            return False
+    except:
+        return False
+
+
+
+def precheck(cfg):
+    """
+    sanity check files, directories to see if this reduction can run
+    (e.g. if the lib_calib path is not available for the date, then this cannot run)
+
+    :param cfg:
+    :return:
+    """
+
+    try:
+
+        rc = 0
+        # echo a few key paths:
+        print(f"[{cfg.log_id}] Precheck. HETDEX_API path: {hetdex_api_path}")
+
+
+        month = cfg.yyyymm[0:6]
+        path_check = os.path.join(hetdex_projects_path,f"lib_calib/{month}")
+        if not os.path.exists(path_check):
+            #todo: this might not be fatal ... could calibrate anyway??  Should think about that.
+            # would we automatically copy the final output here? Needs to be a manual step, since
+            # must be the hetdex user to do the copy
+            print(f"Precheck fail. HETDEX lib_calib path does not exist: {path_check}")
+            return -1
+
+        if not os.path.exists(ScriptRepo):
+            print(f"Precheck fail. ScriptRepo does not exist: {ScriptRepo}")
+            return -1
+
+        #common missing installs (that don't show up until later)
+
+
+        if rc != 0:
+            return -1
+
+    except:
+        print(f"Exception in precheck: {traceback.format_exc()}")
+
+    return 0
+
+
+def initial_setup(cfg):
+    """
+    copy from script repo(s)
+
+    change the cwd to the new workdir for this shot
+
+    this is largely equivalent to what rsetups would do, but here for a single shot and not a whole month
+
+    :return:
+    """
+
+
+    #todo: get the unique ifu_fqid and veryify the yyyymm
+
+    #check that the tarlist exists
+    tarlist_fqfn = os.path.join(tarlist_home,f"{cfg.yyyymm}tarlist")
+    if not os.path.exists(tarlist_fqfn):
+        print(f"FATAL. Could not find tarlist: {tarlist_fqfn}")
+        return -1
+
+    #setup local outputdir
+    cfg.lib_calib = os.path.join(os.getcwd(),f"lib_calib/{cfg.yyyymm}")
+    os.makedirs(cfg.lib_calib,exist_ok=True)
+#>>>> HERE <<<<
+
+    workdir = os.path.join(WorkDirRoot,f"cal{cfg.yyyymm}")
+
+    resume = False #notice: cfg.resume MAY be true and this can still be false if the directory does not already exist
+    if os.path.exists(workdir):
+        if cfg.resume:
+            print(f"[{cfg.log_id}] Resuming. Leave directory intact: {workdir}")
+            resume = True
+        elif cfg.overwrite:
+            #todo: need to be careful and ONLY remove for the IFU + YYYYMM
+            print(f"[{cfg.log_id}] Overwriting directory {workdir} ... ")
+            shutil.rmtree(workdir)
+        else: #todo: actually need to check for the IFU UNDER this diretory, not just the directory itself
+            print(f"[{cfg.log_id}] Calibration directory already exists here! {workdir}")
+            print(f"[{cfg.log_id}] Please include --resume or --overwrite to make intention clear.")
+            print(f"[{cfg.log_id}] Or is this a repeated SLURM task?")
+            if cfg.clean > 1:
+                print(f"[{cfg.log_id}] Did you intend to only clean up the directory? "
+                      f"If so, --clean needs to be the negative value. (see --help)")
+            return -1
+
+    if not resume:
+        os.makedirs(workdir)
+
+        if LocalScriptRepo is not None:
+            #need to see if can get the file lock in case another instance is copying
+            lock = FileLock(Lock_mutex_fn) #we are in the top directory (not calXXXX)
+            with lock:
+                if cfg.update_local_repo:
+                    print("Updating local repo ...")
+                    shutil.copytree(os.path.join(ScriptRepo, ""),
+                                    os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
+                    cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+
+                if os.path.exists(LocalScriptRepo): #we want to use it
+                    print("Using local repo ...")
+                    cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                else:
+                    #copy first to local script repo
+                    print("Copying to local repo ...")
+                    shutil.copytree(os.path.join(ScriptRepo, ""),
+                                    os.path.join(os.getcwd(),LocalScriptRepo), dirs_exist_ok=True)
+                    cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+
+            #lock auto releases
+        else:
+            print("Using main script repo (may be remote) ...")
+            cfg.scriptdir = os.path.join(ScriptRepo,"")
+    else:
+        if LocalScriptRepo is not None:
+            fatal_rtn = False
+            lock = FileLock(Lock_mutex_fn) #we are in the top directory (not sciXXXX)
+            with lock:
+
+                if cfg.update_local_repo:
+                    print("Updating local repo ...")
+                    shutil.copytree(os.path.join(ScriptRepo, ""),
+                                    os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
+                    cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+
+                if os.path.exists(LocalScriptRepo): #we want to use it
+                    print("Using local repo ...")
+                    cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                else:
+                    print("Fatal! --resume selected, but no script repo.")
+                    fatal_rtn = True
+            # lock auto releases
+            if fatal_rtn:
+                return -1
+        else:
+            print("Using main script repo (may be remote) ...")
+            cfg.scriptdir = os.path.join(ScriptRepo,"")
+
+
+    os.chdir(workdir)
+    cfg.cwd = os.getcwd() #now under the sci<shot> directory
+
+
+    if not resume or cfg.update_local_repo:
+
+        # some other process might be updating the local repo ... do not proceed IF there is a lock
+        lock = FileLock(Lock_mutex_fn)  # we are in the top directory (not sciXXXX)
+        with lock:
+            # obtained the lock, so we should be good now,
+            # just release and go
+            print(f"[{cfg.log_id}] Mutex checked. Okay. Safe to local_repo.")
+            # lock auto releases
+
+        print(f"Copying source code to working directory {cfg.cwd}...")
+        ## if ANY of this fails it is fatal
+
+        #shutil.copy2(os.path.join(cfg.scriptdir, "science_reductions", "rsetups"),".") #no, this function is its equivalent
+
+        # shutil.copy2(os.path.join(cfg.scriptdir, "rfixspec"), ".")
+        # shutil.copytree(os.path.join(cfg.scriptdir, "sciscripts"), ".", dirs_exist_ok=True)
+        # shutil.copytree(os.path.join(cfg.scriptdir,"vdrp"), "vdrp", dirs_exist_ok=True)
+        # shutil.copytree(os.path.join(cfg.scriptdir, "detect"), "detect", dirs_exist_ok=True)
+        # shutil.copytree(os.path.join(cfg.scriptdir, "getcen"), "getcen", dirs_exist_ok=True)
+        # shutil.copytree(os.path.join(cfg.scriptdir, "alldet"), "alldet", dirs_exist_ok=True)
+        # shutil.copytree(os.path.join(cfg.scriptdir, "cs"), "cs", dirs_exist_ok=True)
+        # shutil.copytree(os.path.join(cfg.scriptdir, "Diagnose"), "Diagnose", dirs_exist_ok=True)
+        #
+        # #update the "home" path tilde
+        # system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits")
+        # system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits_fix")  # use '#' as sed separator rather than "/"
+        # system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rback_field")  # use '#' as sed separator rather than "/"
+        # system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rback_fix")  # use '#' as sed separator rather than "/"
+        # system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbacks")  # use '#' as sed separator rather than "/"
+        # system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits_s")  # use '#' as sed separator rather than "/"
+        # system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rimarb")  # use '#' as sed separator rather than "/"
+        #
+        #
+        # #update the old red1 path; should now all point to the common directory above each sci<YYYYMMDDvSSS> directories
+        # #yes, I want cwd_orig ... I want a single "reductions" directory off the top with all the sciXXX as siblings
+        # system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# rback_field")  # use '#' as sed separator rather than "/"
+        # system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# rback_fix")
+        # system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# rerun2")
+        # system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# rtaremc") #not necessary, just for completeness
+        # system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# runtar")
+        # system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# runtarm.defunct") #not necessary, just for completeness
+        # #next two are just safeties, the scripts THIS code is using should already have them updated
+        # system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# alldet/rfft")
+        # system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd_orig}# getcen/rgetifucen")
+        #
+        # #extra files needed
+        # #vdrp : /work/00115/gebhardt/maverick/fplane ... need the fplane for the date
+        # os.makedirs(os.path.join(cfg.cwd,"vdrp/fplane"), exist_ok=True)
+        #
+        #
+        # if os.path.exists(os.path.join(karlfplane, f"fp{cfg.ifu_fqid[0:8]}")):
+        #     shutil.copy2(os.path.join(karlfplane, f"fp{cfg.ifu_fqid[0:8]}"), os.path.join(cfg.cwd,"vdrp/fplane"))
+        # else:
+        #     print(f"{[cfg.ifu_fqid]} !Warning! fplane file (fp{cfg.ifu_fqid[0:8]}) not found. Using last known ({LastKnownFplane}) instead. ")
+        #     shutil.copy2(os.path.join(karlfplane, f"{LastKnownFplane}"), os.path.join(cfg.cwd, f"vdrp/fplane/fp{cfg.ifu_fqid[0:8]}"))
+        #
+        # #fix paths in the . cfg files
+        # system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# vdrp/vdrp.config")
+        # system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# vdrp/vdrp.config.original")
+        # system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# vdrp/vdrp.config.gaia")
+        # system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# vdrp/vdrp.config.sdss")
+        # system_command(cfg, f"sed -i s#/scratch/03261/polonius/red1#{cfg.cwd}# vdrp/vdrp.config.panstarrs")
+        #
+        # system_command(cfg, f"sed -i s#/work/03261/polonius/hetdex/science/sciscripts#{cfg.cwd}# vdrp/vdrp.config")
+        # system_command(cfg, f"sed -i s#/work/03261/polonius/hetdex/science/sciscripts#{cfg.cwd}# vdrp/vdrp.config.original")
+        # system_command(cfg, f"sed -i s#/work/03261/polonius/hetdex/science/sciscripts#{cfg.cwd}# vdrp/vdrp.config.gaia")
+        # system_command(cfg, f"sed -i s#/work/03261/polonius/hetdex/science/sciscripts#{cfg.cwd}# vdrp/vdrp.config.sdss")
+        # system_command(cfg, f"sed -i s#/work/03261/polonius/hetdex/science/sciscripts#{cfg.cwd}# vdrp/vdrp.config.panstarrs")
+        #
+        # system_command(cfg, f"sed -i s#/scratch/03261/polonius/science_reductions#{cfg.cwd}# vdrp/vdrp.config")
+        # system_command(cfg, f"sed -i s#/scratch/03261/polonius/science_reductions#{cfg.cwd}# vdrp/vdrp.config.original")
+        # system_command(cfg, f"sed -i s#/scratch/03261/polonius/science_reductions#{cfg.cwd}# vdrp/vdrp.config.gaia")
+        # system_command(cfg, f"sed -i s#/scratch/03261/polonius/science_reductions#{cfg.cwd}# vdrp/vdrp.config.sdss")
+        # system_command(cfg, f"sed -i s#/scratch/03261/polonius/science_reductions#{cfg.cwd}# vdrp/vdrp.config.panstarrs")
+        #
+        # system_command(cfg, f"sed -i s#/scratch/00115/gebhardt#{cfg.cwd}# vdrp/shifts/runsh1")
+        # system_command(cfg, f"sed -i s#/scratch/03261/polonius/science_reductions#{cfg.cwd}# vdrp/shifts/runsh2")
+        # system_command(cfg, f"sed -i s#/scratch/03261/polonius/single_shot/science_reductions#{cfg.cwd}# vdrp/shifts/run_shifts.sh")
+        #
+        # #vdrp: need the runshifts for the shot (from karlgettar)
+        # #e.g. run_shifts.sh 20240730 009 16.317927 33.689304 1
+        # # (formerly, this was the "clean_rta" script
+        #
+        # if os.path.exists(os.path.join(karlgettar,f"rta.{cfg.ifu_fqid[0:6]}")):
+        #    rta_date, rta_shot, rta_ra, rta_dec, rta_v = np.loadtxt(os.path.join(karlgettar,f"rta.{cfg.ifu_fqid[0:6]}"),
+        #                                                         usecols=[1,2,3,4,5],unpack=True,dtype=str)
+        # else:
+        #     date_year = int(cfg.ifu_fqid[0:4])
+        #     #if 202407 < int(cfg.ifu_fqid[0:6]) <= 202412:
+        #     if date_year == 2024:
+        #         rtafn = os.path.join(karlgettar,f"rta.202488")
+        #     elif date_year >= 2025:
+        #         rtafn = os.path.join(karlgettar, f"rta.{date_year}00")
+        #         #rtafn = os.path.join(karlgettar, f"rta.202500")
+        #     else:
+        #         #should not happen
+        #         rtafn = None #just to turn off warning
+        #         Quit(cfg,-1,"Fatal. Cannot locate suitable rta file")
+        #
+        #     rta_date, rta_shot, rta_ra, rta_dec, rta_v = np.loadtxt(rtafn,
+        #                                                         usecols=[1, 2, 3, 4, 5], unpack=True, dtype=str)
+        #
+        # sel = (rta_date == cfg.ifu_fqid[0:8]) * (rta_shot == cfg.ifu_fqid[-3:])
+        # with open(os.path.join(cfg.cwd,f"vdrp/shifts/rta.{cfg.ifu_fqid[0:6]}"),"w") as f:
+        #     for d,s,ra,dec,v in zip(rta_date[sel], rta_shot[sel], rta_ra[sel], rta_dec[sel], rta_v[sel]):
+        #         f.write(f"run_shifts.sh {d} {s} {ra} {dec} {v} \n")
+        #
+
+        #fix detect stuff
+
+        return 0
+    #end if not resume
+
+    return 0
+
+
+def node_setup(cfg): #,safelimit=0):
+    """
+
+    extra stuff shared for datevshots on same node
+
+    :param cfg:
+   # :param safelimit: if positive, do NOT start until the active shot count is BELOW the safelimit
+   #                   e.g. THIS shot adds +1 to reach the safelimit
+    :return:
+    """
+    global MaxSafeActiveShots
+
+    try:
+        lock = FileLock(Lock_tmp_mutex_fn)
+        #if safelimit > 0 and MaxSafeActiveShots > 0:
+        if MaxSafeActiveShots > 0:
+            redlight = True
+            print(f"[{cfg.log_id}] checking if safe to start ...")
+
+            while redlight:
+                with lock:
+                    #how many are active?
+                    fns = glob.glob(os.path.join(Node_basedir, "*.sync"))
+                    active = len(fns)
+                    if active < MaxSafeActiveShots: #good to go
+                        os.makedirs(Node_basedir, exist_ok=True)
+                        with open(os.path.join(Node_basedir, f"{cfg.ifu_fqid}.sync"), "w") as f:
+                            f.write(f"BEGIN {str(datetime.now())}\n")
+                        redlight = False
+                        print(f"[{cfg.log_id}] cleared to start.")
+                    else:
+                        print(f"[{cfg.log_id}] too many active shots ({active}). Must wait ...")
+
+                if redlight:
+                    time.sleep(SafeActiveShotsSleep)
+
+        else:
+            with lock:
+                #create a sync directory and file to hold list of datevshot being used
+                #a bit later this will then be the count of simulataneous datevshots and used to tune the num of processes
+
+                os.makedirs(Node_basedir, exist_ok=True)
+                with open(os.path.join(Node_basedir,f"{cfg.ifu_fqid}.sync"), "w") as f:
+                    f.write(f"BEGIN {str(datetime.now())}\n")
+
+        # lock auto releases
+    except:
+        print(f"Exception! in node_setup()",traceback.format_exc())
+
+
+def node_clean(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+
+    try:
+        lock = FileLock(Lock_tmp_mutex_fn)
+        with lock:
+            #clean up my sync
+            try:
+                #this might have already been removed (e.g. if post_clean() ran successfully)
+                os.remove(os.path.join(Node_basedir,f"{cfg.ifu_fqid}.sync"))
+            except:
+                pass
+
+        # lock auto releases
+    except:
+        print(f"Exception! in node_clean()",traceback.format_exc())
+
+
+def node_active_ct(cfg):
+    """
+    return how many datevshots are active, based on .sync files
+    :param cfg:
+    :return:
+    """
+
+    try:
+        ct = -1
+        lock = FileLock(Lock_tmp_mutex_fn) #get lock instance, but does not ACQUIRE lock
+        with lock: #lock ACQUIRED here
+            fns = glob.glob(os.path.join(Node_basedir,"*.sync"))
+            ct = len(fns)
+            print(f"[{cfg.log_id}] checking active shot count for shared /tmp: {ct}")
+        #lock auto releases
+    except:
+        print(f"Exception! in node_active_ct()", traceback.format_exc())
+
+    return ct
+
+
+
+def Quit(cfg,rc,msg=None,write_status=True):
+    """
+
+    :param cfg:
+    :param rc:
+    :param msg:
+    :return:
+    """
+
+    if msg is not None:
+        print(f"[{cfg.log_id}] ({rc})",msg)
+    else:
+        print(f"[{cfg.log_id}] ({rc})")
+
+
+    if rc >=0:
+        write_summary(cfg)
+
+   # if cfg.orig_stdout:
+   #     sys.stdout = cfg.orig_stdout
+
+    #if cfg.orig_stderr:
+    #    sys.stderr = cfg.orig_stderr
+
+    if cfg.file_stdout:
+        cfg.file_stdout.flush()
+        cfg.file_stdout.close()
+
+        #repeat the final message to the console
+       # if msg is not None:
+        #    print(f"({rc})", msg)
+        #else:
+        #    print(f"({rc})")
+
+    try: #remove the status.run file (if it exists)
+        system_command(cfg,f"rm {os.path.join(cfg.cwd,'status.run')}")
+    except:
+        pass
+
+    try:
+        if write_status and safe_cd(cfg.cwd):
+            if rc < 0:
+                with open("status.fail","w") as f:
+                    f.write(f"[{cfg.log_id}] ({rc}) {msg}\n")
+            else:
+                with open("status.pass","w") as f:
+                    f.write(f"[{cfg.log_id}] ({rc}) {msg}\n")
+    except:
+        pass
+
+    node_clean(cfg)
+
+    if rc >= 0:
+        post_clean(cfg)
+
+    exit(rc)
+
+
+def blocking_command(cfg,cmd):
+    """
+    wrapper to subprocess Popen
+    blocks and returns result
+
+    :param cfg:
+    :param cmd:
+    :return:
+    """
+
+    try:
+        rc = 0
+        #cmdlist = [cmd[0], cmd[1:]]
+        if EchoCmds:
+            print(f"[{cfg.log_id}] subproc CMD: ({os.getcwd()}) > {cmd}")
+
+        rc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT).wait()
+
+        if EchoCmds:
+            print(f"[{cfg.log_id}] subproc rc = {rc}: CMD = ({os.getcwd()}) > {cmd}")
+    except:
+        print(f"[{cfg.log_id}] Exception! in blocking_command. cmd = {cmd}\n",traceback.format_exc())
+        rc = -1
+
+    return rc
+
+def system_command(cfg,cmd):
+    """
+
+    wrapper to execute a system command
+
+    :param cfg:
+    :param cmd:
+    :return:
+    """
+
+    #echo the command
+    if EchoCmds:
+        print(f"[{cfg.log_id}] CMD: ({os.getcwd()}) > {cmd}")
+
+    if cfg.file_stdout:
+        os.system(f"{cmd} &>> {cfg.file_stdout.name}")
+    else:
+        os.system(f"{cmd}")
+
+def update_only(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+
+    print("*** Todo: fix paths for update_only()")
+
+    lock = FileLock(Lock_mutex_fn)  # we are in the top directory (not sciXXXX)
+    with lock:
+        if cfg.update_local_repo:
+            print("(Only) Updating local repo ...")
+            shutil.copytree(os.path.join(ScriptRepo, ""),
+                            os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
+            cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+
+
+
+def progress_update(cfg,progress_dict,key=None,status=True):
+    """
+    update the progress record
+    :param progress_dict:
+    :return:
+    """
+
+    try:
+        if key is not None:
+            progress_dict[key] = status
+
+        fn = os.path.join(cfg.cwd,"progress.dat")
+        with open(fn, 'w') as f:
+            json.dump(progress_dict, f, indent=4)  # indent=4 for pretty-printing
+
+    except:
+        print(f"Exception in progress_update(). {traceback.format_exc()}")
+
+def progress_init(cfg):
+    """
+    read/initialize progress dict
+    :param cfg:
+    :return:
+    """
+    dtprog = None
+    try:
+        fn = os.path.join(cfg.cwd,"progress.dat")
+        if os.path.exists(fn):
+            with open(fn, 'r') as f:
+                dtprog = json.load(f)
+
+            #assume this was successful, but also check --resume
+            if cfg.resume is False:
+                print("********** NOTICE **********")
+                print("Call did NOT specfiy --resume, but this reduction appears to be at least partially complete.")
+                print("Will attempt to resume (implied) at the last incomplete step ...")
+                print("****************************")
+                cfg.resume = True
+
+            if "s04f_analysis" not in dtprog.keys():
+                dtprog["s04f_analysis"] = False
+
+                #consistency check / force (if ANY under a step are False, then the top of the step becomes False (incomplete))
+            if "s04_make_shot" in dtprog.keys():
+                dtprog["s04_make_shot"] = dtprog["s04_make_shot"] and dtprog["s04a_get_ifucens"] and \
+                                                dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] and \
+                                                dtprog["s04e_amp_stats"] and dtprog["s04f_analysis"]
+            else:
+                dtprog["s04_make_shot"] = dtprog["s04_sky_subtraction"] and dtprog["s04a_get_ifucens"] and \
+                                                dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] and \
+                                                dtprog["s04e_amp_stats"] and dtprog["s04f_analysis"]
+                dtprog.pop("s04_sky_subtraction") #remove the old name
+                #ordering is now wrong, but, programatically, it does not matter
+                #should be rare as we move forward, so just noting that the progress.dat for this will be
+                #out of order and move on
+
+
+
+            dtprog["s05_detection"] = dtprog["s05_detection"] and dtprog["s05b_rdet_rf1"] and \
+                                            dtprog["s05c_rgetmax"] and dtprog["s05e_detection_hdf5"]
+
+            dtprog["s06_catalogs"] = dtprog["s06_catalogs"] and dtprog["s06b_fof"] and \
+                                            dtprog["s06c_diagnose"] and dtprog["s06d_elixer"] and dtprog["s06e_source_cat"]
+    except:
+        print(f"Exception in progress_init(). {traceback.format_exc()}")
+
+    if dtprog is None:
+        dtprog = {"s01_run1s": False,
+                  "s02_vdrp": False,
+                  "s03_fluxcal": False,
+                  "s04_make_shot": False,
+                  "s04a_get_ifucens": False,
+                  "s04b_rfft": False,
+                  "s04c_rcal_all": False,
+                  "s04d_shot_h5": False,
+                  "s04e_amp_stats": False,
+                  "s04f_analysis": False,
+                  "s05_detection": False,
+                  "s05b_rdet_rf1": False,
+                  "s05c_rgetmax": False,
+                  "s05e_detection_hdf5": False,
+                  "s06_catalogs": False,
+                  "s06b_fof": False,
+                  "s06c_diagnose": False,
+                  "s06d_elixer": False,
+                  "s06e_source_cat": False, }
+
+        progress_update(cfg,dtprog) #write out the file, no updates yet
+
+    return dtprog
+
+
+
+def write_summary(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+    orig_dir = os.getcwd()
+    try:
+        os.chdir(cfg.cwd)
+        h5 = tables.open_file(f"{cfg.ifu_fqid}.h5",mode="r")
+
+        with open("summary.txt","w") as f:
+            f.write(f"shot:\t\t{cfg.ifu_fqid}\n")
+            f.write(f"field:\t\t{h5.root.Shot.read(field='field')[0]}\n")
+            f.write(f"RA,Dec:\t\t{h5.root.Shot.read(field='ra')[0]}, {h5.root.Shot.read(field='dec')[0]}\n")
+            f.write(f"exptimes:\t{h5.root.Shot.read(field='exptime')[0]}\n")
+            dit_norms = h5.root.Shot.read(field="relflux_virus")[0]
+            f.write(f"relflux_virus:\t{dit_norms}\n")
+            try:
+                max_ditnorm = np.max(dit_norms) / np.min(dit_norms)
+                f.write(f"dither norm:\t{max_ditnorm:0.4f}\n")
+            except:
+                pass
+
+            waves = h5.root.Calibration.Throughput.throughput.read(field="wavelength")
+            tp = h5.root.Calibration.Throughput.throughput.read(field="throughput")
+            tp_at_w = np.interp(4600.0, waves, tp)
+            f.write(f"response_4540:\t{h5.root.Shot.read(field='response_4540')[0]:0.4f}\n")
+            f.write(f"interp  @4600:\t{tp_at_w:0.4f}\n")
+            f.write(f"fwhm_virus:\t{h5.root.Shot.read(field='fwhm_virus')[0]:0.4f}\n")
+
+            dx1 = h5.root.Shot.read(field="xditherpos")[0]
+            dy1 = h5.root.Shot.read(field="yditherpos")[0]
+            f.write(f"Dithers: \t({dx1[0]:0.4f},{dy1[0]:0.4f}) ({dx1[1]:0.4f},{dy1[1]:0.4f}) ({dx1[2]:0.4f},{dy1[2]:0.4f})\n")
+
+            try:
+                total = 0
+                with open(f"{cfg.cwd}/elixer/line.dets", "r") as f2:
+                    total = len(f2.readlines())
+
+                #outer file:
+                f.write(f"Line Dets:\t{total}\n")
+
+            except:
+                pass
+
+            try:
+                total = 0
+                with open(f"{cfg.cwd}/elixer/cont.dets", "r") as f2:
+                    total = len(f2.readlines())
+
+                # outer file:
+                f.write(f"Cont Dets:\t{total}\n")
+
+            except:
+                pass
+
+    except:
+        print(f"[{cfg.log_id}] Exception! trying to write summary file", traceback.format_exc())
+
+    try:
+        h5.close()
+    except:
+        pass
+
+    os.chdir(orig_dir)
+
+
+def post_clean(cfg):
+    """
+    clean up after the run ...
+
+    !!! this is not the safest way to do this, but it is fast and simple (using system commands to rm and unlink)
+
+    for now, there are only two differences ...
+    1 = basic clean (remove script files, intermediate files)
+        (keep: mc files, spec files, etc)
+        (discard vdrp ?)
+    2 = remove same as (1) but also more agressively remove (logs, helper data files, etc)
+
+    :param cfg:
+    :return:
+    """
+
+    try:
+
+        if cfg.clean_done:
+            return
+
+        #always try to clean up /tmp
+        node_clean(cfg)
+
+        if cfg.clean <=0:
+            print(f"[{cfg.log_id}] No -clean")
+            cfg.clean_done = True
+            return
+        else:
+            print(f"[{cfg.log_id}] --clean {cfg.clean}")
+
+
+        if cfg.clean_only:  #this is at the top and cfg.cwd has NOT been set to cfg.ifu_fqid
+            if not safe_cd(os.path.join(cfg.cwd,f"sci{cfg.ifu_fqid}")):
+                print(f"[{cfg.log_id}] Could not initiate --clean")
+                return
+            else:
+                #we did successfully jump to sciXXXX direcotry so update to that for the remainder
+                cfg.cwd = os.getcwd()
+        else:
+            if not safe_cd(cfg.cwd):
+                print(f"[{cfg.log_id}] Could not initiate --clean")
+                return
+
+        #os.chdir(os.path.join(cfg.cwd,f"sci{cfg.ifu_fqid}"))
+        cfg.cwd = os.getcwd()  # now under the sci<shot> directory
+
+        print(f"**************************")
+        print(f"*** TODO  post_clean() ***")
+        print(f"**************************")
+
+        cfg.clean_done = True
+
+    except:
+        print(f"Exception in post_clean(). {traceback.format_exc()}")
+
+
+
+
+########################################################################
+########################################################################
+########################################################################
+# Main (section)
+#   notice: no actual main function
+########################################################################
+########################################################################
+########################################################################
+
+###########
+# setup
+###########
+
+
+if cfg.update_only:
+    update_only(cfg)
+    exit(0)
+
+if cfg.clean_only:
+    print(f"[{cfg.log_id}] Performing only the CLEAN, level : {cfg.clean} ...")
+    post_clean(cfg)
+    Quit(cfg,0,"Clean complete. Exiting",write_status=False)
+
+rc = precheck(cfg)
+if rc < 0:
+    Quit(cfg,rc,"FATAL! Precheck failed. Reduction cannot run.",write_status=False)
+
+
+rc = initial_setup(cfg)
+
+if rc < 0:
+    Quit(cfg,rc,"Could not complete initial setup.",write_status=False)
+
+rc = node_setup(cfg)
+
+if cfg.special == 1:
+    print("*** TODO Special Handling? ***")
+    Quit(cfg, 0, f"Done with special handling. {cfg.ifu_fqid}",write_status=False)
+
+
+#########
+# after the initial setup, move stdout and stderr to a log file
+#########
+
+cfg.file_stdout = open(f"{cfg.ifu_fqid}.log","a")
+print(f"[{cfg.log_id}] Logging redirected to: {cfg.cwd}/{cfg.file_stdout.name}")
+
+
+# get the progress state. Useful if resuming (implied)
+dtprog = progress_init(cfg)
+
+
+#begin
+with open("status.run", "w") as f:
+    f.write(f"[{cfg.log_id}] running .... \n")
+
+###########
+# step1
+###########
