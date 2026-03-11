@@ -42,7 +42,9 @@ except:
 import tables
 from astropy.table import Table, join, Column, MaskedColumn # unique, vstack, hstack
 from astropy.io import fits
+# noinspection PyUnresolvedReferences
 from h5tools import amp_stats as AmpStats
+# noinspection PyUnresolvedReferences
 import hetdex_tools.fof_kdtree as fof
 
 # noinspection PyUnresolvedReferences
