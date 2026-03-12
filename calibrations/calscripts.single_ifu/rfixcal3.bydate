@@ -1,0 +1,44 @@
+#!/usr/bin/python
+
+import numpy as np
+import os.path as op
+from astropy.table import Table
+
+#fixcal3 read in and output by year+month or by IFU+Amp
+#fixcal_path = "/work/03261/polonius/hetdex/calibrations/analysis/rfixcal3"
+fixcal_path = "./rfixcal3"
+
+#read non-comment (cp 202308/i060aLL* 202309/. #really back to 202305)
+
+src_ifu_amp =  []
+src_yyyymm = []
+dst_yyyymm = []
+
+with open(fixcal_path,"r") as f:
+    for line in f:
+        if line.startswith('#') or len(line) < 5:
+            continue
+
+        toks = line.split() #spaces
+
+        src_d = int(toks[1].split("/")[0])
+        dst_d = int(toks[2].split("/")[0])
+        src_i = toks[1].split("/")[1][1:4]
+        src_a = toks[1].split("a")[1]
+
+        if src_a[0] == "*":
+            src_a = "XX"
+        else:
+            src_a = src_a[0:2]
+
+        src_yyyymm.append(src_d)
+        dst_yyyymm.append(dst_d)
+        src_ifu_amp.append(f"{src_i}+{src_a}")
+
+#Tt1 = Table([out_ifu, out_amp, out_date, out_fwhm], names=['ifu', 'amp','yyyymm','fwhm'])
+fT = Table([src_yyyymm, src_ifu_amp, dst_yyyymm], names=['src_yyyymm', 'src_ifu_amp','dst_yyyymm'])
+
+#print by destination date
+fT.sort(['dst_yyyymm','src_ifu_amp'])
+#print(fT['dst_yyyymm','src_ifu_amp','src_yyyymm'],"\n")
+fT['dst_yyyymm','src_ifu_amp','src_yyyymm'].pprint_all()

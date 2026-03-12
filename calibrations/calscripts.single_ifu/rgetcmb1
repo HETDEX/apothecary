@@ -1,0 +1,4 @@
+rgetcmb $1 LL
+rgetcmb $1 LU
+rgetcmb $1 RL
+rgetcmb $1 RU

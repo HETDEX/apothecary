@@ -1,0 +1,35 @@
+ifu=$1
+amp=$2
+
+cd tmp
+
+ls 2*/*${amp}prf.fits | awk '{print "\""$1"\""}' > list
+rm -f out1.fits out2.fits
+~gebhardt/bin/imcmbbs
+mv out1.fits i${ifu}a${amp}cmbp.fits
+mv out2.fits i${ifu}a${amp}cmsp.fits
+
+ls 2*/*${amp}ftf.fits | awk '{print "\""$1"\""}' > list
+rm -f out1.fits out2.fits
+~gebhardt/bin/imcmbbs
+mv out1.fits i${ifu}a${amp}cmbf.fits
+mv out2.fits i${ifu}a${amp}cmsf.fits
+
+ls 2*/*${amp}wtr.fits | awk '{print "\""$1"\""}' > list
+rm -f out1.fits out2.fits
+~gebhardt/bin/imcmbbs
+mv out1.fits i${ifu}a${amp}cbwt.fits
+mv out2.fits i${ifu}a${amp}cswt.fits
+
+ls 2*/*${amp}xtr.fits | awk '{print "\""$1"\""}' > list
+rm -f out1.fits out2.fits
+~gebhardt/bin/getxtr << eof
+/null
+eof
+mv out1.fits i${ifu}a${amp}cbxt.fits
+mv out2.fits i${ifu}a${amp}csxt.fits
+
+ls 2*/*${amp}wavo.dat | awk '{print "\""$1"\""}' > list
+rm -f wave.out
+~gebhardt/bin/getwavo
+mv wave.out i${ifu}a${amp}wave.dat

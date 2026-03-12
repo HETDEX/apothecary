@@ -1,0 +1,8 @@
+rm -f imars.fits
+~gebhardt/bin/imars << eof
+"$1"
+1
+2
+$2
+eof
+mv imars.fits $3.fits

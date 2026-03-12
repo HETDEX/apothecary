@@ -1,0 +1,18 @@
+date=$1
+shot=$2
+exp=$3
+mth=$4
+type=$5
+dir1=$(pwd)
+cd /tmp/d${date}s${shot}${exp}
+tar cvf d${date}s${shot}${exp}_prf.tar d${date}s${shot}${exp}*prf.fits
+tar cvf d${date}s${shot}${exp}_ftf.tar d${date}s${shot}${exp}*ftf.fits
+tar cvf d${date}s${shot}${exp}_wtr.tar d${date}s${shot}${exp}*wtr.fits
+tar cvf d${date}s${shot}${exp}_xtr.tar d${date}s${shot}${exp}*xtr.fits
+tar cvf d${date}s${shot}${exp}_1ds.tar d${date}s${shot}${exp}*1ds.fits
+tar cvf d${date}s${shot}${exp}_wav.tar d${date}s${shot}${exp}*wav.fits
+tar cvf d${date}s${shot}${exp}_wavo.tar d${date}s${shot}${exp}*wavo.dat
+
+mv *.tar ${dir1}/.
+cd /tmp
+rm -r d${date}s${shot}${exp}

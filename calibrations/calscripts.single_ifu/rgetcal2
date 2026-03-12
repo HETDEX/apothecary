@@ -1,0 +1,24 @@
+ifu=$1
+mth=$2
+spec=$3
+dir1=$(pwd)
+cd /tmp
+#cd tmp
+mkdir -p $1$2
+cd $1$2
+cp ${dir1}/rgetata .
+cp ${dir1}/rgetata1 .
+rm -f rt rt2
+echo "rgetata1 ${ifu}" > rt2
+
+ls $dir1/d${mth}*/*ata.tar > j1
+sed -r 's/(.*)\//\1 /' j1 | sed s/"_ata.tar"/"i${ifu}a??ata.dat"/ | awk '{print $2}' > j2
+paste j1 j2 | awk '{print "tar xf",$1,$2}' >> rt
+
+chmod +x rt; rt
+
+chmod +x rt2
+rt2
+mv i*ata.dat ${dir1}/.
+cd ..
+rm -r $1$2

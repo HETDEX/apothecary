@@ -1,0 +1,33 @@
+ifu=$1
+amp=$2
+
+ls *i${ifu}a${amp}prf.fits > list
+rm -f out1.fits out2.fits
+~gebhardt/bin/imcmbbs
+mv out1.fits i${ifu}a${amp}cmbp.fits
+mv out2.fits i${ifu}a${amp}cmsp.fits
+
+ls *i${ifu}a${amp}ftf.fits > list
+rm -f out1.fits out2.fits
+~gebhardt/bin/imcmbbs
+mv out1.fits i${ifu}a${amp}cmbf.fits
+mv out2.fits i${ifu}a${amp}cmsf.fits
+
+ls *i${ifu}a${amp}wtr.fits > list
+rm -f out1.fits out2.fits
+~gebhardt/bin/imcmbbs
+mv out1.fits i${ifu}a${amp}cbwt.fits
+mv out2.fits i${ifu}a${amp}cswt.fits
+
+ls *i${ifu}a${amp}xtr.fits > list
+rm -f out1.fits out2.fits
+~gebhardt/bin/getxtr << eof
+/null
+eof
+mv out1.fits i${ifu}a${amp}cbxt.fits
+mv out2.fits i${ifu}a${amp}csxt.fits
+
+ls *i${ifu}a${amp}wavo.dat > list
+rm -f wave.out
+~gebhardt/bin/getwavo
+mv wave.out i${ifu}a${amp}wave.dat

@@ -1,0 +1,6 @@
+ifu=$1
+amp=$2
+ls d*i${ifu}a${amp}ata.dat > inlist
+rm -f ata.out
+~gebhardt/bin/getata
+mv ata.out i${ifu}a${amp}ata.dat

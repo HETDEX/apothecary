@@ -6,7 +6,6 @@ This is based on the HETDEX Calibration proceedure (see notes_calibration.odt) b
   and is self-contained (e.g. this script runs the full calibration with automated checks along the way)
 
 
-
 This follows the same basic layout as ../single_shot_reducetion/reduce_shot.py
 """
 
@@ -104,7 +103,8 @@ HET_by_date = "/work/03946/hetdex/maverick/"
 karlgettar = "/work/00115/gebhardt/maverick/gettar/"
 karlfplane = "/work/00115/gebhardt/maverick/fplane/"
 karlhome = "/home1/00115/gebhardt"
-tarlist_home = "/work/00115/gebhardt/lib_calib/tarlists/"
+#tarlist_home = "/work/00115/gebhardt/lib_calib/tarlists/"
+tarlist_home = karlgettar #"/work/00115/gebhardt/gettar/tarlists/"
 hetdex_projects_path = "/scratch/projects/hetdex/"
 
 hetdex_api_path = os.path.dirname(importlib.util.find_spec("hetdex_api").origin)
@@ -172,6 +172,12 @@ class Config:
     ifu_fqid = None
     log_id = None
 
+    yyyymm_fnbase = None #will be the actual YYYYMM for < 202408 and other values after (202488, 202500, 202600, etc)
+    rtx_filelist = []
+    runx_filelist = []
+    shotnum = [] #list of strings of 3 digit shot numbers
+    day = [] #list of days (YYYYMMDD) that match up with the shotnum
+
 
 ########################################################################
 # Basic user input
@@ -200,11 +206,12 @@ if "-help" in args:
 
     --help : display this help text and exit
 
-    --ifuslot <str(3)> : work with this IFUSlot. If there is only one matching IFU for the selected date range
-                         this is sufficent
+    # --ifuslot <str(3)> : work with this IFUSlot. If there is only one matching IFU for the selected date range
+    #                      this is sufficent
                          
                          
-    --multi <str(11)> : work with this fully qualified IFU as: <spec>_<slot>_<ifuid>
+    --ifustr <str(11)> : work with this fully qualified IFU string as: <specid>_<ifuslot>_<ifuid>
+                         note: the normal shorthand is to refer to the ifuslot (2nd value)
                          
     --nolimit : if present, overrides the in-code limiting of simultaneous active shots per node
 
@@ -301,45 +308,57 @@ if "-special" in args:
     args.remove("-special")
     print(f"*** --special condition invoked. Condition = {cfg.special}")
 
-if "-ifuslot" in args:
-    i = args.index("-ifuslot")
-    try:
-        cfg.ifuslot = args[i + 1]
-        if len(cfg.ifuslot) != 3 and 1 <= int(cfg.ifuslot) <= 999:
-            print(f"Invalid -ifuslot specified: {args[i + 1]}")
-            exit(-1)
-    except:
-        print(f"Invalid -ifuslot specified: {args[i + 1]}")
-        exit(-1)
+# this would usually be enough to figure out the whole IFU string, but let's keep it explicit
+#
+# if "-ifuslot" in args:
+#     i = args.index("-ifuslot")
+#     try:
+#         cfg.ifuslot = args[i + 1]
+#         if len(cfg.ifuslot) != 3 and 1 <= int(cfg.ifuslot) <= 999:
+#             print(f"Invalid -ifuslot specified: {args[i + 1]}")
+#             exit(-1)
+#     except:
+#         print(f"Invalid -ifuslot specified: {args[i + 1]}")
+#         exit(-1)
+#
+#     del args[i + 1]  # args.pop(0) #remove THIS file
+#     args.remove("-ifuslot")
 
-    del args[i + 1]  # args.pop(0) #remove THIS file
-    args.remove("-ifuslot")
-
-if "-multi" in args:
-    i = args.index("-multi")
+if "-ifustr" in args:
+    i = args.index("-ifustr")
     try:
         ifustr = args[i + 1]
         if len(ifustr) != 11:
-            print(f"Invalid -multi specified: {args[i + 1]}")
-            exit(-1)
+            okay = False
+            #sanity check, could be a copy past with "multi_" prefixed
+            if 17 <= len(ifustr) <= 20:
+                toks = ifustr.split("_")
+                if toks[0].lower() == "multi":
+                    if len(toks) >= 5: #has an amp at the end if 5 or not if 4
+                        ifustr = "_".join(toks[1:4])
+                        okay = True
+
+            if not okay:
+                print(f"Invalid -ifustr specified: {args[i + 1]}")
+                exit(-1)
 
         #spec slot ifuid
         toks = ifustr.split("_")
         if len(toks) != 3:
-            print(f"Invalid -multi specified: {args[i + 1]}")
+            print(f"Invalid -ifustr specified: {args[i + 1]}")
             exit(-1)
 
         cfg.specid = str(int(toks[0])).zfill(3)
         cfg.ifuslot = str(int(toks[1])).zfill(3)
         cfg.ifuid = str(int(toks[2])).zfill(3)
-        cfg.ifu_fqid = f"{cfg.specid}_{cfg.ifuslot}_{cfg.ifuid}"
+        cfg.ifu_fqid = f"{cfg.specid}_{cfg.ifuslot}_{cfg.ifuid}" #should be the same as the input string
 
     except:
-        print(f"Invalid -multi specified: {args[i + 1]}")
+        print(f"Invalid -ifustr specified: {args[i + 1]}")
         exit(-1)
 
     del args[i + 1]  # args.pop(0) #remove THIS file
-    args.remove("-multi")
+    args.remove("-ifustr")
 
 if "-yyyymm" in args:
     i = args.index("-yyyymm")
@@ -440,6 +459,38 @@ def precheck(cfg):
     return 0
 
 
+def get_calibration_tarlist(cfg):
+    """
+    get the tar list for calibration
+    depends on the ifuslot and the yyyymm
+
+    e.g. rt1.202600 rt1b.202600  rt1c.202600 rt2.202600 rt3.202600 rta.202600
+    e.g and runt202600 and runs202600
+
+    :param cfg:
+    :return:
+    """
+
+    rt = []
+    run = []
+    fnbase = None
+    try:
+        if cfg.yyyymm <= "202407": #201701 to 202407
+            fnbase = f"{cfg.yyyymm}"
+        elif cfg.yyyymm <= "202501":
+            fnbase = "202488" #should be 2024xx??
+        else: #2025, 2026, etc
+            fnbase = f"{cfg.yyyymm[0:4]}00"
+
+        rt = sorted(glob.glob(os.path.join(karlgettar,f"rt*.{fnbase}")))
+        run = sorted(glob.glob(os.path.join(karlgettar, f"run?{fnbase}")))  #runt and runs
+
+    except:
+        print(f"Exception in get_calibration_tarlist(): {traceback.format_exc()}")
+
+    return fnbase, rt, run
+
+
 def initial_setup(cfg):
     """
     copy from script repo(s)
@@ -451,21 +502,22 @@ def initial_setup(cfg):
     :return:
     """
 
-
-    #todo: get the unique ifu_fqid and veryify the yyyymm
-
     #check that the tarlist exists
     tarlist_fqfn = os.path.join(tarlist_home,f"{cfg.yyyymm}tarlist")
     if not os.path.exists(tarlist_fqfn):
         print(f"FATAL. Could not find tarlist: {tarlist_fqfn}")
         return -1
 
+    #setup temporary het_raw storage
+    if not os.path.exists(f"{cfg.cwd_orig}/het_raw"):
+        os.makedirs(f"{cfg.cwd_orig}/het_raw", exist_ok=True)
+
     #setup local outputdir
     cfg.lib_calib = os.path.join(os.getcwd(),f"lib_calib/{cfg.yyyymm}")
     os.makedirs(cfg.lib_calib,exist_ok=True)
 #>>>> HERE <<<<
 
-    workdir = os.path.join(WorkDirRoot,f"cal{cfg.yyyymm}")
+    workdir = os.path.join(WorkDirRoot,f"cal{cfg.yyyymm}/multi_{cfg.ifu_fqid}")
 
     resume = False #notice: cfg.resume MAY be true and this can still be false if the directory does not already exist
     if os.path.exists(workdir):
@@ -473,10 +525,9 @@ def initial_setup(cfg):
             print(f"[{cfg.log_id}] Resuming. Leave directory intact: {workdir}")
             resume = True
         elif cfg.overwrite:
-            #todo: need to be careful and ONLY remove for the IFU + YYYYMM
             print(f"[{cfg.log_id}] Overwriting directory {workdir} ... ")
             shutil.rmtree(workdir)
-        else: #todo: actually need to check for the IFU UNDER this diretory, not just the directory itself
+        else:
             print(f"[{cfg.log_id}] Calibration directory already exists here! {workdir}")
             print(f"[{cfg.log_id}] Please include --resume or --overwrite to make intention clear.")
             print(f"[{cfg.log_id}] Or is this a repeated SLURM task?")
@@ -539,7 +590,7 @@ def initial_setup(cfg):
 
 
     os.chdir(workdir)
-    cfg.cwd = os.getcwd() #now under the sci<shot> directory
+    cfg.cwd = os.getcwd() #now under the  cal<yyyymm>/ifu_xxx directory
 
 
     if not resume or cfg.update_local_repo:
@@ -553,7 +604,47 @@ def initial_setup(cfg):
             # lock auto releases
 
         print(f"Copying source code to working directory {cfg.cwd}...")
+
         ## if ANY of this fails it is fatal
+        #for rstep1
+        shutil.copy2(os.path.join(cfg.scriptdir, "run1t"), ".") #needs path edits, cp call edits
+        system_command(cfg, f"sed -i s#/runtChangeMe#runt{cfg.yyyymm}# run1t")
+        system_command(cfg, f"sed -i s#scriptdir_ChangeMe#{cfg.cwd}/# run1t")
+        system_command(cfg, f"sed -i s#het_raw_ChangeMe#{cfg.cwd_orig}/het_raw# run1t")
+
+
+
+        shutil.copy2(os.path.join(cfg.scriptdir, "rback"), ".") #needs path edits, cp call edits
+        #rj is built during rstep1
+        shutil.copy2(os.path.join(cfg.scriptdir, "rbfits"), ".") #may be fine as is
+        shutil.copy2(os.path.join(cfg.scriptdir, "rbfits0"), ".") #may be fine as is
+        shutil.copy2(os.path.join(cfg.scriptdir, "rimarb"), ".") #may be fine as is
+        shutil.copy2(os.path.join(cfg.scriptdir, "rback1"), ".") #may need path edits , cp call edits ?
+        shutil.copy2(os.path.join(cfg.scriptdir, "sun_use.dat"), ".") #fine as is
+
+
+        #for rstep2
+        shutil.copy2(os.path.join(cfg.scriptdir, "rgetcal0"), ".") #need to edit cp calls
+        shutil.copy2(os.path.join(cfg.scriptdir, "rgetcmb1"), ".") #may be okay as is
+        shutil.copy2(os.path.join(cfg.scriptdir, "rgetcmb"), ".") #may be okay as is
+
+
+        #rstep3 is a move ( mv i* ../../lib_calib/<YYYYMM>/ )
+        # and then a manual copy as the hetdex user to:
+        # copy ../../lib_calib/<YYYYMM>/*     to   /scratch/projects/hetdex/lib_calib/<YYYYMM>
+
+
+        #for rstep4
+        shutil.copy2(os.path.join(cfg.scriptdir, "rgetcal1"), ".")
+
+        #for rstep5 (note in the original method, rstep5 is automatically appended to rstep4)
+        shutil.copy2(os.path.join(cfg.scriptdir, "rgetcal2"), ".")
+
+        #rstep6 and rstep7 and rstep8 is a move and several copies
+        # mv i* ../../lib_calib/<YYYYMM>/
+        # as hetdex copy ../../lib_calib/<YYYYMM>/*     to   /scratch/projects/hetdex/lib_calib/<YYYYMM>
+        # as hetdex copy ../../lib_calib/<YYYYMM>/*     to   /corral/utexas/Hobby-Eberly-Telesco/lib_calib/<YYYYMM>
+
 
         #shutil.copy2(os.path.join(cfg.scriptdir, "science_reductions", "rsetups"),".") #no, this function is its equivalent
 
@@ -1094,6 +1185,145 @@ def post_clean(cfg):
 
 
 
+def get_month_shot_info(cfg):
+    """
+    get the list of qualified shots for this YYYYMM
+
+    these come from the gettar directory
+    the rt*.YYYYMM files (or 202500, etc)
+    and the runt<YYYYMM> files
+
+    :param cfg:
+    :return:
+    """
+
+    shotnum = []
+    day = []
+    try:
+
+        fnbase, rt, run = get_calibration_tarlist(cfg)
+
+        cfg.rtx_filelist  = rt
+        cfg.runx_filelist = run
+        cfg.yyyymm_fnbase = fnbase
+
+        #need rt1.YYYYMM
+        rt1 = os.path.join(karlgettar,f"rt1.{fnbase}")
+        if rt1 in rt:
+            with open(rt1,"r") as f:
+                #example line:  run1t 20231018 003 exp01 202310
+                for line in f:
+                    if f"run1t {cfg.yyyymm}" in line:
+                        shotnum.append(line.split()[2])
+                        day.append(line.split()[1])
+
+        else: #problem
+            print(f"[{cfg.log_id}] rstep1 fail. Could not find {rt1}")
+    except:
+        print(f"Exception in get_month_shot_info(). {traceback.format_exc()}")
+
+    return shotnum, day
+
+
+
+def copy_shottar(cfg):
+    """
+
+    copy from HETRaw_archive the <date>.tarfiles that correspond to what we need, untar and clean up
+
+    :param cfg:
+    :return:
+    """
+
+    rc = 0
+    cwd = os.getcwd()
+    try:
+
+        #get the tarfile list
+        tarfns = glob.glob(os.path.join(HETRaw_archive,f"{cfg.yyyymm}??.tar"))
+
+        if safe_cd(f"{cfg.cwd_orig}/het_raw"):
+            #copy each of them
+            for i,fn in enumerate(tarfns):
+                #might already exist if another IFU effort already has it
+                if os.path.exists(os.path.basename(fn)):
+                    cmd = "tar -xf {os.path.basename(fn)}" #just untar ...
+                    #this, too, might be unnecssary, but we don't know if all the sub-tar files are still here
+                    #todo: can be smarter and check the top tar file contents and see if the sub tar files are
+                    #  already untarred
+                    log_stmt = f"[{cfg.log_id}] untarring {i+1} of {len(tarfns)}: {fn} ..."
+                else:
+                    log_stmt = f"[{cfg.log_id}] copying and untarring {i+1} of {len(tarfns)}: {fn} ..."
+                    #shutil.copy2(fn, os.path.join(cfg.cwd_orig,"het_raw"))
+                    cmd = f"cp {fn} . && tar -xf {os.path.basename(fn)}"
+                    # don't delete the tar file, might want it for subsequent IFU calls && rm {os.path.basename(fn)}"
+
+                #if copying or untarring, either way, this neds to be protected
+
+                lockfn = os.path.basename(fn) + ".lock"
+                lock = FileLock(lockfn)
+                with lock:
+                    print(log_stmt)
+                    system_command(cfg,cmd)
+        else:
+            #this is a problem
+            print(f"[{cfg.log_id}] temp het_raw location does not exist. Fatal.")
+            rc = -1
+
+    except:
+        print(f"Exception in get_month_shot_info(). {traceback.format_exc()}")
+
+    os.chdir(cwd)
+    return rc
+
+def rstep1(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+
+    rc = 0
+    try:
+        # example run1t 20231002 002 exp01 202310
+        #         run1t <YYYYMMDD> <shotid> exp01 <YYYYMM>
+
+        shotnum, day = get_month_shot_info(cfg)
+        cfg.shotnum = shotnum
+        cfg.day = day
+        if len(shotnum) == 0: #this is fatal
+            print(f"[{cfg.log_id}] rstep1  Could not get shotnumbers. Fatal")
+            rc = -1
+
+        #now set up the run1t calls
+        #this would have been the 3 per line rt1.YYYYMM_1.run
+        runfile = f"rt1.{cfg.yyyymm}_1.run"
+        with open(runfile,"w") as f:
+            for s,d in zip(shotnum,day):
+                f.write(f"run1t {d} {s} exp01 {cfg.yyyymm} \n")
+
+
+
+        #todo: need to update run1t paths, etc (actually move this to earlier in setup, if we have enough info)
+
+        #build the runt<YYYYMM> input
+        with open(f"runt{cfg.yyyymm}","w") as f:
+            for s, d in zip(shotnum, day):
+                f.write(f"rback {d} {s} exp01 {cfg.ifuid} {cfg.specid} {cfg.yyyymm} 0 \n")
+
+        #get the shot tar files and extract them
+        rc = copy_shottar(cfg)
+
+        #now, we run it
+        if rc >= 0:
+            print("todo: call the runfile here")
+            system_command(cfg,f"source ./{runfile}")
+
+
+    except:
+        print(f"Exception in rstep1(). {traceback.format_exc()}")
+
+    return rc
 
 ########################################################################
 ########################################################################
@@ -1128,7 +1358,8 @@ rc = initial_setup(cfg)
 if rc < 0:
     Quit(cfg,rc,"Could not complete initial setup.",write_status=False)
 
-rc = node_setup(cfg)
+print("todo: node_setup")
+#rc = node_setup(cfg)
 
 if cfg.special == 1:
     print("*** TODO Special Handling? ***")
@@ -1144,7 +1375,8 @@ print(f"[{cfg.log_id}] Logging redirected to: {cfg.cwd}/{cfg.file_stdout.name}")
 
 
 # get the progress state. Useful if resuming (implied)
-dtprog = progress_init(cfg)
+print("todo: progress_init")
+#dtprog = progress_init(cfg)
 
 
 #begin
@@ -1154,3 +1386,7 @@ with open("status.run", "w") as f:
 ###########
 # step1
 ###########
+
+rc = rstep1(cfg)
+if rc < 0:
+    Quit(cfg,rc,"Could not complete rstep1.",write_status=False)
