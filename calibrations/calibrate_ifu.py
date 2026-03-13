@@ -96,8 +96,8 @@ WorkDirRoot = "./"
 red1path = None # if None, will use the local (cwd) as the basepath, otherwise user can edit and specify one here
                 # "/scratch/03261/polonius/red1/reductions/"
 
-HETRaw_archive = "/corral-repl/utexas/Hobby-Eberly-Telesco/het_raw/"
-#HETDEXSurvey = "/corral-repl/utexas/Hobby-Eberly-Telesco/hdr5/survey/survey_hdr5.h5"
+HETRaw_archive = "/corral/utexas/Hobby-Eberly-Telesco/het_raw/"
+#HETDEXSurvey = "/corral/utexas/Hobby-Eberly-Telesco/hdr5/survey/survey_hdr5.h5"
 HETDEXSurvey = "/scratch/projects/hetdex/hdr5/survey/survey_hdr5.h5"
 HET_by_date = "/work/03946/hetdex/maverick/"
 karlgettar = "/work/00115/gebhardt/maverick/gettar/"
@@ -1226,7 +1226,7 @@ def get_month_shot_info(cfg):
 
 
 
-def copy_shottar(cfg):
+def fetch_virus_tar(cfg):
     """
 
     copy from HETRaw_archive the <date>.tarfiles that correspond to what we need, untar and clean up
@@ -1239,39 +1239,129 @@ def copy_shottar(cfg):
     cwd = os.getcwd()
     try:
 
-        #get the tarfile list
-        tarfns = glob.glob(os.path.join(HETRaw_archive,f"{cfg.yyyymm}??.tar"))
+        one_at_a_time = True
+        cmds = []
+        log_stmts = []
+        done_checks = []
+
+        #example, extract specific file to specific location
+        #tar -xf /corral/utexas/Hobby-Eberly-Telesco/het_raw/20230914.tar  20230914/virus/virus0000013.tar  -C ./20230914/virus/
 
         if safe_cd(f"{cfg.cwd_orig}/het_raw"):
             #copy each of them
-            for i,fn in enumerate(tarfns):
-                #might already exist if another IFU effort already has it
-                if os.path.exists(os.path.basename(fn)):
-                    cmd = "tar -xf {os.path.basename(fn)}" #just untar ...
-                    #this, too, might be unnecssary, but we don't know if all the sub-tar files are still here
-                    #todo: can be smarter and check the top tar file contents and see if the sub tar files are
-                    #  already untarred
-                    log_stmt = f"[{cfg.log_id}] untarring {i+1} of {len(tarfns)}: {fn} ..."
+
+            lockfn = f"mutex_{cfg.yyyymm}.lock"
+            lock = FileLock(lockfn)
+            with lock:
+                #build up a list of commands to execute (optional copies, untars and a touch do indicate it is done)
+                current_date = "19700101"
+                cmd = ""
+                for i in range(len(cfg.shotnum)):
+                    #these are in date order
+                    #if the files we expect are already there for this shot, skip and move on to the next
+                    #expect to find <path>/<date>/virus/virus0000{shot}
+                    expected_file = f"{cfg.cwd_orig}/het_raw/{cfg.day[i]}/virus/virus{str(cfg.shotnum[i]).zfill(7)}.tar"
+                    if os.path.exists(expected_file):
+                        print(f"[{cfg.log_id}] already copied file {i+1} of {len(cfg.shotnum)}: {expected_file}")
+                        continue
+
+                    #otherwise, extract the one file we want
+                    fn = os.path.join(HETRaw_archive, f"{cfg.day[i]}.tar")
+                    subtar_path = f"{cfg.day[i]}/virus/virus{str(cfg.shotnum[i]).zfill(7)}.tar"
+                    output_path = f"./{cfg.day[i]}/virus/"
+
+                    if one_at_a_time:
+                        cmds.append(f"tar -xf {fn} {subtar_path} -C {output_path}")
+                        log_stmts.append(f"[{cfg.log_id}] untarring {i + 1} of {len(cfg.shotnum)}: {fn}/{subtar_path} ...")
+                    else: #all at once in batch
+                        #if this is a new date OR the last iteration, write out the current command
+                        if current_date != cfg.day[i]:
+                            if len(cmd) != 0: #append the current command as a background task
+                                cmd += " &"
+                                cmds.append(cmd)
+                                cmd = ""
+                            #otherwise this is just the first comamnd
+                            #start a new command
+                            current_date = cfg.day[i]
+                            cmd = f"tar -xf {fn} {subtar_path} -C {output_path} && " \
+                                   f"touch {os.path.basename(fn)}_virus{str(cfg.shotnum[i]).zfill(7)}.done"
+                            done_checks.append(f"{os.path.basename(fn)}_virus{str(cfg.shotnum[i]).zfill(7)}.done")
+                        else:
+                            cmd += f" ; tar -xf {fn} {subtar_path} -C {output_path} && " \
+                                   f"touch {os.path.basename(fn)}_virus{str(cfg.shotnum[i]).zfill(7)}.done"
+                            done_checks.append(f"{os.path.basename(fn)}_virus{str(cfg.shotnum[i]).zfill(7)}.done")
+
+                #add the last command string chain, if needed
+                if not one_at_a_time and len(cmd) > 0:
+                    cmd += " &"
+                    cmds.append(cmd)
+
+
+                #build out the shell script and run
+                if len(cmds) > 0:
+                    if one_at_a_time:
+                        print(f"[{cfg.log_id}] untar ({len(cmds)}), one at a time ... ",flush=True)
+                        for log_stmt, cmd in zip(log_stmts,cmds):
+                            print(log_stmt,flush=True)
+                            system_command(cfg,cmd)
+
+                    else: #all at once
+                        with open(f"r{cfg.yyyymm}", "w") as f:
+                            for cmd in cmds:
+                                f.write(f"{cmd}\n")
+
+                        done = False
+                        ct = 10
+                        while not done:
+                            if os.path.exists(f"./r{cfg.yyyymm}"):
+                                done = True
+                            else:
+                                ct -= 1
+                                if ct > 0:
+                                    time.sleep(1.0)
+                                else:
+                                    # this is a problem
+                                    print(f"[{cfg.log_id}] Fatal. Cannot find tar fetch script r{cfg.yyyymm}",flush=True)
+                                    done = True
+                                    rc = -1
+
+                        if rc >= 0:
+                            system_command(cfg, f"chmod 755 r{cfg.yyyymm}")
+                            system_command(cfg, f"./r{cfg.yyyymm}")
+                        else:
+                            return rc
+
+                        done = False
+                        while not done:
+                            time.sleep(30.0)
+                            for done_fn in done_checks:
+                                if not os.path.exists(done_fn):
+                                    break
+                                done = True  # all accounted
+
+                        # now clean up
+                        for done_fn in done_checks:
+                            try:
+                                os.remove(done_fn)
+                            except:
+                                print(f"[{cfg.log_id}] Could not remove {done_fn}",flush=True)
+
+                        try:
+                            os.remove(f"r{cfg.yyyymm}")
+                        except:
+                            print(f"[{cfg.log_id}] Could not remove {cfg.yyyymm}",flush=True)
+
                 else:
-                    log_stmt = f"[{cfg.log_id}] copying and untarring {i+1} of {len(tarfns)}: {fn} ..."
-                    #shutil.copy2(fn, os.path.join(cfg.cwd_orig,"het_raw"))
-                    cmd = f"cp {fn} . && tar -xf {os.path.basename(fn)}"
-                    # don't delete the tar file, might want it for subsequent IFU calls && rm {os.path.basename(fn)}"
+                    print(f"[{cfg.log_id}] No extra untarring to run.",flush=True)
 
-                #if copying or untarring, either way, this neds to be protected
-
-                lockfn = os.path.basename(fn) + ".lock"
-                lock = FileLock(lockfn)
-                with lock:
-                    print(log_stmt)
-                    system_command(cfg,cmd)
+            #end lock
         else:
             #this is a problem
-            print(f"[{cfg.log_id}] temp het_raw location does not exist. Fatal.")
+            print(f"[{cfg.log_id}] temp het_raw location does not exist. Fatal.",flush=True)
             rc = -1
 
     except:
-        print(f"Exception in get_month_shot_info(). {traceback.format_exc()}")
+        print(f"Exception in fetch_virus_tar(). {traceback.format_exc()}")
 
     os.chdir(cwd)
     return rc
@@ -1312,11 +1402,10 @@ def rstep1(cfg):
                 f.write(f"rback {d} {s} exp01 {cfg.ifuid} {cfg.specid} {cfg.yyyymm} 0 \n")
 
         #get the shot tar files and extract them
-        rc = copy_shottar(cfg)
+        rc = fetch_virus_tar(cfg)
 
         #now, we run it
         if rc >= 0:
-            print("todo: call the runfile here")
             system_command(cfg,f"source ./{runfile}")
 
 
