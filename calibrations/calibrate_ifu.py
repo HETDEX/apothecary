@@ -1417,8 +1417,12 @@ def rstep3(cfg):
 
     rc = 0
     try:
-        #just one call (only 1 IFU)
-        print(f"todo: figure out what I want to do for rstep3 move and copies")
+
+        print(f"rstep3, mv i* to local lib_callib")
+        system_command(cfg,f"mv i* ../../lib_calib/{cfg.yyyymm}")
+
+        print(f"todo: figure out what I want to do for rstep3 copy to /scratch/projects/hetdex/lib_calib/YYYYMM")
+
     except:
         print(f"Exception in rstep3(). {traceback.format_exc()}")
 
