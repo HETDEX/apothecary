@@ -13,11 +13,11 @@ mkdir -p d${date}s${shot}${exp}
 cd d${date}s${shot}${exp}
 mkdir -p d${date}s${shot}${exp}i${ifu}
 cd d${date}s${shot}${exp}i${ifu}
-cp /work/03261/polonius/hetdex/calibrations/calscripts/rbfits .
-cp /work/03261/polonius/hetdex/calibrations/calscripts/rbfits0 .
-cp /work/03261/polonius/hetdex/calibrations/calscripts/rimarb .
-cp /work/03261/polonius/hetdex/calibrations/calscripts/rback1 .
-cp /work/03261/polonius/hetdex/calibrations/calscripts/sun_use.dat .
+cp scriptdir_ChangeMe/rbfits .
+cp scriptdir_ChangeMe/rbfits0 .
+cp scriptdir_ChangeMe/rimarb .
+cp scriptdir_ChangeMe/rback1 .
+cp scriptdir_ChangeMe/sun_use.dat .
 echo ${mth} ${type} > vred.in
 rback1 $1 $2 $3 $4 $5 $6 LL $mthd
 rback1 $1 $2 $3 $4 $5 $6 LU $mthd

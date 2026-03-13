@@ -615,6 +615,7 @@ def initial_setup(cfg):
 
 
         shutil.copy2(os.path.join(cfg.scriptdir, "rback"), ".") #needs path edits, cp call edits
+        system_command(cfg, f"sed -i s#scriptdir_ChangeMe#{cfg.cwd}# rback")
         #rj is built during rstep1
         shutil.copy2(os.path.join(cfg.scriptdir, "rbfits"), ".")
         system_command(cfg, f"sed -i s#het_raw_ChangeMe#{cfg.cwd_orig}/het_raw# rbfits")

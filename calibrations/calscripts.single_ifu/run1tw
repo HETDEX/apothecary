@@ -13,11 +13,10 @@ cd /tmp
 mkdir -p d${date}s${shot}${exp}
 cd d${date}s${shot}${exp}
 mkdir -p ${date}v${shot}${exp}
-#cp /work/03946/hetdex/maverick/${date}/virus/virus0000${shot}.tar .
-cp /scratch/03261/polonius/het_raw/${date}/virus/virus0000${shot}.tar .
+cp /het_raw_ChangeMe/${date}/virus/virus0000${shot}.tar .
 cp ${ddir}/rj .
 cp ${ddir}/rback .
-scriptdir="/work/03261/polonius/hetdex/calibrations/calscripts/"
+scriptdir="scriptdir_ChangeMe"
 cp ${scriptdir}rbfits .
 cp ${scriptdir}rbfits0 .
 cp ${scriptdir}rimarb .
