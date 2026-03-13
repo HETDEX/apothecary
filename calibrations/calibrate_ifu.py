@@ -1016,7 +1016,7 @@ def progress_init(cfg):
                   "rstep2": False,
                   "rstep3": False, #manual move /scratch/projects
                   "rstep4": False,
-                  #"rstep5": False, #actually part of step4 now
+                  "rstep5": False, #used to be part of rstep4
                   #"rstep6": False, #move to local lib_calib
                   #"rstep7": False, #manual move to /scratch/projects
                   #"rstep8": False, #manual move to /corral/
@@ -1428,6 +1428,64 @@ def rstep3(cfg):
 
     return rc
 
+
+def rstep4(cfg):
+    """
+
+    much like rstep1, same format of calls but for rgetcal1 instead of run1t
+
+    :param cfg:
+    :return:
+    """
+
+    rc = 0
+    try:
+        # example run1t 20231002 002 exp01 202310
+        #         run1t <YYYYMMDD> <shotid> exp01 <YYYYMM>
+
+        shotnum, day = get_month_shot_info(cfg)
+        cfg.shotnum = shotnum
+        cfg.day = day
+        if len(shotnum) == 0: #this is fatal
+            print(f"[{cfg.log_id}] rstep1  Could not get shotnumbers. Fatal")
+            rc = -1
+
+        #now set up the run1t calls
+        #this would have been the 2 per line rt2.YYYYMM_1.run
+        runfile = f"rt2.{cfg.yyyymm}_1.run"
+        with open(runfile,"w") as f:
+            for s,d in zip(shotnum,day):
+                f.write(f"rgetcal1 {d} {s} exp01 {cfg.yyyymm} \n")
+
+        #now, we run it
+        if rc >= 0:
+            system_command(cfg, f"chmod 755 {runfile}")
+            system_command(cfg,f"./{runfile}")
+
+
+    except:
+        print(f"Exception in rstep1(). {traceback.format_exc()}")
+
+    return rc
+
+def rstep5(cfg):
+    """
+
+    in the old way, this was appended to rstep4, here it is split back out
+
+    :param cfg:
+    :return:
+    """
+
+    rc = 0
+    try:
+        #just one call (only 1 IFU)
+        system_command(cfg,f"rgetcal2 {cfg.ifuslot} {cfg.yyyymm} {cfg.specid}")
+    except:
+        print(f"Exception in rstep5(). {traceback.format_exc()}")
+
+    return rc
+
 ########################################################################
 ########################################################################
 ########################################################################
@@ -1485,9 +1543,6 @@ dtprog = progress_init(cfg)
 with open("status.run", "w") as f:
     f.write(f"[{cfg.log_id}] running .... \n")
 
-###########
-# step1
-###########
 
 #todo: for rstep1 on vm-small can run 4 maybe 5 at a time. Around 6-8 GB RAM needed per
 # so could use mutex counting (like on reduce_shot.py), but need to be careful on the rt1.xxx_1.run calls since
@@ -1514,10 +1569,39 @@ else:
 
 if not dtprog["rstep3"]:
     rc = rstep3(cfg)
-
     if rc < 0:
         Quit(cfg, rc, "Could not complete rstep3.", write_status=False)
     else:
         progress_update(cfg, dtprog, "rstep3")
 else:
     print(f"[{cfg.log_id}] Skipping rstep3")
+
+
+if not dtprog["rstep4"]:
+    rc = rstep4(cfg)
+
+    if rc < 0:
+        Quit(cfg, rc, "Could not complete rstep4.", write_status=False)
+    else:
+        progress_update(cfg, dtprog, "rstep4")
+else:
+    print(f"[{cfg.log_id}] Skipping rstep4")
+
+
+if not dtprog["rstep5"]:
+    rc = rstep5(cfg)
+
+    if rc < 0:
+        Quit(cfg, rc, "Could not complete rstep5.", write_status=False)
+    else:
+        progress_update(cfg, dtprog, "rstep5")
+else:
+    print(f"[{cfg.log_id}] Skipping rstep5")
+
+##########
+# DONE
+##########
+
+post_clean(cfg)
+
+Quit(cfg, 0, f"Complete: {cfg.datevshot}")

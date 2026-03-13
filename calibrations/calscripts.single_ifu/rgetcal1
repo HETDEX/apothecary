@@ -5,7 +5,6 @@ mth=$4
 type=$5
 dir1=$(pwd)
 cd /tmp
-#cd tmp
 mkdir -p d${date}s${shot}${exp}
 cd d${date}s${shot}${exp}
 
