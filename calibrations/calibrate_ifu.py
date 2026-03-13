@@ -616,8 +616,10 @@ def initial_setup(cfg):
 
         shutil.copy2(os.path.join(cfg.scriptdir, "rback"), ".") #needs path edits, cp call edits
         #rj is built during rstep1
-        shutil.copy2(os.path.join(cfg.scriptdir, "rbfits"), ".") #may be fine as is
-        shutil.copy2(os.path.join(cfg.scriptdir, "rbfits0"), ".") #may be fine as is
+        shutil.copy2(os.path.join(cfg.scriptdir, "rbfits"), ".")
+        system_command(cfg, f"sed -i s#het_raw_ChangeMe#{cfg.cwd_orig}/het_raw# rbfits")
+        shutil.copy2(os.path.join(cfg.scriptdir, "rbfits0"), ".")
+        system_command(cfg, f"sed -i s#het_raw_ChangeMe#{cfg.cwd_orig}/het_raw# rbfits0")
         shutil.copy2(os.path.join(cfg.scriptdir, "rimarb"), ".") #may be fine as is
         shutil.copy2(os.path.join(cfg.scriptdir, "rback1"), ".") #may need path edits , cp call edits ?
         shutil.copy2(os.path.join(cfg.scriptdir, "sun_use.dat"), ".") #fine as is
@@ -1393,20 +1395,21 @@ def rstep1(cfg):
                 f.write(f"run1t {d} {s} exp01 {cfg.yyyymm} \n")
 
 
-
-        #todo: need to update run1t paths, etc (actually move this to earlier in setup, if we have enough info)
-
         #build the runt<YYYYMM> input
         with open(f"runt{cfg.yyyymm}","w") as f:
+            ct = 0
+            tot = len(day)
             for s, d in zip(shotnum, day):
-                f.write(f"rback {d} {s} exp01 {cfg.ifuslot} {cfg.specid} {cfg.yyyymm} 0 \n")
+                ct += 1
+                f.write(f"echo {ct} / {tot} ; rback {d} {s} exp01 {cfg.ifuslot} {cfg.specid} {cfg.yyyymm} 0 \n")
 
         #get the shot tar files and extract them
         rc = fetch_virus_tar(cfg)
 
         #now, we run it
         if rc >= 0:
-            system_command(cfg,f"source ./{runfile}")
+            system_command(cfg, f"chmod 755 {runfile}")
+            system_command(cfg,f"./{runfile}")
 
 
     except:

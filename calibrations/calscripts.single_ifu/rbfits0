@@ -10,6 +10,5 @@ mv virus0000*/*/*/2*fits in.fits
 rm -rf virus0000*
 else
 echo "not tarred yet"
-#cp /work/03946/hetdex/maverick/${file3} in.fits
-cp /scratch/03261/polonius/het_raw/${file3} in.fits
+cp /het_raw_ChangeMe/${file3} in.fits
 fi
