@@ -1399,7 +1399,7 @@ def rstep1(cfg):
         #build the runt<YYYYMM> input
         with open(f"runt{cfg.yyyymm}","w") as f:
             for s, d in zip(shotnum, day):
-                f.write(f"rback {d} {s} exp01 {cfg.ifuid} {cfg.specid} {cfg.yyyymm} 0 \n")
+                f.write(f"rback {d} {s} exp01 {cfg.ifuslot} {cfg.specid} {cfg.yyyymm} 0 \n")
 
         #get the shot tar files and extract them
         rc = fetch_virus_tar(cfg)
