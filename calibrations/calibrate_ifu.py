@@ -608,7 +608,7 @@ def initial_setup(cfg):
         ## if ANY of this fails it is fatal
         #for rstep1
         shutil.copy2(os.path.join(cfg.scriptdir, "run1t"), ".") #needs path edits, cp call edits
-        system_command(cfg, f"sed -i s#/runtChangeMe#runt{cfg.yyyymm}# run1t")
+        system_command(cfg, f"sed -i s#runtChangeMe#runt{cfg.yyyymm}# run1t")
         system_command(cfg, f"sed -i s#scriptdir_ChangeMe#{cfg.cwd}/# run1t")
         system_command(cfg, f"sed -i s#het_raw_ChangeMe#{cfg.cwd_orig}/het_raw# run1t")
 
