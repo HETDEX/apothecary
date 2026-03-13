@@ -1003,58 +1003,24 @@ def progress_init(cfg):
             #assume this was successful, but also check --resume
             if cfg.resume is False:
                 print("********** NOTICE **********")
-                print("Call did NOT specfiy --resume, but this reduction appears to be at least partially complete.")
+                print("Call did NOT specfiy --resume, but this calibration appears to be at least partially complete.")
                 print("Will attempt to resume (implied) at the last incomplete step ...")
                 print("****************************")
                 cfg.resume = True
 
-            if "s04f_analysis" not in dtprog.keys():
-                dtprog["s04f_analysis"] = False
-
-                #consistency check / force (if ANY under a step are False, then the top of the step becomes False (incomplete))
-            if "s04_make_shot" in dtprog.keys():
-                dtprog["s04_make_shot"] = dtprog["s04_make_shot"] and dtprog["s04a_get_ifucens"] and \
-                                                dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] and \
-                                                dtprog["s04e_amp_stats"] and dtprog["s04f_analysis"]
-            else:
-                dtprog["s04_make_shot"] = dtprog["s04_sky_subtraction"] and dtprog["s04a_get_ifucens"] and \
-                                                dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] and \
-                                                dtprog["s04e_amp_stats"] and dtprog["s04f_analysis"]
-                dtprog.pop("s04_sky_subtraction") #remove the old name
-                #ordering is now wrong, but, programatically, it does not matter
-                #should be rare as we move forward, so just noting that the progress.dat for this will be
-                #out of order and move on
-
-
-
-            dtprog["s05_detection"] = dtprog["s05_detection"] and dtprog["s05b_rdet_rf1"] and \
-                                            dtprog["s05c_rgetmax"] and dtprog["s05e_detection_hdf5"]
-
-            dtprog["s06_catalogs"] = dtprog["s06_catalogs"] and dtprog["s06b_fof"] and \
-                                            dtprog["s06c_diagnose"] and dtprog["s06d_elixer"] and dtprog["s06e_source_cat"]
     except:
         print(f"Exception in progress_init(). {traceback.format_exc()}")
 
     if dtprog is None:
-        dtprog = {"s01_run1s": False,
-                  "s02_vdrp": False,
-                  "s03_fluxcal": False,
-                  "s04_make_shot": False,
-                  "s04a_get_ifucens": False,
-                  "s04b_rfft": False,
-                  "s04c_rcal_all": False,
-                  "s04d_shot_h5": False,
-                  "s04e_amp_stats": False,
-                  "s04f_analysis": False,
-                  "s05_detection": False,
-                  "s05b_rdet_rf1": False,
-                  "s05c_rgetmax": False,
-                  "s05e_detection_hdf5": False,
-                  "s06_catalogs": False,
-                  "s06b_fof": False,
-                  "s06c_diagnose": False,
-                  "s06d_elixer": False,
-                  "s06e_source_cat": False, }
+        dtprog = {"rstep1": False,
+                  "rstep2": False,
+                  "rstep3": False, #manual move /scratch/projects
+                  "rstep4": False,
+                  #"rstep5": False, #actually part of step4 now
+                  #"rstep6": False, #move to local lib_calib
+                  #"rstep7": False, #manual move to /scratch/projects
+                  #"rstep8": False, #manual move to /corral/
+             }
 
         progress_update(cfg,dtprog) #write out the file, no updates yet
 
@@ -1418,6 +1384,46 @@ def rstep1(cfg):
 
     return rc
 
+
+
+def rstep2(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+
+    rc = 0
+    try:
+        #just one call (only 1 IFU)
+        system_command(cfg,f"rgetcal0 {cfg.ifuslot} {cfg.yyyymm} {cfg.specid}")
+    except:
+        print(f"Exception in rstep2(). {traceback.format_exc()}")
+
+    return rc
+
+
+def rstep3(cfg):
+    """
+
+    two parts
+    1)   mv i* ../../lib_calib/<YYYYMM>/.    (as local user)
+    2) also copy  to /scratch/projects/hetdex/lib_calib/<YYYYMM>  as hetdex user
+
+
+    :param cfg:
+    :return:
+    """
+
+    rc = 0
+    try:
+        #just one call (only 1 IFU)
+        print(f"todo: figure out what I want to do for rstep3 move and copies")
+    except:
+        print(f"Exception in rstep3(). {traceback.format_exc()}")
+
+    return rc
+
 ########################################################################
 ########################################################################
 ########################################################################
@@ -1468,8 +1474,7 @@ print(f"[{cfg.log_id}] Logging redirected to: {cfg.cwd}/{cfg.file_stdout.name}")
 
 
 # get the progress state. Useful if resuming (implied)
-print("todo: progress_init")
-#dtprog = progress_init(cfg)
+dtprog = progress_init(cfg)
 
 
 #begin
@@ -1480,6 +1485,35 @@ with open("status.run", "w") as f:
 # step1
 ###########
 
-rc = rstep1(cfg)
-if rc < 0:
-    Quit(cfg,rc,"Could not complete rstep1.",write_status=False)
+#todo: for rstep1 on vm-small can run 4 maybe 5 at a time. Around 6-8 GB RAM needed per
+# so could use mutex counting (like on reduce_shot.py), but need to be careful on the rt1.xxx_1.run calls since
+# those are in a shell script ... would have to change s|t each line in rt1.xxx_1.run is called from Python and
+# not from the rt1.xx_1.run file
+
+if not dtprog["rstep1"]:
+    rc = rstep1(cfg)
+    if rc < 0:
+        Quit(cfg,rc,"Could not complete rstep1.",write_status=False)
+    else:
+        progress_update(cfg, dtprog, "rstep1")
+else:
+    print(f"[{cfg.log_id}] Skipping rstep1")
+
+if not dtprog["rstep2"]:
+    rc = rstep2(cfg)
+    if rc < 0:
+        Quit(cfg, rc, "Could not complete rstep2.", write_status=False)
+    else:
+        progress_update(cfg, dtprog, "rstep2")
+else:
+    print(f"[{cfg.log_id}] Skipping rstep2")
+
+if not dtprog["rstep3"]:
+    rc = rstep3(cfg)
+
+    if rc < 0:
+        Quit(cfg, rc, "Could not complete rstep3.", write_status=False)
+    else:
+        progress_update(cfg, dtprog, "rstep3")
+else:
+    print(f"[{cfg.log_id}] Skipping rstep3")
