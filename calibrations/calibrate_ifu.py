@@ -1,6 +1,9 @@
 """
 
-Calibrate a single IFU for a given time period (typically over one calendar month)
+Update the Calibration a single IFU for a given time period (typically over one calendar month)
+
+!!! DOES NOT INCLUDE Amp to Amp (ata) or WAVELENGTH solutions, which require the full array of IFUs to calibrate !!!!
+!!! Therefore, this is ONLY to update fiber to fiber, fiber trace, etc that can be done on a single IFU !!!
 
 This is based on the HETDEX Calibration proceedure (see notes_calibration.odt) but operates on a single IFU
   and is self-contained (e.g. this script runs the full calibration with automated checks along the way)
@@ -192,6 +195,10 @@ cfg = Config()
 if "-help" in args:
     # do NOTHING else except print the help
     help = """
+    
+    !!! NOTICE !!!
+    !!! This DOES NOT INCLUDE Amp to Amp (ata) or WAVELENGTH solutions, which require the full array of IFUs to calibrate !!!
+    !!! Therefore, this is ONLY to update fiber to fiber, fiber trace, etc that can be done on a single IFU !!!
 
     usage: python reduce_shot.py <shot> [switches]
            where <shot> is YYYYMMDDSSS or YYYYMMDDvSSS
@@ -385,7 +392,6 @@ if len(args) > 0:
 #set a simple log identifier
 cfg.log_id = f"ifu{cfg.ifuslot}_{cfg.yyyymm}"
 
-# check datevshot ... can only be numeric or in datevshot format, but could be truncated
 print(f"[{cfg.log_id}] Initializing calibration ...")
 
 
@@ -756,7 +762,7 @@ def initial_setup(cfg):
 def node_setup(cfg): #,safelimit=0):
     """
 
-    extra stuff shared for datevshots on same node
+
 
     :param cfg:
    # :param safelimit: if positive, do NOT start until the active shot count is BELOW the safelimit
@@ -791,7 +797,7 @@ def node_setup(cfg): #,safelimit=0):
 
         else:
             with lock:
-                #create a sync directory and file to hold list of datevshot being used
+                #create a sync directory and file
                 #a bit later this will then be the count of simulataneous datevshots and used to tune the num of processes
 
                 os.makedirs(Node_basedir, exist_ok=True)
@@ -1034,66 +1040,9 @@ def write_summary(cfg):
     :param cfg:
     :return:
     """
-    orig_dir = os.getcwd()
-    try:
-        os.chdir(cfg.cwd)
-        h5 = tables.open_file(f"{cfg.ifu_fqid}.h5",mode="r")
-
-        with open("summary.txt","w") as f:
-            f.write(f"shot:\t\t{cfg.ifu_fqid}\n")
-            f.write(f"field:\t\t{h5.root.Shot.read(field='field')[0]}\n")
-            f.write(f"RA,Dec:\t\t{h5.root.Shot.read(field='ra')[0]}, {h5.root.Shot.read(field='dec')[0]}\n")
-            f.write(f"exptimes:\t{h5.root.Shot.read(field='exptime')[0]}\n")
-            dit_norms = h5.root.Shot.read(field="relflux_virus")[0]
-            f.write(f"relflux_virus:\t{dit_norms}\n")
-            try:
-                max_ditnorm = np.max(dit_norms) / np.min(dit_norms)
-                f.write(f"dither norm:\t{max_ditnorm:0.4f}\n")
-            except:
-                pass
-
-            waves = h5.root.Calibration.Throughput.throughput.read(field="wavelength")
-            tp = h5.root.Calibration.Throughput.throughput.read(field="throughput")
-            tp_at_w = np.interp(4600.0, waves, tp)
-            f.write(f"response_4540:\t{h5.root.Shot.read(field='response_4540')[0]:0.4f}\n")
-            f.write(f"interp  @4600:\t{tp_at_w:0.4f}\n")
-            f.write(f"fwhm_virus:\t{h5.root.Shot.read(field='fwhm_virus')[0]:0.4f}\n")
-
-            dx1 = h5.root.Shot.read(field="xditherpos")[0]
-            dy1 = h5.root.Shot.read(field="yditherpos")[0]
-            f.write(f"Dithers: \t({dx1[0]:0.4f},{dy1[0]:0.4f}) ({dx1[1]:0.4f},{dy1[1]:0.4f}) ({dx1[2]:0.4f},{dy1[2]:0.4f})\n")
-
-            try:
-                total = 0
-                with open(f"{cfg.cwd}/elixer/line.dets", "r") as f2:
-                    total = len(f2.readlines())
-
-                #outer file:
-                f.write(f"Line Dets:\t{total}\n")
-
-            except:
-                pass
-
-            try:
-                total = 0
-                with open(f"{cfg.cwd}/elixer/cont.dets", "r") as f2:
-                    total = len(f2.readlines())
-
-                # outer file:
-                f.write(f"Cont Dets:\t{total}\n")
-
-            except:
-                pass
-
-    except:
-        print(f"[{cfg.log_id}] Exception! trying to write summary file", traceback.format_exc())
-
-    try:
-        h5.close()
-    except:
-        pass
-
-    os.chdir(orig_dir)
+    print("*******************")
+    print("todo: write_summary")
+    print("*******************")
 
 
 def post_clean(cfg):
@@ -1418,10 +1367,17 @@ def rstep3(cfg):
     rc = 0
     try:
 
-        print(f"rstep3, mv i* to local lib_callib")
-        system_command(cfg,f"mv i* ../../lib_calib/{cfg.yyyymm}")
+        #print(f"rstep3, mv i* to local lib_callib")
 
-        print(f"todo: figure out what I want to do for rstep3 copy to /scratch/projects/hetdex/lib_calib/YYYYMM")
+        #we only want certain files ... and lets copy instead of move
+        #
+        #system_command(cfg,f"mv i* ../../lib_calib/{cfg.yyyymm}")
+
+        system_command(cfg, f"cp i*cbwt* ../../lib_calib/{cfg.yyyymm}")
+        system_command(cfg, f"cp i*cbxt* ../../lib_calib/{cfg.yyyymm}")
+        system_command(cfg, f"cp i*cbmf* ../../lib_calib/{cfg.yyyymm}")
+        system_command(cfg, f"cp i*cbmp* ../../lib_calib/{cfg.yyyymm}")
+        system_command(cfg, f"cp i*wave* ../../lib_calib/{cfg.yyyymm}")
 
     except:
         print(f"Exception in rstep3(). {traceback.format_exc()}")
@@ -1447,7 +1403,7 @@ def rstep4(cfg):
         cfg.shotnum = shotnum
         cfg.day = day
         if len(shotnum) == 0: #this is fatal
-            print(f"[{cfg.log_id}] rstep1  Could not get shotnumbers. Fatal")
+            print(f"[{cfg.log_id}] rstep4  Could not get shotnumbers. Fatal")
             rc = -1
 
         #now set up the run1t calls
@@ -1455,7 +1411,11 @@ def rstep4(cfg):
         runfile = f"rt2.{cfg.yyyymm}_1.run"
         with open(runfile,"w") as f:
             for s,d in zip(shotnum,day):
-                f.write(f"rgetcal1 {d} {s} exp01 {cfg.yyyymm} \n")
+                f.write(f"rgetcal1 {d} {s} exp01 {cfg.yyyymm} 1\n")
+                #last charater is 0 (new calibration) or 1 (read in a calibration)
+                #in this case, we want the 1 (the calibration bit was done in prior steps)
+
+        Quit(cfg,99,"*** TESTING *** \n early exit in rstep4, after create rt2.xxx_1.run")
 
         #now, we run it
         if rc >= 0:
@@ -1573,30 +1533,50 @@ if not dtprog["rstep3"]:
         Quit(cfg, rc, "Could not complete rstep3.", write_status=False)
     else:
         progress_update(cfg, dtprog, "rstep3")
+
+        print(f"*** User ***")
+        print(f"You now need to change to the 'hetdex' user and copy the contents of:  ")
+        print(f"    {cfg.cwd_orig}/lib_calib/{cfg.yyyymm} ")
+        print(f"    to")
+        print(f"    /scratch/projects/hetdex/lib_calib/{cfg.yyyymm}")
+        print(f"    and")
+        print(f"    /corral/utexas/Hobby-Eberly-Telesco/lib_calib/{cfg.yyyymm}")
+        print(f"\n")
+        print(f"This update to the calibration is done. The rest of the steps only apply for a FULL IFU array calibration.")
+        #print(f"You can then re-run calibrate_ifu.py BUT you must add --resume ")
+        #
+        #Quit(cfg, 0, f"[{cfg.log_id}] Partially Complete. Waiting user action.")
 else:
     print(f"[{cfg.log_id}] Skipping rstep3")
 
 
-if not dtprog["rstep4"]:
-    rc = rstep4(cfg)
 
-    if rc < 0:
-        Quit(cfg, rc, "Could not complete rstep4.", write_status=False)
-    else:
-        progress_update(cfg, dtprog, "rstep4")
-else:
-    print(f"[{cfg.log_id}] Skipping rstep4")
+#
+# !!! we may actually be done ... the next steps combine and check across ALL the IFUs
+#     (e.g. Amp to Amp (ata) stuff), which we CANNOT do since this is only for one IFU
+#
 
-
-if not dtprog["rstep5"]:
-    rc = rstep5(cfg)
-
-    if rc < 0:
-        Quit(cfg, rc, "Could not complete rstep5.", write_status=False)
-    else:
-        progress_update(cfg, dtprog, "rstep5")
-else:
-    print(f"[{cfg.log_id}] Skipping rstep5")
+#
+# if not dtprog["rstep4"]:
+#     rc = rstep4(cfg)
+#
+#     if rc < 0:
+#         Quit(cfg, rc, "Could not complete rstep4.", write_status=False)
+#     else:
+#         progress_update(cfg, dtprog, "rstep4")
+# else:
+#     print(f"[{cfg.log_id}] Skipping rstep4")
+#
+#
+# if not dtprog["rstep5"]:
+#     rc = rstep5(cfg)
+#
+#     if rc < 0:
+#         Quit(cfg, rc, "Could not complete rstep5.", write_status=False)
+#     else:
+#         progress_update(cfg, dtprog, "rstep5")
+# else:
+#     print(f"[{cfg.log_id}] Skipping rstep5")
 
 ##########
 # DONE
@@ -1604,4 +1584,4 @@ else:
 
 post_clean(cfg)
 
-Quit(cfg, 0, f"Complete: {cfg.datevshot}")
+Quit(cfg, 0, f"[{cfg.log_id}] Complete")

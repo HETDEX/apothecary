@@ -13,6 +13,7 @@ tar xf ${dir1}/d${date}s${shot}${exp}/*wav.tar
 
 rm -f out.fits
 ls d${date}s${shot}${exp}*1ds.fits > list
+#todo:  next line vred2.in .... do we need to specify just one IFU? might be a change to vred?
 echo ${mth} ${type} > vred2.in
 ~gebhardt/bin/vred2
 tar cf d${date}s${shot}${exp}_ata.tar d${date}s${shot}${exp}*ata.dat
