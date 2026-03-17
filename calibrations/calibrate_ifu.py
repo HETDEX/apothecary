@@ -9,6 +9,12 @@ This is based on the HETDEX Calibration proceedure (see notes_calibration.odt) b
   and is self-contained (e.g. this script runs the full calibration with automated checks along the way)
 
 
+MEMORY -- 4 simultaneous is okay on vm-small
+       -- up to 32 may be okay on normal
+
+RUNTIME -- about 1.25 hours (70 - 75 minutes) if tar files already untarred
+        -- about 2 - 2.5 hours if need to copy tar files
+
 This follows the same basic layout as ../single_shot_reducetion/reduce_shot.py
 """
 
@@ -509,10 +515,11 @@ def initial_setup(cfg):
     """
 
     #check that the tarlist exists
-    tarlist_fqfn = os.path.join(tarlist_home,f"{cfg.yyyymm}tarlist")
-    if not os.path.exists(tarlist_fqfn):
-        print(f"FATAL. Could not find tarlist: {tarlist_fqfn}")
-        return -1
+    # this is more complicated and is done later
+    # tarlist_fqfn = os.path.join(tarlist_home,f"{cfg.yyyymm}tarlist")
+    # if not os.path.exists(tarlist_fqfn):
+    #     print(f"FATAL. Could not find tarlist: {tarlist_fqfn}")
+    #     return -1
 
     #setup temporary het_raw storage
     if not os.path.exists(f"{cfg.cwd_orig}/het_raw"):
