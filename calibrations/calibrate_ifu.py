@@ -489,7 +489,7 @@ def get_calibration_tarlist(cfg):
     try:
         if cfg.yyyymm <= "202407": #201701 to 202407
             fnbase = f"{cfg.yyyymm}"
-        elif cfg.yyyymm < "202501":
+        elif cfg.yyyymm <= "202412":
             fnbase = "202488" #should be 2024xx??
         else: #2025, 2026, etc
             fnbase = f"{cfg.yyyymm[0:4]}00"
