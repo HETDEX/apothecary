@@ -106,6 +106,7 @@ red1path = None # if None, will use the local (cwd) as the basepath, otherwise u
                 # "/scratch/03261/polonius/red1/reductions/"
 
 HETRaw_archive = "/corral/utexas/Hobby-Eberly-Telesco/het_raw/"
+HETRaw_work_alternate = "/work/03946/hetdex/maverick/"
 #HETDEXSurvey = "/corral/utexas/Hobby-Eberly-Telesco/hdr5/survey/survey_hdr5.h5"
 HETDEXSurvey = "/scratch/projects/hetdex/hdr5/survey/survey_hdr5.h5"
 HET_by_date = "/work/03946/hetdex/maverick/"
@@ -1194,27 +1195,53 @@ def fetch_virus_tar(cfg):
                     fn = os.path.join(HETRaw_archive, f"{cfg.day[i]}.tar")
                     subtar_path = f"{cfg.day[i]}/virus/virus{str(cfg.shotnum[i]).zfill(7)}.tar"
                     output_path = f"./{cfg.day[i]}/virus/"
+                    if os.path.exists(fn):
 
-                    if one_at_a_time:
-                        cmds.append(f"tar -xf {fn} {subtar_path} -C {output_path}")
-                        log_stmts.append(f"[{cfg.log_id}] untarring {i + 1} of {len(cfg.shotnum)}: {fn}/{subtar_path} ...")
-                    else: #all at once in batch
-                        #if this is a new date OR the last iteration, write out the current command
-                        if current_date != cfg.day[i]:
-                            if len(cmd) != 0: #append the current command as a background task
-                                cmd += " &"
-                                cmds.append(cmd)
-                                cmd = ""
-                            #otherwise this is just the first comamnd
-                            #start a new command
-                            current_date = cfg.day[i]
-                            cmd = f"tar -xf {fn} {subtar_path} -C {output_path} && " \
-                                   f"touch {os.path.basename(fn)}_virus{str(cfg.shotnum[i]).zfill(7)}.done"
-                            done_checks.append(f"{os.path.basename(fn)}_virus{str(cfg.shotnum[i]).zfill(7)}.done")
-                        else:
-                            cmd += f" ; tar -xf {fn} {subtar_path} -C {output_path} && " \
-                                   f"touch {os.path.basename(fn)}_virus{str(cfg.shotnum[i]).zfill(7)}.done"
-                            done_checks.append(f"{os.path.basename(fn)}_virus{str(cfg.shotnum[i]).zfill(7)}.done")
+                        if one_at_a_time:
+                            cmds.append(f"tar -xf {fn} {subtar_path} -C {output_path}")
+                            log_stmts.append(f"[{cfg.log_id}] untarring {i + 1} of {len(cfg.shotnum)}: {fn}/{subtar_path} ...")
+                        else: #all at once in batch
+                            #if this is a new date OR the last iteration, write out the current command
+                            if current_date != cfg.day[i]:
+                                if len(cmd) != 0: #append the current command as a background task
+                                    cmd += " &"
+                                    cmds.append(cmd)
+                                    cmd = ""
+                                #otherwise this is just the first comamnd
+                                #start a new command
+                                current_date = cfg.day[i]
+                                cmd = f"tar -xf {fn} {subtar_path} -C {output_path} && " \
+                                       f"touch {os.path.basename(fn)}_virus{str(cfg.shotnum[i]).zfill(7)}.done"
+                                done_checks.append(f"{os.path.basename(fn)}_virus{str(cfg.shotnum[i]).zfill(7)}.done")
+                            else:
+                                cmd += f" ; tar -xf {fn} {subtar_path} -C {output_path} && " \
+                                       f"touch {os.path.basename(fn)}_virus{str(cfg.shotnum[i]).zfill(7)}.done"
+                                done_checks.append(f"{os.path.basename(fn)}_virus{str(cfg.shotnum[i]).zfill(7)}.done")
+                    else: #tar file does not exist, but these might still be on /work
+                        flat_fn = os.path.join(HETRaw_work_alternate,subtar_path)
+                        if os.path.exists(flat_fn):
+                            if one_at_a_time:
+                                cmds.append(f"mkdir -p {output_path} && cp {flat_fn} {output_path}")
+                                log_stmts.append(f"[{cfg.log_id}] copying {i + 1} of {len(cfg.shotnum)}: {subtar_path} ...")
+                            else:  # all at once in batch
+                                # if this is a new date OR the last iteration, write out the current command
+                                if current_date != cfg.day[i]:
+                                    if len(cmd) != 0:  # append the current command as a background task
+                                        cmd += " &"
+                                        cmds.append(cmd)
+                                        cmd = ""
+                                    # otherwise this is just the first comamnd
+                                    # start a new command
+                                    current_date = cfg.day[i]
+                                    cmd = f"mkdir -p {output_path} && cp {flat_fn} {output_path} && " \
+                                          f"touch {os.path.basename(fn)}_virus{str(cfg.shotnum[i]).zfill(7)}.done"
+                                    done_checks.append(
+                                        f"{os.path.basename(fn)}_virus{str(cfg.shotnum[i]).zfill(7)}.done")
+                                else:
+                                    cmd += f" ; mkdir -p {output_path} && cp {flat_fn} {output_path} && " \
+                                           f"touch {os.path.basename(fn)}_virus{str(cfg.shotnum[i]).zfill(7)}.done"
+                                    done_checks.append(
+                                        f"{os.path.basename(fn)}_virus{str(cfg.shotnum[i]).zfill(7)}.done")
 
                 #add the last command string chain, if needed
                 if not one_at_a_time and len(cmd) > 0:
