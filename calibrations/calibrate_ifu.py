@@ -489,7 +489,7 @@ def get_calibration_tarlist(cfg):
     try:
         if cfg.yyyymm <= "202407": #201701 to 202407
             fnbase = f"{cfg.yyyymm}"
-        elif cfg.yyyymm <= "202501":
+        elif cfg.yyyymm < "202501":
             fnbase = "202488" #should be 2024xx??
         else: #2025, 2026, etc
             fnbase = f"{cfg.yyyymm[0:4]}00"
@@ -1309,6 +1309,7 @@ def rstep1(cfg):
         if len(shotnum) == 0: #this is fatal
             print(f"[{cfg.log_id}] rstep1  Could not get shotnumbers. Fatal")
             rc = -1
+            return rc
 
         #now set up the run1t calls
         #this would have been the 3 per line rt1.YYYYMM_1.run
