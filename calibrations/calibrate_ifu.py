@@ -1382,8 +1382,8 @@ def rstep3(cfg):
 
         system_command(cfg, f"cp i*cbwt* ../../lib_calib/{cfg.yyyymm}")
         system_command(cfg, f"cp i*cbxt* ../../lib_calib/{cfg.yyyymm}")
-        system_command(cfg, f"cp i*cbmf* ../../lib_calib/{cfg.yyyymm}")
-        system_command(cfg, f"cp i*cbmp* ../../lib_calib/{cfg.yyyymm}")
+        system_command(cfg, f"cp i*cmbf* ../../lib_calib/{cfg.yyyymm}")
+        system_command(cfg, f"cp i*cmbp* ../../lib_calib/{cfg.yyyymm}")
         system_command(cfg, f"cp i*wave* ../../lib_calib/{cfg.yyyymm}")
 
     except:
