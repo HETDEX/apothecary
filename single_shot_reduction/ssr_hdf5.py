@@ -11,11 +11,13 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 
 """
 
-# 0.1.0 long running baseline without notes
+# 0.1.0 long-running baseline without notes
 # 0.1.1 added FullSkyModel groups with reduced precision from float64 to float32
+# 0.1.2 restored VIRUSImage data (the CCD clean_image, image(with sky) and error, but really try to keep as float16
+#       the images can force to float32 but if only the error is large, cap the error to max float16
 
 
-__version__ = '0.1.1'
+__version__ = '0.1.2'
 
 
 import numpy as np
@@ -55,8 +57,10 @@ FullFloat = np.float32
 DblFloat = np.float64
 StdFloat = HalfFloat #np.float16  #could change to float32 if needed
 
-threshold_16 = 1e4 #if abs value greater than this, go with float32 (just due to precision loss)
-                       #float16 can sort of represent up to about 65K
+threshold_16 = 3e4     #if abs value greater than this, go with float32 (just due to precision loss), about half-max
+                       #float16 can sort of represent up to about 65K (65504.0 is max)
+
+image_threshold_16 = 64800.0 #back off the 65504 just a bit. experimentally, I like this value for rounding better
 
 FATAL_EXIT = 0 #global flag to terminate
 elixer_h5_force = False #if True (set later) ignore the version constraint and try anyway
@@ -695,32 +699,33 @@ class VIRUSFiber32(tables.IsDescription): #same as VIRUSFiber but uses Float32 i
         # error1D = tables.Float16ColCol((1032,))
 
 
-# VIRUSImage, very expensive ... more than half total shot.h5 is wrapped up here. Will skip.
-# class VIRUSImage16(tables.IsDescription):
-#     obsind = tables.Int32Col()
-#     multiframe = tables.StringCol((20), pos=0)
-#     image = tables.Float16Col((1032, 1032))
-#     error = tables.Float16Col((1032, 1032))
-#     clean_image = tables.Float16Col((1032, 1032))
-#     ifuslot = tables.StringCol(3)
-#     ifuid = tables.StringCol(3)
-#     specid = tables.StringCol(3)
-#     contid = tables.StringCol(8)
-#     amp = tables.StringCol(2)
-#     expnum = tables.Int16Col()
-#
-# class VIRUSImage32(tables.IsDescription):
-#     obsind = tables.Int32Col()
-#     multiframe = tables.StringCol((20), pos=0)
-#     image = tables.Float32Col((1032, 1032))
-#     error = tables.Float32Col((1032, 1032))
-#     clean_image = tables.Float32Col((1032, 1032))
-#     ifuslot = tables.StringCol(3)
-#     ifuid = tables.StringCol(3)
-#     specid = tables.StringCol(3)
-#     contid = tables.StringCol(8)
-#     amp = tables.StringCol(2)
-#     expnum = tables.Int16Col()
+#VIRUSImage, very expensive ... more than half total shot.h5 is wrapped up here. Will skip.
+#limit only to critical ones and limit to 16 bit?
+class VIRUSImage16(tables.IsDescription):
+    obsind = tables.Int32Col()
+    multiframe = tables.StringCol((20), pos=0)
+    image = tables.Float16Col((1032, 1032))  #elixer uses
+    error = tables.Float16Col((1032, 1032)) #elixer uses
+    clean_image = tables.Float16Col((1032, 1032)) #elixer uses ??
+    ifuslot = tables.StringCol(3)
+    ifuid = tables.StringCol(3)
+    specid = tables.StringCol(3)
+    contid = tables.StringCol(8)
+    amp = tables.StringCol(2)
+    expnum = tables.Int16Col()
+
+class VIRUSImage32(tables.IsDescription):
+    obsind = tables.Int32Col()
+    multiframe = tables.StringCol((20), pos=0)
+    image = tables.Float32Col((1032, 1032))
+    error = tables.Float32Col((1032, 1032))
+    clean_image = tables.Float32Col((1032, 1032))
+    ifuslot = tables.StringCol(3)
+    ifuid = tables.StringCol(3)
+    specid = tables.StringCol(3)
+    contid = tables.StringCol(8)
+    amp = tables.StringCol(2)
+    expnum = tables.Int16Col()
 
 class AmpStats(tables.IsDescription):
     """
@@ -1096,69 +1101,74 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
 
 
-        # ##################################
-        # # VIRUSImages
-        # # ... VERY expensive (more than half the total size of the shot.h5
-        # #      will skip. Does not impact re-extraction, BUT you cannot build elixer reports without them
-        ##                    and without other data.
-        # ##################################
-        #
-        # print(f"Importing VIRUS CCD image data ... ", flush=True)
-        #
-        # use32 = False
-        # mx = np.abs(shot_h5.root.Data.Images.read(field="image")).max()
-        # if mx > 65000.0:
-        #     use32 = True
-        #     log.debug(f"Data.Images.image requires float32: mx {mx}")
-        # else:
-        #     mx = np.abs(shot_h5.root.Data.Images.read(field="clean_image")).max()
-        #     if mx > 65000.0:
-        #         use32 = True
-        #         log.debug(f"Data.Images.clean_image requires float32: mx {mx}")
-        #     else:
-        #         mx = np.max(shot_h5.root.Data.Images.read(field="error"))  # can only be positive
-        #         if mx > 65000.0:
-        #             use32 = True
-        #             log.debug(f"Data.Images.error requires float32: mx {mx}")
-        #
-        # if use32:
-        #     print("Using Float32 for VIRUSImages")
-        #     fileh.create_table(fileh.root.Data, 'Images', VIRUSImage32, 'VIRUS CCD Image Data')
-        # else:
-        #     print("Using Float16 for VIRUSImages")
-        #     fileh.create_table(fileh.root.Data, 'Images', VIRUSImage16, 'VIRUS CCD Image Data')
-        #
-        # for row in tqdm(shot_h5.root.Data.Images.read()):
-        #     # for row in shot_h5.root.Data.Fibers.read():
-        #     new_row = fileh.root.Data.Images.row
-        #     # go over some columns individual since want to change some types
-        #     # directy copy columns:
-        #     for col in ['obsind', 'multiframe', 'ifuslot', 'ifuid', 'specid', 'contid', 'amp']:
-        #         new_row[col] = row[col]
-        #
-        #     # special treatment, mostly float32 to float16
-        #     new_row['expnum'] = row['expnum'].astype(np.int16)  # Maybe we'd have more than 15 exposures (prob not, though)
-        #     if use32:
-        #         new_row['image'] = row['image'].astype(np.float32)
-        #         new_row['error'] = row['error'].astype(np.float32)
-        #         new_row['clean_image'] = row['clean_image'].astype(np.float32)
-        #     else:
-        #         new_row['image'] = row['image'].astype(np.float16)
-        #         new_row['error'] = row['error'].astype(np.float16)
-        #         new_row['clean_image'] = row['clean_image'].astype(np.float16)
-        #
-        #
-        #     new_row.append()
-        #
-        # fileh.root.Data.Images.flush()
-        #
-        # # set the index
-        # try:
-        #     fileh.root.Data.Images.cols.multiframe.create_csindex()
-        # except:
-        #     log.debug("Index fail on Data.Images table", exc_info=True)
-        #
-        # fileh.root.Data.Images.flush()
+        ##################################
+        # VIRUSImages
+        # ... VERY expensive (more than half the total size of the shot.h5
+        #      will skip. Does not impact re-extraction, BUT you cannot build elixer reports without them
+        #                    and without other data.
+        ##################################
+
+        print(f"Importing VIRUS CCD image data ... ", flush=True)
+
+        use32 = False
+        clip_error = 0.
+        mx = np.abs(shot_h5.root.Data.Images.read(field="image")).max()
+        if mx > image_threshold_16:
+            use32 = True
+            log.debug(f"Data.Images.image requires float32: mx {mx}")
+        else:
+            mx = np.abs(shot_h5.root.Data.Images.read(field="clean_image")).max()
+            if mx > image_threshold_16:
+                use32 = True
+                log.debug(f"Data.Images.clean_image requires float32: mx {mx}")
+            else:
+                mx = np.max(shot_h5.root.Data.Images.read(field="error"))  # can only be positive
+                if mx > image_threshold_16:
+                    #want to set max value to 65504.00
+                    #use32 = True
+                    #log.debug(f"Data.Images.error requires float32: mx {mx}")
+                    clip_error = 65500.00 #max is 655504
+                    log.debug(f"Data.Images.error clipping to {clip_error} : mx {mx}")
+        if use32:
+            print("Using Float32 for VIRUSImages")
+            fileh.create_table(fileh.root.Data, 'Images', VIRUSImage32, 'VIRUS CCD Image Data')
+        else:
+            print("Using Float16 for VIRUSImages")
+            fileh.create_table(fileh.root.Data, 'Images', VIRUSImage16, 'VIRUS CCD Image Data')
+
+        for row in tqdm(shot_h5.root.Data.Images.read()):
+            # for row in shot_h5.root.Data.Fibers.read():
+            new_row = fileh.root.Data.Images.row
+            # go over some columns individual since want to change some types
+            # directy copy columns:
+            for col in ['obsind', 'multiframe', 'ifuslot', 'ifuid', 'specid', 'contid', 'amp']:
+                new_row[col] = row[col]
+
+            # special treatment, mostly float32 to float16
+            new_row['expnum'] = row['expnum'].astype(np.int16)  # Maybe we'd have more than 15 exposures (prob not, though)
+            if use32:
+                new_row['image'] = row['image'].astype(np.float32)
+                new_row['error'] = row['error'].astype(np.float32)
+                new_row['clean_image'] = row['clean_image'].astype(np.float32)
+            else:
+                new_row['image'] = row['image'].astype(np.float16)
+                #new_row['error'] = row['error'].astype(np.float16)
+                if clip_error > 0:
+                    new_row['error'] = np.clip(row['error'],a_min=-1*clip_error,a_max=clip_error).astype(np.float16)
+                new_row['clean_image'] = row['clean_image'].astype(np.float16)
+
+
+            new_row.append()
+
+        fileh.root.Data.Images.flush()
+
+        # set the index
+        try:
+            fileh.root.Data.Images.cols.multiframe.create_csindex()
+        except:
+            log.debug("Index fail on Data.Images table", exc_info=True)
+
+        fileh.root.Data.Images.flush()
 
         #####################################
         # CalfibDQ
