@@ -61,9 +61,11 @@ threshold_16 = 3e4     #if abs value greater than this, go with float32 (just du
                        #float16 can sort of represent up to about 65K (65504.0 is max)
 
 image_threshold_16 = 64800.0 #back off the 65504 just a bit. experimentally, I like this value for rounding better
+clip_float16 = 65500.0
 
 FATAL_EXIT = 0 #global flag to terminate
-elixer_h5_force = False #if True (set later) ignore the version constraint and try anyway
+elixer_h5_force = False  #if True (set later) ignore the version constraint and try anyway
+exclude_ccd_images = False #do not include the CCD images (VIRUSImage table)
 
 #logging will just be prints
 #this is all single threaded, no real management needed
@@ -616,21 +618,21 @@ class VIRUSFiber16(tables.IsDescription): #uses Float16 where possibly
 
     #consider removing these to save longterm storage
     #if needed, would re-run
-    # spectrum = tables.Float16ColCol((1032,))
-    # wavelength = tables.Float16ColCol((1032,))
+    spectrum = tables.Float16Col((1032,))
+    wavelength = tables.Float32Col((1032,))
 
-    fiber_to_fiber = StdFloatCol((1032,)) #re-extraction in HETDEX_API needs it
+    fiber_to_fiber = tables.Float16Col((1032,)) #re-extraction in HETDEX_API needs it
 
     #
-    # chi2 = tables.Float16ColCol((1032,))
-    # rms = tables.Float16ColCol((1032,))
+    chi2 = tables.Float16Col((1032,))
+    rms = tables.Float16Col((1032,))
     # calfib_counts = tables.Float16ColCol((1036,))
     # calfibe_counts = tables.Float16ColCol((1036,))
     #
-    # trace = tables.Float16ColCol((1032,))
-    # sky_subtracted = tables.Float16ColCol((1032,))
-    # sky_spectrum = tables.Float16ColCol((1032,))
-    # error1D = tables.Float16ColCol((1032,))
+    trace = tables.Float16Col((1032,))
+    sky_subtracted = tables.Float16Col((1032,))
+    sky_spectrum = tables.Float16Col((1032,))
+    #error1D = tables.Float16ColCol((1032,))
 
 class VIRUSFiber32(tables.IsDescription): #same as VIRUSFiber but uses Float32 instead of Float16 if needed
         """
@@ -682,20 +684,20 @@ class VIRUSFiber32(tables.IsDescription): #same as VIRUSFiber but uses Float32 i
 
         # consider removing these to save longterm storage
         # if needed, would re-run
-        # spectrum = tables.Float16ColCol((1032,))
-        # wavelength = tables.Float16ColCol((1032,))
+        spectrum = tables.Float32Col((1032,))
+        wavelength = tables.Float32Col((1032,))
 
         fiber_to_fiber = tables.Float32Col((1032,)) #re-extraction in HETDEX_API needs it as part of the masking
 
         #
-        # chi2 = tables.Float16ColCol((1032,))
-        # rms = tables.Float16ColCol((1032,))
-        # calfib_counts = tables.Float16ColCol((1036,))
-        # calfibe_counts = tables.Float16ColCol((1036,))
+        chi2 = tables.Float32Col((1032,))
+        rms = tables.Float32Col((1032,))
+        # calfib_counts = tables.Float16Col((1036,))
+        # calfibe_counts = tables.Float16Col((1036,))
         #
-        # trace = tables.Float16ColCol((1032,))
-        # sky_subtracted = tables.Float16ColCol((1032,))
-        # sky_spectrum = tables.Float16ColCol((1032,))
+        trace = tables.Float32Col((1032,))
+        sky_subtracted = tables.Float32Col((1032,))
+        sky_spectrum = tables.Float32Col((1032,))
         # error1D = tables.Float16ColCol((1032,))
 
 
@@ -1018,10 +1020,28 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 new_row['calfib'] = row['calfib'].astype(np.float32)
                 new_row['calfibe'] = row['calfibe'].astype(np.float32)
                 new_row['calfib_ffsky'] = row['calfib_ffsky'].astype(np.float32)
+
+                #questionable ones
+                new_row['wavelength'] = row['wavelength'].astype(np.float32)  # always 32-bit
+                new_row['spectrum'] = row['spectrum'].astype(np.float32)
+                new_row['chi2'] = row['chi2'].astype(np.float32)
+                new_row['rms'] = row['rms'].astype(np.float32)
+                new_row['trace'] = row['trace'].astype(np.float32)
+                new_row['sky_subtracted'] = row['sky_subtracted'].astype(np.float32)
+                new_row['sky_spectrum'] = row['sky_spectrum'].astype(np.float32)
             else:
                 new_row['calfib'] = row['calfib'].astype(StdFloat)
                 new_row['calfibe'] = row['calfibe'].astype(StdFloat)
                 new_row['calfib_ffsky'] = row['calfib_ffsky'].astype(StdFloat)
+
+                # questionable ones
+                new_row['wavelength'] = row['wavelength'].astype(np.float32) #always 32-bit
+                new_row['spectrum'] = row['spectrum'].astype(StdFloat)
+                new_row['chi2'] = np.clip(row['chi2'],a_min=-1*clip_float16,a_max=clip_float16).astype(StdFloat)
+                new_row['rms'] = row['rms'].astype(StdFloat)
+                new_row['trace'] = row['trace'].astype(StdFloat)
+                new_row['sky_subtracted'] = row['sky_subtracted'].astype(StdFloat)
+                new_row['sky_spectrum'] = row['sky_spectrum'].astype(StdFloat)
 
 
             #add in the corresponding FiberIndex
@@ -1107,68 +1127,73 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         #      will skip. Does not impact re-extraction, BUT you cannot build elixer reports without them
         #                    and without other data.
         ##################################
+        if not exclude_ccd_images:
+            print(f"Importing VIRUS CCD image data ... ", flush=True)
 
-        print(f"Importing VIRUS CCD image data ... ", flush=True)
-
-        use32 = False
-        clip_error = 0.
-        mx = np.abs(shot_h5.root.Data.Images.read(field="image")).max()
-        if mx > image_threshold_16:
-            use32 = True
-            log.debug(f"Data.Images.image requires float32: mx {mx}")
-        else:
-            mx = np.abs(shot_h5.root.Data.Images.read(field="clean_image")).max()
-            if mx > image_threshold_16:
+            if StdFloatCol == FullFloatCol:
                 use32 = True
-                log.debug(f"Data.Images.clean_image requires float32: mx {mx}")
+                clip_error = 0.
             else:
-                mx = np.max(shot_h5.root.Data.Images.read(field="error"))  # can only be positive
+                use32 = False
+                clip_error = 0.
+                mx = np.abs(shot_h5.root.Data.Images.read(field="image")).max()
                 if mx > image_threshold_16:
-                    #want to set max value to 65504.00
-                    #use32 = True
-                    #log.debug(f"Data.Images.error requires float32: mx {mx}")
-                    clip_error = 65500.00 #max is 655504
-                    log.debug(f"Data.Images.error clipping to {clip_error} : mx {mx}")
-        if use32:
-            print("Using Float32 for VIRUSImages")
-            fileh.create_table(fileh.root.Data, 'Images', VIRUSImage32, 'VIRUS CCD Image Data')
-        else:
-            print("Using Float16 for VIRUSImages")
-            fileh.create_table(fileh.root.Data, 'Images', VIRUSImage16, 'VIRUS CCD Image Data')
+                    use32 = True
+                    log.debug(f"Data.Images.image requires float32: mx {mx}")
+                else:
+                    mx = np.abs(shot_h5.root.Data.Images.read(field="clean_image")).max()
+                    if mx > image_threshold_16:
+                        use32 = True
+                        log.debug(f"Data.Images.clean_image requires float32: mx {mx}")
+                    else:
+                        mx = np.max(shot_h5.root.Data.Images.read(field="error"))  # can only be positive
+                        if mx > image_threshold_16:
+                            #want to set max value to 65504.00
+                            #use32 = True
+                            #log.debug(f"Data.Images.error requires float32: mx {mx}")
+                            clip_error = 65500.00 #max is 655504
+                            log.debug(f"Data.Images.error clipping to {clip_error} : mx {mx}")
 
-        for row in tqdm(shot_h5.root.Data.Images.read()):
-            # for row in shot_h5.root.Data.Fibers.read():
-            new_row = fileh.root.Data.Images.row
-            # go over some columns individual since want to change some types
-            # directy copy columns:
-            for col in ['obsind', 'multiframe', 'ifuslot', 'ifuid', 'specid', 'contid', 'amp']:
-                new_row[col] = row[col]
-
-            # special treatment, mostly float32 to float16
-            new_row['expnum'] = row['expnum'].astype(np.int16)  # Maybe we'd have more than 15 exposures (prob not, though)
             if use32:
-                new_row['image'] = row['image'].astype(np.float32)
-                new_row['error'] = row['error'].astype(np.float32)
-                new_row['clean_image'] = row['clean_image'].astype(np.float32)
+                print("Using Float32 for VIRUSImages")
+                fileh.create_table(fileh.root.Data, 'Images', VIRUSImage32, 'VIRUS CCD Image Data')
             else:
-                new_row['image'] = row['image'].astype(np.float16)
-                #new_row['error'] = row['error'].astype(np.float16)
-                if clip_error > 0:
-                    new_row['error'] = np.clip(row['error'],a_min=-1*clip_error,a_max=clip_error).astype(np.float16)
-                new_row['clean_image'] = row['clean_image'].astype(np.float16)
+                print("Using Float16 for VIRUSImages")
+                fileh.create_table(fileh.root.Data, 'Images', VIRUSImage16, 'VIRUS CCD Image Data')
+
+            for row in tqdm(shot_h5.root.Data.Images.read()):
+                # for row in shot_h5.root.Data.Fibers.read():
+                new_row = fileh.root.Data.Images.row
+                # go over some columns individual since want to change some types
+                # directy copy columns:
+                for col in ['obsind', 'multiframe', 'ifuslot', 'ifuid', 'specid', 'contid', 'amp']:
+                    new_row[col] = row[col]
+
+                # special treatment, mostly float32 to float16
+                new_row['expnum'] = row['expnum'].astype(np.int16)  # Maybe we'd have more than 15 exposures (prob not, though)
+                if use32:
+                    new_row['image'] = row['image'].astype(np.float32)
+                    new_row['error'] = row['error'].astype(np.float32)
+                    new_row['clean_image'] = row['clean_image'].astype(np.float32)
+                else:
+                    new_row['image'] = row['image'].astype(np.float16)
+                    #new_row['error'] = row['error'].astype(np.float16)
+                    if clip_error > 0:
+                        new_row['error'] = np.clip(row['error'],a_min=-1*clip_error,a_max=clip_error).astype(np.float16)
+                    new_row['clean_image'] = row['clean_image'].astype(np.float16)
 
 
-            new_row.append()
+                new_row.append()
 
-        fileh.root.Data.Images.flush()
+            fileh.root.Data.Images.flush()
 
-        # set the index
-        try:
-            fileh.root.Data.Images.cols.multiframe.create_csindex()
-        except:
-            log.debug("Index fail on Data.Images table", exc_info=True)
+            # set the index
+            try:
+                fileh.root.Data.Images.cols.multiframe.create_csindex()
+            except:
+                log.debug("Index fail on Data.Images table", exc_info=True)
 
-        fileh.root.Data.Images.flush()
+            fileh.root.Data.Images.flush()
 
         #####################################
         # CalfibDQ
@@ -1959,6 +1984,15 @@ if "-bg" in args:
         exit(-1)
     del args[i + 1]
     args.remove("-bg")
+
+
+if "-float32" in args: #force32 bit for fields that were originally 32bit (do not allow down-casting to float16)
+    StdFloatCol = FullFloatCol
+    args.remove("-float32")
+
+if "-exclude_ccd" in args:
+    exclude_ccd_images = True
+    args.remove("-exclude_ccd")
 
 #default, level 2
 COMPRESSION_FILTER = tables.Filters(complevel=1, complib='zlib', bitshuffle=False, shuffle=False)
