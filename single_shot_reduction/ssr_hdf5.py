@@ -958,11 +958,14 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             use32 = True
         else:
             use32 = False
-            mx = np.abs(shot_h5.root.Data.Fibers.read(field="calfib")).max()
+            #mx = np.abs(shot_h5.root.Data.Fibers.read(field="calfib")).max()
+            mx = np.max(shot_h5.root.Data.Fibers.read(field="calfib"))
+            #mn = np.min(shot_h5.root.Data.Fibers.read(field="calfib"))
             if mx > threshold_16:
                 use32 = True
             else:
-                mx = np.abs(shot_h5.root.Data.Fibers.read(field="calfib_ffsky")).max()
+                #mx = np.abs(shot_h5.root.Data.Fibers.read(field="calfib_ffsky")).max()
+                mx = np.max(shot_h5.root.Data.Fibers.read(field="calfib_ffsky"))
                 if mx > threshold_16:
                     use32 = True
                 else:
@@ -1030,9 +1033,13 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 new_row['sky_subtracted'] = row['sky_subtracted'].astype(np.float32)
                 new_row['sky_spectrum'] = row['sky_spectrum'].astype(np.float32)
             else:
-                new_row['calfib'] = row['calfib'].astype(StdFloat)
+                # could have stupidly negative values (always errorneous and since already checked for max okay, apply a clip to be safe)
+                #new_row['calfib'] = row['calfib'].astype(StdFloat)
+                new_row['calfib'] = np.clip(row['calfib'], a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
                 new_row['calfibe'] = row['calfibe'].astype(StdFloat)
-                new_row['calfib_ffsky'] = row['calfib_ffsky'].astype(StdFloat)
+                #could have stupidly negative values (always errorneous and since already checked for max okay, apply a clip to be safe)
+                #new_row['calfib_ffsky'] = row['calfib_ffsky'].astype(StdFloat)
+                new_row['calfib_ffsky'] = np.clip(row['calfib_ffsky'], a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
 
                 # questionable ones
                 new_row['wavelength'] = row['wavelength'].astype(np.float32) #always 32-bit
@@ -1136,6 +1143,8 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             else:
                 use32 = False
                 clip_error = 0.
+                #note: should not expect grossly negative values, but may be a scaling issue?
+                #for now, at least, allow absolute value check
                 mx = np.abs(shot_h5.root.Data.Images.read(field="image")).max()
                 if mx > image_threshold_16:
                     use32 = True
@@ -1368,7 +1377,8 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 use32 = True
             else:
                 use32 = False
-                mx = np.abs(elixer_h5.root.CalibratedSpectra.read(field="flux")).max()
+                #mx = np.abs(elixer_h5.root.CalibratedSpectra.read(field="flux")).max()
+                mx = np.max(elixer_h5.root.CalibratedSpectra.read(field="flux"))
                 if mx > threshold_16:
                     use32 = True
                 else:
@@ -1394,8 +1404,11 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                     new_row['flux'] = row['flux'].astype(np.float32)
                     new_row['flux_err'] = row['flux_err'].astype(np.float32)
                 else:
-                    new_row['flux'] = row['flux'].astype(StdFloat)
+                    # could have stupidly negative values (always errorneous and since already checked for max okay, apply a clip to be safe)
+                    #new_row['flux'] = row['flux'].astype(StdFloat)
+                    new_row['flux'] = np.clip(row['flux'], a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
                     new_row['flux_err'] = row['flux_err'].astype(StdFloat)
+
                 new_row['dust_corr'] = row['dust_corr'].astype(StdFloat)
 
                 #aperture needs help too (not -10000)
