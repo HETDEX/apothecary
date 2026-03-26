@@ -1951,6 +1951,54 @@ args = [x.replace("--","-") for x in args]
 
 print(f"version {__version__}")
 
+
+if "-help" in args:
+    help = """
+        Single Shot Reduction HDF5 Aggregation and Compression
+        
+        usage: python ssr_hdf5.py [switches]
+        
+        output: new file named ssr_<shot_h5>        
+               
+        --shot_h5           REQUIRED
+            The input shot.h5 file to be compressed (includes the filename). Can be a relative path.
+
+        --bg [#]            optional
+            Specify the maximum number of simulatenously running hdf5 constructions
+            Note: for a single vm-small node on lonestar6, this should be 3
+                  for a single development or normal node, this can be 20-24
+                  
+        --float32           optional
+            Override the compression and force float32 where float16 would otherwise be used due to limited range
+            Note: this applies only to float32 data in the original (input) shot.h5 file 
+        
+        --exclude_ccd       optional
+            Do not include the CCD images (3x1032x1032 plus supporting fields for each amp)
+            note: in compressed float16 representation this is around 6GB for a typical shot. 
+            
+        --compression       optional
+            Set the compression type and level. Mostly affectes ELiXer report images. The default is (2)
+            (1) blosc2 compression at level 9; very fast but lesser compression
+                    about 20% faster but 25%+ lesser compression than (2)
+            (2) zlib compression at level 1; fast with good compression, 
+                   [default] typically around 6 minutes run time per shot 
+            (3) bzip2 compression at level 9; very slow but maximum compression
+                    about 300% longer to run but 40-50% better compression than (2)
+                  
+        --elixer_h5         optional
+            Path to the <elixer>.h5 file for this shot (includes the filename). Can be a relative path.
+            if present, the ELiXer hdf5 tables and the ELiXer report images will be included in the output hdf5 file
+            
+        --elixer_h5_force   optional
+             attempt to force the inclusion of ELiXer data even if the reported elixer version is not explicitly supported
+             
+        --images            optional
+            Path the the ELiXer report (png) images (path only, no filenames). Can be a relative path.
+            
+    """
+    print(f"todo {help}")
+    exit(0)
+
 shot_h5_path = None
 if "-shot_h5" in args: #path to the shot h5 file
     i = args.index("-shot_h5")
@@ -2012,6 +2060,7 @@ if "-float32" in args: #force32 bit for fields that were originally 32bit (do no
     StdFloatCol = FullFloatCol
     args.remove("-float32")
 
+#maybe this is enough ?
 if "-exclude_ccd" in args:
     exclude_ccd_images = True
     args.remove("-exclude_ccd")

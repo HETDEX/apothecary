@@ -275,7 +275,7 @@ if "-help" in args:
     #do NOTHING else except print the help
     help = """
     
-    usage: python reduce_shot.py <shot> [switches]
+    usage: python reduce_shot.py [switches] <shot>
            where <shot> is YYYYMMDDSSS or YYYYMMDDvSSS
     
     switches (all optional):
