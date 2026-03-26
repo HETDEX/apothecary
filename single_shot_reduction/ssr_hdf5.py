@@ -57,8 +57,11 @@ FullFloat = np.float32
 DblFloat = np.float64
 StdFloat = HalfFloat #np.float16  #could change to float32 if needed
 
-threshold_16 = 3e4     #if abs value greater than this, go with float32 (just due to precision loss), about half-max
+threshold_16 = 6e4     #if abs value greater than this, go with float32 (just due to precision loss), about half-max
                        #float16 can sort of represent up to about 65K (65504.0 is max)
+                       #AND be careful about where to apply this. A loss of precision is fine for fluxes where the
+                       #uncertianties are typically around 20-25%, but it is NOT ok for, say, wavelengths which have
+                       #uncertainties way less than 1%
 
 image_threshold_16 = 64800.0 #back off the 65504 just a bit. experimentally, I like this value for rounding better
 clip_float16 = 65500.0
@@ -962,24 +965,37 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             use32 = True
         else:
             use32 = False
-            #mx = np.abs(shot_h5.root.Data.Fibers.read(field="calfib")).max()
-            mx = np.max(shot_h5.root.Data.Fibers.read(field="calfib"))
-            #mn = np.min(shot_h5.root.Data.Fibers.read(field="calfib"))
-            if mx > threshold_16:
-                use32 = True
-            else:
-                #mx = np.abs(shot_h5.root.Data.Fibers.read(field="calfib_ffsky")).max()
-                mx = np.max(shot_h5.root.Data.Fibers.read(field="calfib_ffsky"))
-                if mx > threshold_16:
+            #in order of most likely to need float32
+            f16_check_fields = ["calfib","calfib_ffsky","spectrum","sky_subtracted","sky_spectrum","trace"]
+            print(f"[{datevshot}] Checking for float16 compatibility ... ")
+            for fd in f16_check_fields:
+                if np.max(shot_h5.root.Data.Fibers.read(field=fd)) > threshold_16:
+                    print(f"[{datevshot}] {fd} (at least) requires float32")
                     use32 = True
-                else:
-                    mx = np.max(shot_h5.root.Data.Fibers.read(field="calfibe"))  # can only be positive
-                    if mx > threshold_16:
-                        use32 = True
-                    else:
-                        mx = np.max(shot_h5.root.Data.Fibers.read(field="fiber_to_fiber"))
-                        if mx > threshold_16:
-                            use32 = True
+                    #print(f"{fd} : min {np.min(shot_h5.root.Data.Fibers.read(field=fd))} , max {np.max(shot_h5.root.Data.Fibers.read(field=fd))}")
+                    break #for a test, don't break ... want to see them all
+
+            f16_fields_to_clip = ["chi2"]
+
+            # use32 = False
+            # #mx = np.abs(shot_h5.root.Data.Fibers.read(field="calfib")).max()
+            # mx = np.max(shot_h5.root.Data.Fibers.read(field="calfib"))
+            # #mn = np.min(shot_h5.root.Data.Fibers.read(field="calfib"))
+            # if mx > threshold_16:
+            #     use32 = True
+            # else:
+            #     #mx = np.abs(shot_h5.root.Data.Fibers.read(field="calfib_ffsky")).max()
+            #     mx = np.max(shot_h5.root.Data.Fibers.read(field="calfib_ffsky"))
+            #     if mx > threshold_16:
+            #         use32 = True
+            #     else:
+            #         mx = np.max(shot_h5.root.Data.Fibers.read(field="calfibe"))  # can only be positive
+            #         if mx > threshold_16:
+            #             use32 = True
+            #         else:
+            #             mx = np.max(shot_h5.root.Data.Fibers.read(field="fiber_to_fiber"))
+            #             if mx > threshold_16:
+            #                 use32 = True
         if use32:
             print(f"[{datevshot}] Using Float32 for VIRUSFibers",flush=True)
             fileh.create_table(fileh.root, 'Fibers', VIRUSFiber32, 'Fiber Summary Table')
@@ -1040,19 +1056,19 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 # could have stupidly negative values (always errorneous and since already checked for max okay, apply a clip to be safe)
                 #new_row['calfib'] = row['calfib'].astype(StdFloat)
                 new_row['calfib'] = np.clip(row['calfib'], a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
-                new_row['calfibe'] = row['calfibe'].astype(StdFloat)
+                new_row['calfibe'] = np.clip(row['calfibe'], a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
                 #could have stupidly negative values (always errorneous and since already checked for max okay, apply a clip to be safe)
                 #new_row['calfib_ffsky'] = row['calfib_ffsky'].astype(StdFloat)
                 new_row['calfib_ffsky'] = np.clip(row['calfib_ffsky'], a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
 
                 # questionable ones
                 new_row['wavelength'] = row['wavelength'].astype(np.float32) #always 32-bit
-                new_row['spectrum'] = row['spectrum'].astype(StdFloat)
+                new_row['spectrum'] = np.clip(row['spectrum'], a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
                 new_row['chi2'] = np.clip(row['chi2'],a_min=-1*clip_float16,a_max=clip_float16).astype(StdFloat)
-                new_row['rms'] = row['rms'].astype(StdFloat)
-                new_row['trace'] = row['trace'].astype(StdFloat)
-                new_row['sky_subtracted'] = row['sky_subtracted'].astype(StdFloat)
-                new_row['sky_spectrum'] = row['sky_spectrum'].astype(StdFloat)
+                new_row['rms'] = np.clip(row['rms'],a_min=-1*clip_float16,a_max=clip_float16).astype(StdFloat)
+                new_row['trace'] = np.clip(row['trace'], a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
+                new_row['sky_subtracted'] = np.clip(row['sky_subtracted'], a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
+                new_row['sky_spectrum'] = np.clip(row['sky_spectrum'], a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
 
 
             #add in the corresponding FiberIndex
@@ -1077,12 +1093,24 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         #set the index
         try:
             fileh.root.Fibers.cols.fiber_id.create_csindex()
+        except:
+            log.debug(f"[{datevshot}] Index fail on fibers table:", exc_info=True)
+        try:
             fileh.root.Fibers.cols.multiframe.create_csindex()
+        except:
+            log.debug(f"[{datevshot}] Index fail on fibers table:", exc_info=True)
+        try:
             fileh.root.Fibers.cols.ra.create_csindex()
+        except:
+            log.debug(f"[{datevshot}] Index fail on fibers table:", exc_info=True)
+        try:
             fileh.root.Fibers.cols.dec.create_csindex()
+        except:
+            log.debug(f"[{datevshot}] Index fail on fibers table:", exc_info=True)
+        try:
             fileh.root.Fibers.cols.healpix.create_csindex()
         except:
-            log.debug(f"[{datevshot}] Index fail on fibers table",exc_info=True)
+            log.debug(f"[{datevshot}] Index fail on fibers table:",exc_info=True)
 
         fileh.root.Fibers.flush()
 
@@ -1996,7 +2024,7 @@ if "-help" in args:
             Path the the ELiXer report (png) images (path only, no filenames). Can be a relative path.
             
     """
-    print(f"todo {help}")
+    print(help)
     exit(0)
 
 shot_h5_path = None
