@@ -108,7 +108,7 @@ log = PrintLog('h5_merge.log')
 
 Lock_tmp_mutex_fn = "tmp_ssrcompress.mutex"
 Lock_tmp_ct_fn = "tmp_ssrcompress.ct"
-Max_Simultaneous_Shots = 3
+Max_Simultaneous_Shots = 3 #this depends on options
 
 SafeActiveShotsSleep = 30.0 # recheck every xx seconds
 
@@ -2072,6 +2072,17 @@ if "-images" in args:
     del args[i+1]  # args.pop(0) #remove THIS file
     args.remove("-images")
 
+
+if "-float32" in args: #force32 bit for fields that were originally 32bit (do not allow down-casting to float16)
+    StdFloatCol = FullFloatCol
+    args.remove("-float32")
+
+#maybe this is enough ?
+if "-exclude_ccd" in args:
+    exclude_ccd_images = True
+    args.remove("-exclude_ccd")
+
+
 if "-bg" in args:
     SHOW_TQDM = False
     i = args.index("-bg")
@@ -2082,16 +2093,10 @@ if "-bg" in args:
         exit(-1)
     del args[i + 1]
     args.remove("-bg")
+else:
+    if not exclude_ccd_images: #cut in half
+        Max_Simultaneous_Shots = round(Max_Simultaneous_Shots/2)
 
-
-if "-float32" in args: #force32 bit for fields that were originally 32bit (do not allow down-casting to float16)
-    StdFloatCol = FullFloatCol
-    args.remove("-float32")
-
-#maybe this is enough ?
-if "-exclude_ccd" in args:
-    exclude_ccd_images = True
-    args.remove("-exclude_ccd")
 
 #default, level 2
 COMPRESSION_FILTER = tables.Filters(complevel=1, complib='zlib', bitshuffle=False, shuffle=False)
