@@ -1131,7 +1131,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         # many for fibers, so iterate
         # root.Data.FiberIndex or root.FiberIndex  (root.Data.FiberIndex Does not have the flags)
         print(f"[{datevshot}] Importing Fiber data ... ", flush=True)
-        for row in tqdm(shot_h5.root.FiberIndex.read()):
+        for row in tqdm(shot_h5.root.FiberIndex.read(),disable=not SHOW_TQDM):
             # for row in shot_h5.root.Data.Fibers.read():
             new_row = fileh.root.FiberIndex.row
             # go over some columns individual since want to change some types
@@ -1207,7 +1207,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 print(f"[{datevshot}] Using Float16 for VIRUSImages")
                 fileh.create_table(fileh.root.Data, 'Images', VIRUSImage16, 'VIRUS CCD Image Data')
 
-            for row in tqdm(shot_h5.root.Data.Images.read()):
+            for row in tqdm(shot_h5.root.Data.Images.read(),disable=not SHOW_TQDM):
                 # for row in shot_h5.root.Data.Fibers.read():
                 new_row = fileh.root.Data.Images.row
                 # go over some columns individual since want to change some types
