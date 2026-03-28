@@ -5086,7 +5086,7 @@ if queue_elixer:
     exit(0)
 
 if prep_compress:
-    run_prep_compress(cfg)
+    run_prep_compress(cfg,max_simultaneous=prep_compress)
     exit(0)
 
 if cfg.clean_only:

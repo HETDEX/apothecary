@@ -969,8 +969,9 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             f16_check_fields = ["calfib","calfib_ffsky","spectrum","sky_subtracted","sky_spectrum","trace"]
             print(f"[{datevshot}] Checking for float16 compatibility ... ")
             for fd in f16_check_fields:
-                if np.max(shot_h5.root.Data.Fibers.read(field=fd)) > threshold_16:
-                    print(f"[{datevshot}] {fd} (at least) requires float32")
+                mx = np.max(shot_h5.root.Data.Fibers.read(field=fd))
+                if mx > threshold_16:
+                    print(f"[{datevshot}] {fd} (at least) requires float32: mx {mx}")
                     use32 = True
                     #print(f"{fd} : min {np.min(shot_h5.root.Data.Fibers.read(field=fd))} , max {np.max(shot_h5.root.Data.Fibers.read(field=fd))}")
                     break #for a test, don't break ... want to see them all
