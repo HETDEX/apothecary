@@ -1039,5 +1039,16 @@ for i in tqdm(range(len(source_id_mismatches)),disable=not SHOW_TQDM):
                     SrcTab['flag_seldet'][SrcTab['detectid'] == det] = 0
 
 # re-do the index
-SrcTab.add_index('source_id')
+try:
+    SrcTab.add_index('source_id')
+except:
+    pass
+try:
+    SrcTab.add_index('detectid')
+except:
+    pass
 
+if overwrite:
+    SrcTab.write(catchunk,format=catchunk_format,overwrite=True)
+else:
+    SrcTab.write(f"updated_{catchunk}", format=catchunk_format, overwrite=False)
