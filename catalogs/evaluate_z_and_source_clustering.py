@@ -744,8 +744,6 @@ sel_row = None  # SrcTab['detectid'] == 4018105236
 dets_with_errors = []
 dets_with_errors_reason = []
 
-
-
 source_id_mismatches = []
 
 # sdet = SrcTab['detectid'] == check_det
@@ -788,6 +786,8 @@ for i, row in tqdm(enumerate(SrcTab),total= len(SrcTab),disable=not SHOW_TQDM):
     if z_diagnose and z_elixer <= -1.0:
         # nothing to fall back on, have to accept it as it is
         print(f"{det} {z_diagnose} {z_elixer} ; cannot adjust, no reference")
+        dets_with_errors.append(det)
+        dets_with_errors_reason.append("no reference")
         continue
 
     # passed the initial check, we do have something to refence, so load the rest of the data we want
@@ -995,7 +995,17 @@ print(f"[{catchunk}] Changed continuum counterpart: {len(changed_counterpart_det
 print(f"[{catchunk}] Changed z assignments: {len(changed_z_dets)}")
 print(f"[{catchunk}] Questionable z assignments: {len(questionable_z_dets)}")
 # print(f"Changed: {changed_z_dets}")
-print(f"[{catchunk}] Source IDs to update ({len(source_id_mismatches)}): {source_id_mismatches}")
+print(f"[{catchunk}] Source IDs to update ({len(source_id_mismatches)})")#: {source_id_mismatches}")
+print(f"[{catchunk}] Errors: {len(dets_with_errors)}")
+
+with open(f"{catchunk[0:3]}_errors.dets","w") as f:
+    for d,e in zip(dets_with_errors,dets_with_errors_reason):
+        f.write(f"{d}\t{e}\n")
+
+with open(f"{catchunk[0:3]}_questionble_z.dets","w") as f:
+    for d in zip(questionable_z_dets):
+        f.write(f"{d}\n")
+
 
 ####################################
 #update the source_ids
