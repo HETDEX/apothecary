@@ -5264,18 +5264,29 @@ if s03_fluxcal and not dtprog["s03_fluxcal"]:
 
     #this is largely for parallels and we want GAIA for that, so have it first
     # note: for HETDEX it was SDSS first for flux calibration and GAIA for astrometry
-    if os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.gaia")):
-        star_cat_list.append("gaia")
 
-    if os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.sdss")):
-        star_cat_list.append("sdss")
+    if cfg.hetdex:
+        #SDSS for flux calibration and GAIA for astrometry
+        if os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.sdss")):
+            star_cat_list.append("sdss")
 
-    if os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.panstarrs")):
-         star_cat_list.append("panstarrs")
+        if os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.gaia")):
+            star_cat_list.append("gaia")
+
+        if os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.panstarrs")):
+            star_cat_list.append("panstarrs")
+    else:
+        if os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.gaia")):
+            star_cat_list.append("gaia")
+
+        if os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.sdss")):
+            star_cat_list.append("sdss")
+
+        if os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.panstarrs")):
+             star_cat_list.append("panstarrs")
 
     if len(star_cat_list) == 0:
         Quit(cfg, -1, "FATAL. Something wrong. No star catalogs available under vdrp/shifts.")
-
 
     for star_cat in star_cat_list:
         print(f"[{cfg.datevshot}] flux calibration: {star_cat}")
