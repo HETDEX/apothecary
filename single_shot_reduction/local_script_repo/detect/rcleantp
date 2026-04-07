@@ -1,4 +1,5 @@
 name=$1
+echo "running rcleantp"
 rm -f ${name}*/j?
 rm -f ${name}*/radc
 rm -f ${name}*/rradc

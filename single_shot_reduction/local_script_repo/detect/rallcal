@@ -2,4 +2,5 @@ rsetstar $1 $2
 rgettp0 $1 $2
 rgettp0b $1 $2 0.2 0.02
 rfitpoly0 $1 $2
-rcleantp $1v$2
+# comment the next line to stop cleanup (loose the .ps plot)
+# rcleantp $1v$2
