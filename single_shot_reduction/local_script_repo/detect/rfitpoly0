@@ -11,7 +11,8 @@ echo $1v$2 > title
 mv out $1v$2sedtpf.dat
 cp $1v$2sedtpf.dat in
 ~gebhardt/bin/fitpoly << eof
-/n
+# /n #skips the plot, change to /vcps to plot
+/vcps
 eof
 cp out in
 ~gebhardt/bin/fixextcor2
