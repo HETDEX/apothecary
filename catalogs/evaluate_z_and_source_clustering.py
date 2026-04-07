@@ -35,7 +35,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*alltru
 ##########################
 # edit as needed
 ##########################
-SHOW_TQDM = True
+SHOW_TQDM = False
 catchunk_format = "fits" #for use with astropy table read/write
 overwrite = True # overwrite the input file after correction, if False, write out as a new file
                  # note: always writes out in the cwd, so if the input is in another directory
@@ -62,6 +62,7 @@ if "-catchunk" in args: #path to the shot h5 file
     i = args.index("-catchunk")
     try:
         catchunk = args[i+1]
+        catchunk_fn = os.path.basename(catchunk)
     except:
         print(f"Invalid -catchunk specified: {args[i+1]}")
         exit(-1)
@@ -667,7 +668,7 @@ no_seldet_sources = np.setdiff1d(keep_srcs, SubSrcTab['source_id'])  # 74 of the
 # why? these 74 do NOT have any flag_seldet in the source_catalog ... no detectid is set as the seldet
 # So, what do we want to do??? well, lets pick one to be the seldet for now and re-insert them
 if len(no_seldet_sources) > 0:
-    print(f"[{catchunk}] re-assigning a selected_det for those that do not have one ...")
+    print(f"[{catchunk_fn}] re-assigning a selected_det for those that do not have one ...")
     no_seldet_sources = np.setdiff1d(keep_srcs, SubSrcTab['source_id'])
     no_seldet_set_det = []
     for s in no_seldet_sources:
@@ -689,26 +690,26 @@ if len(no_seldet_sources) > 0:
         SrcTab['flag_seldet'][sel] = 1
         SrcTab['selected_det'][sel] = True
 
-    #print(f"[{catchunk}] re-select SubSrcTab ...")
+    #print(f"[{catchunk_fn}] re-select SubSrcTab ...")
 
     sel = np.full(len(SrcTab), False)
     sel_seldet = np.array(SrcTab['flag_seldet'] != 0)
 
-    #print(f"[{catchunk}] sub select 1")
+    #print(f"[{catchunk_fn}] sub select 1")
     SubSrcTab = SrcTab[sel_seldet]
 
     # want the indicies into SubSrcTab that match the source_ids in u_srcs
-    #print(f"[{catchunk}] intersect ...")
+    #print(f"[{catchunk_fn}] intersect ...")
     _, i1, i2 = np.intersect1d(keep_srcs, SubSrcTab['source_id'], assume_unique=True, return_indices=True)
     #print(len(i1), len(i2))
 
-    #print(f"[{catchunk}] sub select 2")
+    #print(f"[{catchunk_fn}] sub select 2")
     SubSrcTab = SubSrcTab[i2]
 
     #print(len(SubSrcTab), len(keep_srcs), len(np.intersect1d(keep_srcs, SubSrcTab['source_id'], assume_unique=True)))
-    print(f"[{catchunk}] SrcTab (as selected) has been modified s|t every source_id now has exactly one detectid that is the selected_det")
+    print(f"[{catchunk_fn}] SrcTab (as selected) has been modified s|t every source_id now has exactly one detectid that is the selected_det")
 
-print(f"[{catchunk}] Now SubSrcTab has one entry for every source_id and that entry is the detectid that is the selected_det")
+print(f"[{catchunk_fn}] Now SubSrcTab has one entry for every source_id and that entry is the detectid that is the selected_det")
 
 
 #############################
@@ -836,7 +837,7 @@ for i, row in tqdm(enumerate(SrcTab),total= len(SrcTab),disable=not SHOW_TQDM):
         row_z_hetdex = None
 
     elif src_ct == 0:  # this is an error case, should not happen
-        print(f"[{catchunk}] {det} WFT? has not source_id??")
+        print(f"[{catchunk_fn}] {det} WFT? has not source_id??")
         dets_with_errors.append(det)
         dets_with_errors_reason.append("no source_id")
         continue  # have to just ignore it and move on to the next
@@ -852,13 +853,13 @@ for i, row in tqdm(enumerate(SrcTab),total= len(SrcTab),disable=not SHOW_TQDM):
             # this is a problem ... most likely due to early cuts, the one with the flag_seldet was excluded
             # this PROBABLY means that it is a poorly chosen seldet for this clustering
             print(
-                f"[{catchunk}] [{det}] Error. Source_id {srcid} has no flag_seldet. Claims {src_ct} members. selection = {np.count_nonzero(which_is_seldet)}")
+                f"[{catchunk_fn}] [{det}] Error. Source_id {srcid} has no flag_seldet. Claims {src_ct} members. selection = {np.count_nonzero(which_is_seldet)}")
 
             # alternate check
             which_is_seldet = SrcTab['selected_det'][sel_src] == True
             if np.count_nonzero(which_is_seldet) != 1:
                 print(
-                    f"[{catchunk}] [{det}] Error. Alternate check: Source_id {srcid} has no flag_seldet. Claims {src_ct} members. selection = {np.count_nonzero(which_is_seldet)}")
+                    f"[{catchunk_fn}] [{det}] Error. Alternate check: Source_id {srcid} has no flag_seldet. Claims {src_ct} members. selection = {np.count_nonzero(which_is_seldet)}")
                 continue
 
             # if z_hetdex_src == 'liu_agn':  # z_agn is not necessarily from Chenxu
@@ -991,18 +992,18 @@ for i, row in tqdm(enumerate(SrcTab),total= len(SrcTab),disable=not SHOW_TQDM):
 
 source_id_mismatches = np.unique(source_id_mismatches)
 # changed_counterpart_dets
-print(f"[{catchunk}] Changed continuum counterpart: {len(changed_counterpart_dets)}")
-print(f"[{catchunk}] Changed z assignments: {len(changed_z_dets)}")
-print(f"[{catchunk}] Questionable z assignments: {len(questionable_z_dets)}")
+print(f"[{catchunk_fn}] Changed continuum counterpart: {len(changed_counterpart_dets)}")
+print(f"[{catchunk_fn}] Changed z assignments: {len(changed_z_dets)}")
+print(f"[{catchunk_fn}] Questionable z assignments: {len(questionable_z_dets)}")
 # print(f"Changed: {changed_z_dets}")
-print(f"[{catchunk}] Source IDs to update ({len(source_id_mismatches)})")#: {source_id_mismatches}")
-print(f"[{catchunk}] Errors: {len(dets_with_errors)}")
+print(f"[{catchunk_fn}] Source IDs to update ({len(source_id_mismatches)})")#: {source_id_mismatches}")
+print(f"[{catchunk_fn}] Errors: {len(dets_with_errors)}")
 
-with open(f"{catchunk[0:3]}_errors.dets","w") as f:
+with open(f"{catchunk_fn[0:3]}_errors.dets","w") as f:
     for d,e in zip(dets_with_errors,dets_with_errors_reason):
         f.write(f"{d}\t{e}\n")
 
-with open(f"{catchunk[0:3]}_questionble_z.dets","w") as f:
+with open(f"{catchunk_fn[0:3]}_questionble_z.dets","w") as f:
     for d in zip(questionable_z_dets):
         f.write(f"{d}\n")
 
@@ -1059,6 +1060,8 @@ except:
     pass
 
 if overwrite:
-    SrcTab.write(catchunk,format=catchunk_format,overwrite=True)
+    print(f"[{catchunk_fn}] Done. (Over)Writing to cwd.")
+    SrcTab.write(catchunk_fn,format=catchunk_format,overwrite=True)
 else:
-    SrcTab.write(f"updated_{catchunk}", format=catchunk_format, overwrite=False)
+    print(f"[{catchunk_fn}] Done. Writing updated_{catchunk_fn} to cwd.")
+    SrcTab.write(f"updated_{catchunk_fn}", format=catchunk_format, overwrite=False)
