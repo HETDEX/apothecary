@@ -73,6 +73,16 @@ else:
     print("Fatal. Must supply --catchunk <path to the cat chunk file>")
     exit(-1)
 
+if "-tqdm" in args:
+    i = args.index("-tqdm")
+    try:
+        SHOW_TQDM = True
+    except:
+        print(f"Invalid -tqdm specified")
+
+    args.remove("-tqdm")
+else:
+    pass
 
 ########################
 # load the table
@@ -748,7 +758,7 @@ dets_with_errors_reason = []
 source_id_mismatches = []
 
 # sdet = SrcTab['detectid'] == check_det
-
+print(f"[{catchunk_fn}] Main z_hetdex evaluation loop ...")
 # for i,row in enumerate(tqdm(SrcTab[sdet])):
 for i, row in tqdm(enumerate(SrcTab),total= len(SrcTab),disable=not SHOW_TQDM):
 
@@ -1012,6 +1022,7 @@ with open(f"{catchunk_fn[0:3]}_questionble_z.dets","w") as f:
 #update the source_ids
 ###################################
 # now, go through those mismatches and assign new source_ids
+print(f"[{catchunk_fn}] Updating source_ids ...")
 try:
     SrcTab.remove_indices('source_id')
 except:
