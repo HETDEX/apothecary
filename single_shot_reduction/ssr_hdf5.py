@@ -18,6 +18,7 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 # 0.1.3 restored FiberIndex as its own separate table to speed up searches
 # 0.1.4 add in the Astrometry Collapsed images as they can come in handy for debugging and are part of analysis notebook
 #       turned on group level compression for these iamges AND for the CCD images
+#       added in Calibration.Throughput.throughput
 
 __version__ = '0.1.4'
 
@@ -844,6 +845,14 @@ class VIRUSFiberIndexWithFlags(tables.IsDescription):
     flag_throughput = tables.Int8Col(dflt=1) #pos=26) #1 is "good"
 
 
+class ThroughputTable (tables.IsDescription):
+
+    wavelength = tables.Int32Col(pos=0)
+    throughput = tables.Int32Col(pos=1)
+    tp_low = tables.Int32Col(pos=2)
+    tp_high = tables.Int32Col(pos=3)
+    rat_poly = tables.Int32Col(pos=4)
+    tp_gband = tables.Int32Col(pos=5)
 
 
 def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
@@ -933,6 +942,33 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         #just one row for Shot table, so just do a direct copy
         fileh.root.Shot.append(shot_h5.root.Shot.read())
         fileh.root.Shot.flush()
+
+        ############################
+        # Calibration/Throughput
+        # very small table with some limited use
+        # (including for compatibility with analysis notebook)
+        ############################
+
+        try:
+            group = fileh.create_group(fileh.root, "Calibration", "HETDEX Calibration Info")
+            groupThroughput = fileh.create_group(group, "Throughput", "Throughput Curve")
+            fileh.create_table(fileh.root.Calibration.Throughput, "throughput", ThroughputTable, 'Throughput Curve')
+
+            for row in shot_h5.root.Calibration.Throughput.throughput.read():
+                # for row in shot_h5.root.Data.Fibers.read():
+                new_row = fileh.root.Calibration.Throughput.throughput.row
+                # go over some columns individual since want to change some types
+                # directy copy columns:
+                for col in fileh.root.Calibration.Throughput.throughput.colnames:
+                    new_row[col] = row[col].astype(np.float32) #they are float64, needlessly
+
+                new_row.append()
+
+            fileh.root.Calibration.Throughput.throughput.flush()
+
+        except:
+            #log.debug("Non fatal. Will ignore. Fail on Calibration/Throughput/throughput table", exc_info=True)
+            print(f"[{datevshot}] Non fatal. Will ignore. Fail on Calibration/Throughput/throughput table: {traceback.format_exc()}")
 
 
         #######################################
@@ -1171,6 +1207,8 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         #create a softlink for compatibility ????
         print(f"[{datevshot}] Trying softlink to FiberIndex....")
         shot_h5.create_soft_link(fileh.root.Data, 'FiberIndex', target=fileh.root.FiberIndex)
+
+
 
 
 
