@@ -16,8 +16,10 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 # 0.1.2 restored VIRUSImage data (the CCD clean_image, image(with sky) and error, but really try to keep as float16
 #       the images can force to float32 but if only the error is large, cap the error to max float16
 # 0.1.3 restored FiberIndex as its own separate table to speed up searches
+# 0.1.4 add in the Astrometry Collapsed images as they can come in handy for debugging and are part of analysis notebook
+#       turned on group level compression for these iamges AND for the CCD images
 
-__version__ = '0.1.3'
+__version__ = '0.1.4'
 
 
 import numpy as np
@@ -45,6 +47,9 @@ UNSET_NAN = np.nan
 SUPPORTED_ELIXER_H5_VERSIONS = [b"0.9.2",b"0.10.0"]
 SHOW_TQDM = True
 
+Include_CoaddImage_matched = True
+Include_CoaddImage_ifugrid = True
+Include_CoaddImage_skyview = True
 
 HalfFloatCol = tables.Float16Col
 FullFloatCol = tables.Float32Col
@@ -953,7 +958,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
 
         #######################################
-        # Fibers (also FiberIndex)
+        # Fibers
         #######################################
 
         print(f"[{datevshot}] Importing Fiber data ... ", flush=True)
@@ -997,12 +1002,15 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             #             mx = np.max(shot_h5.root.Data.Fibers.read(field="fiber_to_fiber"))
             #             if mx > threshold_16:
             #                 use32 = True
+
+        #note: turning on fitlers=COMPRESSION_FITLER can save about 500MB per file BUT
+        #      reading the fibers is 1.5 to 3x longer and fibers are what are hit most
         if use32:
             print(f"[{datevshot}] Using Float32 for VIRUSFibers",flush=True)
-            fileh.create_table(fileh.root, 'Fibers', VIRUSFiber32, 'Fiber Summary Table')
+            fileh.create_table(fileh.root, 'Fibers', VIRUSFiber32, 'Fiber Summary Table')#,filters=COMPRESSION_FILTER)
         else:
             print(f"[{datevshot}] Using Float16 for VIRUSFibers",flush=True)
-            fileh.create_table(fileh.root, 'Fibers', VIRUSFiber16, 'Fiber Summary Table')
+            fileh.create_table(fileh.root, 'Fibers', VIRUSFiber16, 'Fiber Summary Table')#,filters=COMPRESSION_FILTER)
 
         #this will also be softlinked to root.Data.Fibers
         #fileh.create_table(group_data, 'Fibers', VIRUSFiber, 'Fiber Summary Table')
@@ -1203,10 +1211,10 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
             if use32:
                 print(f"[{datevshot}] Using Float32 for VIRUSImages")
-                fileh.create_table(fileh.root.Data, 'Images', VIRUSImage32, 'VIRUS CCD Image Data')
+                fileh.create_table(fileh.root.Data, 'Images', VIRUSImage32, 'VIRUS CCD Image Data',filters=COMPRESSION_FILTER)
             else:
                 print(f"[{datevshot}] Using Float16 for VIRUSImages")
-                fileh.create_table(fileh.root.Data, 'Images', VIRUSImage16, 'VIRUS CCD Image Data')
+                fileh.create_table(fileh.root.Data, 'Images', VIRUSImage16, 'VIRUS CCD Image Data',filters=COMPRESSION_FILTER)
 
             for row in tqdm(shot_h5.root.Data.Images.read(),disable=not SHOW_TQDM):
                 # for row in shot_h5.root.Data.Fibers.read():
@@ -1300,6 +1308,38 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
         fileh.root.AmpStats.flush()
 
+
+
+        ######################################
+        # Astrometry
+        # Images
+        # NOTE: unlike the elixer images, these are 1 per leaf table
+        ######################################
+
+        if Include_CoaddImage_matched or Include_CoaddImage_ifugrid or Include_CoaddImage_skyview:
+            print(f"[{datevshot}] Importing Collapsed Images ...", flush=True)
+            try:
+
+                groupAstrometry = fileh.create_group(fileh.root, 'Astrometry', 'Astrometry Info')
+                #create the group with compression
+                groupCoadd = fileh.create_group(groupAstrometry, 'CoaddImages', 'Coadd Images',filters=COMPRESSION_FILTER)
+
+                for node in shot_h5.root.Astrometry.CoaddImages:
+                    n = shot_h5.get_node(node)
+
+                    if (n.name[0:3] == "mat" and Include_CoaddImage_matched) or \
+                       (n.name[0:3] == "png" and Include_CoaddImage_ifugrid) or \
+                       (n.name[0:3] == "exp" and Include_CoaddImage_skyview):
+                        try:
+                            img_array = n.read().astype(np.float32)
+                            #compression is automtic due to group creation with filters defined
+                            fileh.create_array(groupCoadd, n.name, img_array)
+                        except:
+                            log.debug(f"[{datevshot}] Exception adding {n}", exc_info=True)
+
+                fileh.flush()
+            except:
+                log.debug(f"[{datevshot}] Exception adding Collapsed Image(s)", exc_info=True)
 
 
         #done with the shot.h5 file now
