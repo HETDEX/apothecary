@@ -19,8 +19,10 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 # 0.1.4 add in the Astrometry Collapsed images as they can come in handy for debugging and are part of analysis notebook
 #       turned on group level compression for these iamges AND for the CCD images
 #       added in Calibration.Throughput.throughput
+# 0.1.5 repace --exclude_ccd_images with --minimum as applies to more than just the VIRUS CCD images
+#       include all additional original hdf5 info except the SuffleCfg
 
-__version__ = '0.1.4'
+__version__ = '0.1.5'
 
 
 import numpy as np
@@ -74,7 +76,16 @@ clip_float16 = 65500.0
 
 FATAL_EXIT = 0 #global flag to terminate
 elixer_h5_force = False  #if True (set later) ignore the version constraint and try anyway
-exclude_ccd_images = False #do not include the CCD images (VIRUSImage table)
+#exclude_ccd_images = False #do not include the CCD images (VIRUSImage table)
+minimum_h5 = False #replaced exclude_ccd_images
+full_h5 = True
+
+#sanity force values
+if full_h5:
+    minimum_h5 = False
+    Include_CoaddImage_matched = True
+    Include_CoaddImage_ifugrid = True
+    Include_CoaddImage_skyview = True
 
 #logging will just be prints
 #this is all single threaded, no real management needed
@@ -855,6 +866,84 @@ class ThroughputTable (tables.IsDescription):
     tp_gband = tables.Int32Col(pos=5)
 
 
+class QualityAssessment(tables.IsDescription):
+    expnum = tables.Int32Col(pos=0)
+    xoffset = tables.Float32Col(pos=1)
+    yoffset = tables.Float32Col(pos=2)
+    xrms = tables.Float32Col(pos=3)
+    yrms = tables.Float32Col(pos=4)
+    nstars = tables.Float32Col(pos=5)
+
+
+class NominalVals(tables.IsDescription):
+    expnum = tables.Int32Col(pos=0)
+    ra = tables.Float32Col(pos=1)
+    dec = tables.Float32Col(pos=2)
+    parangle = tables.Float32Col(pos=3)
+    x_dither_pos = tables.Float32Col(pos=4)
+    y_dither_pos = tables.Float32Col(pos=5)
+    relflux_virus = tables.Float32Col(pos=6)
+    als_filename = tables.StringCol((23))
+
+
+class Fplane(tables.IsDescription):
+    ifuslot = tables.Int32Col(pos=0)
+    fpx = tables.Float32Col(pos=1)
+    fpy = tables.Float32Col(pos=2)
+    specid = tables.Int32Col(pos=3)
+    specslot = tables.Int32Col(pos=4)
+    ifuid = tables.Int32Col(pos=5)
+    ifurot = tables.Float32Col(pos=6)
+    platesc = tables.Float32Col(pos=7)
+
+class Dithall(tables.IsDescription):
+    ra = tables.Float32Col(pos=0)
+    dec = tables.Float32Col(pos=1)
+    ifuslot = tables.StringCol((3))
+    XS = tables.Float32Col()
+    YS = tables.Float32Col()
+    xfplane = tables.Float32Col()
+    yfplane = tables.Float32Col()
+    multifits = tables.StringCol((28))
+    timestamp = tables.StringCol((17))
+    exposure = tables.StringCol((5))
+
+class PositionOffsets(tables.IsDescription):
+    xoffset = tables.Float32Col(pos=0)
+    yoffset = tables.Float32Col(pos=1)
+    ra_dex = tables.Float32Col(pos=2)
+    dec_dex = tables.Float32Col(pos=3)
+    ra_cat = tables.Float32Col(pos=4)
+    dec_cat = tables.Float32Col(pos=5)
+    ifuslot = tables.Int32Col(pos=6)
+
+
+class StarCatalog(tables.IsDescription):
+    ignore = tables.Int64Col(pos=0)
+    star_ID = tables.StringCol((28), pos=1)
+    ra_cat = tables.Float64Col(pos=2)
+    dec_cat = tables.Float64Col(pos=3)
+    u = tables.Float64Col(pos=4)
+    g = tables.Float64Col(pos=5)
+    r = tables.Float64Col(pos=6)
+    i = tables.Float64Col(pos=7)
+    z = tables.Float64Col(pos=8)
+
+
+class StarCatalogMatches(tables.IsDescription):
+    RA_det = tables.Float32Col(pos=0)
+    DEC_det = tables.Float32Col((28), pos=1)
+    IFUSLOT_det = tables.Int32Col(pos=2)
+    xifu_det = tables.Float32Col(pos=3)
+    yifu_det = tables.Float32Col(pos=4)
+    ifuslot_det = tables.Int32Col(pos=5)
+    RA_cat = tables.Float32Col(pos=6)
+    DEC_cat = tables.Float32Col(pos=7)
+    IFUSLOT_cat = tables.Int32Col(pos=8)
+    xifu_cat = tables.Float32Col(pos=9)
+    yifu_cat = tables.Float32Col(pos=10)
+    ifuslot_cat = tables.Int32Col(pos=11)
+
 def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
     """
     combine and trim the original <shot.h5> and <elixer.h5> files
@@ -966,9 +1055,23 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
             fileh.root.Calibration.Throughput.throughput.flush()
 
+
+            #and the image /Calibration/Throughput/tp_png (ImageArray(1684, 1190, 4))
+            try:
+                if "tp_png" in [node.name for node in shot_h5.root.Calibration.Throughput]:
+                    pngimarr = shot_h5.root.Calibration.Throughput.tp_png.read()
+                    pngim = fileh.create_array(groupThroughput, "tp_png", pngimarr,filter=COMPRESSION_FILTER)
+                    pngim.attrs["CLASS"] = "IMAGE"
+                    pngim.flush()
+                else:
+                    print(f"[{datevshot}] Non fatal. Will ignore. tp_png not found in root.Calibration.Throughput")
+
+            except:
+                print(f"[{datevshot}] Non fatal. Will ignore. Fail on Calibration/Throughput/tp_png: {traceback.format_exc()}")
+
         except:
             #log.debug("Non fatal. Will ignore. Fail on Calibration/Throughput/throughput table", exc_info=True)
-            print(f"[{datevshot}] Non fatal. Will ignore. Fail on Calibration/Throughput/throughput table: {traceback.format_exc()}")
+            print(f"[{datevshot}] Non fatal. Will ignore. Fail on Calibration/Throughput: {traceback.format_exc()}")
 
 
         #######################################
@@ -1218,7 +1321,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         #      will skip. Does not impact re-extraction, BUT you cannot build elixer reports without them
         #                    and without other data.
         ##################################
-        if not exclude_ccd_images:
+        if not minimum_h5:
             print(f"[{datevshot}] Importing VIRUS CCD image data ... ", flush=True)
 
             if StdFloatCol == FullFloatCol:
@@ -1354,11 +1457,11 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         # NOTE: unlike the elixer images, these are 1 per leaf table
         ######################################
 
-        if Include_CoaddImage_matched or Include_CoaddImage_ifugrid or Include_CoaddImage_skyview:
+        if full_h5 or Include_CoaddImage_matched or Include_CoaddImage_ifugrid or Include_CoaddImage_skyview:
+            groupAstrometry = fileh.create_group(fileh.root, 'Astrometry', 'Astrometry Info')
+
             print(f"[{datevshot}] Importing Collapsed Images ...", flush=True)
             try:
-
-                groupAstrometry = fileh.create_group(fileh.root, 'Astrometry', 'Astrometry Info')
                 #create the group with compression
                 groupCoadd = fileh.create_group(groupAstrometry, 'CoaddImages', 'Coadd Images',filters=COMPRESSION_FILTER)
 
@@ -1379,6 +1482,149 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             except:
                 log.debug(f"[{datevshot}] Exception adding Collapsed Image(s)", exc_info=True)
 
+
+
+            if full_h5: #the rest of the Astrometry
+
+                try:
+                    print(f"[{datevshot}] Astrometry.NominalVals")
+                    fileh.create_table(groupAstrometry, 'NominalVals', NominalVals, 'Nominal Values')
+                    copy_cols = fileh.root.Astrometry.NominalVals.colnames
+                    for row in tqdm(shot_h5.root.Astrometry.NominalVals.read()):#, disable=not SHOW_TQDM):
+                        new_row = fileh.root.Astrometry.NominalVals.row
+                        # go over some columns individual since want to change some types
+                        # directy copy columns:
+                        for col in copy_cols:
+                            new_row[col] = row[col]
+
+                        new_row.append()
+
+                    fileh.root.Astrometry.NominalVals.flush()
+                except:
+                    log.debug(f"[{datevshot}] Exception adding Astrometry.NominalVals", exc_info=True)
+
+                try:
+                    print(f"[{datevshot}] Astrometry.QA")
+                    fileh.create_table(groupAstrometry, 'QA', QualityAssessment, 'Quality Assessment')
+                    copy_cols = fileh.root.Astrometry.QA.colnames
+                    for row in tqdm(shot_h5.root.Astrometry.QA.read()):#, disable=not SHOW_TQDM):
+                        new_row = fileh.root.Astrometry.QA.row
+                        # go over some columns individual since want to change some types
+                        # directy copy columns:
+                        for col in copy_cols:
+                            new_row[col] = row[col]
+
+                        new_row.append()
+
+                    fileh.root.Astrometry.QA.flush()
+                except:
+                    log.debug(f"[{datevshot}] Exception adding Astrometry.QA", exc_info=True)
+
+                print(f"[{datevshot}] Deliberately skipping Astrometry.ShuffleCfg. This is by design.")
+
+                try:
+                    print(f"[{datevshot}] Astrometry.StarCatalog")
+                    fileh.create_table(groupAstrometry, 'StarCatalog', StarCatalog, 'StarCatalog')
+                    copy_cols = fileh.root.Astrometry.StarCatalog.colnames
+                    for row in tqdm(shot_h5.root.Astrometry.StarCatalog.read()):#, disable=not SHOW_TQDM):
+                        new_row = fileh.root.Astrometry.StarCatalog.row
+                        # go over some columns individual since want to change some types
+                        # directy copy columns:
+                        for col in copy_cols:
+                            new_row[col] = row[col]
+
+                        new_row.append()
+
+                    fileh.root.Astrometry.StarCatalog.flush()
+                except:
+                    log.debug(f"[{datevshot}] Exception adding Astrometry.StarCatalog", exc_info=True)
+
+
+                try:
+                    print(f"[{datevshot}] Astrometry.fplane")
+                    fileh.create_table(groupAstrometry, 'fplane', Fplane, 'fplane')
+                    int_cols = ['ifuslot','specid','specslot','ifuid']
+                    float_cols = ['fpx','fpy','ifurot','platesc']
+                    for row in tqdm(shot_h5.root.Astrometry.fplane.read()):#, disable=not SHOW_TQDM):
+                        new_row = fileh.root.Astrometry.fplane.row
+                        # go over some columns individual since want to change some types
+                        # directy copy columns:
+                        for col in int_cols:
+                            new_row[col] = row[col].astype(np.int32)
+                        for col in float_cols:
+                            new_row[col] = row[col].astype(np.float32)
+
+                        new_row.append()
+
+                    fileh.root.Astrometry.fplane.flush()
+                except:
+                    log.debug(f"[{datevshot}] Exception adding Astrometry.fplane", exc_info=True)
+
+
+                #CatalogMatches ... depends on the number of exposures
+                try:
+                    print(f"[{datevshot}] Astrometry.CatalogMatches.exp??")
+                    subgroup = fileh.create_group(fileh.root.Astrometry, 'CatalogMatches', 'Match Catalog Info')
+
+                    #notice: there is redundant info IFUSLOT_det vs ifuslot_det
+                    #                            and IFUSLOT_cat vs ifuslot_cat
+                    # ASSUME this is for some compatibility? overall size impact is negligible so just leave as is
+                    int_cols = ['IFUSLOT_det','ifuslot_det','IFUSLOT_cat','ifuslot_cat']
+                    float_cols = ['RA_det','DEC_det','xifu_det','yifu_det','RA_cat','DEC_cat','xifu_cat','yifu_cat']
+
+                    for node in shot_h5.root.Astrometry.CatalogMatches: #this is "exp01", "exp02", ...
+                        scmtb = fileh.create_table(subgroup, node.name, StarCatalogMatches, 'Match Catalog Info')
+                        new_row = scmtb.row
+
+                        #there is no need for the int64 and float64, but int16 and float16 is not enough
+                        #so cast to 32bit
+                        for col in int_cols:
+                            new_row[col] = row[col].astype(np.int32)
+                        for col in float_cols:
+                            new_row[col] = row[col].astype(np.float32)
+
+                        scmtb.flush()
+
+                except:
+                    log.debug(f"[{datevshot}] Exception adding Astrometry.CatalogMatches.exp??", exc_info=True)
+
+                # Dithall ... depends on the number of exposures
+                try:
+                    print(f"[{datevshot}] Astrometry.Dithall.exp??")
+                    subgroup = fileh.create_group(fileh.root.Astrometry, 'Dithall', 'Fiber Astrometry Info')
+
+                    for node in shot_h5.root.Astrometry.Dithall:  # this is "exp01", "exp02", ...
+                        datb = fileh.create_table(subgroup, node.name, Dithall, 'Fiber Astrometry Info')
+                        new_row = datb.row
+                        copy_cols = fileh.root.Astrometry.Dithall.colnames
+
+                        for col in copy_cols:
+                            new_row[col] = row[col]
+
+                        datb.flush()
+                except:
+                    log.debug(f"[{datevshot}] Exception adding Astrometry.Dithall.exp??", exc_info=True)
+
+
+                # PositionOffsets ... depends on the number of exposures
+                try:
+                    print(f"[{datevshot}] Astrometry.PositionOffsets.exp??")
+                    subgroup = fileh.create_group(fileh.root.Astrometry, 'PositionOffsets', 'Offset in star matches')
+                    int_cols = ['ifuslot']
+                    float_cols = ['xoffset','yoffset','ra_dex','dec_dex','ra_cat','dec_cat']
+
+                    for node in shot_h5.root.Astrometry.Dithall:  # this is "exp01", "exp02", ...
+                        potb = fileh.create_table(subgroup, node.name, PositionOffsets, 'Offset in star matches')
+                        new_row = potb.row
+
+                        for col in float_cols:
+                            new_row[col] = row[col].astype(np.float32)
+                        for col in int_cols:
+                            new_row[col] = row[col].astype(np.int32)
+
+                        potb.flush()
+                except:
+                    log.debug(f"[{datevshot}] Exception adding Astrometry.PositionOffsets.exp??", exc_info=True)
 
         #done with the shot.h5 file now
         shot_h5.close()
@@ -2157,10 +2403,13 @@ if "-float32" in args: #force32 bit for fields that were originally 32bit (do no
     args.remove("-float32")
 
 #maybe this is enough ?
-if "-exclude_ccd" in args:
-    exclude_ccd_images = True
-    args.remove("-exclude_ccd")
+# if "-exclude_ccd" in args:
+#     exclude_ccd_images = True
+#     args.remove("-exclude_ccd")
 
+if "-minimum" in args:
+    minimum_h5 = True
+    args.remove("-minimum")
 
 if "-bg" in args:
     SHOW_TQDM = False
@@ -2173,7 +2422,7 @@ if "-bg" in args:
     del args[i + 1]
     args.remove("-bg")
 else:
-    if not exclude_ccd_images: #cut in half
+    if not minimum_h5: #cut in half
         Max_Simultaneous_Shots = round(Max_Simultaneous_Shots/2)
 
 
