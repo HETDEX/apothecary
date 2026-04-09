@@ -20,7 +20,7 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 #       turned on group level compression for these iamges AND for the CCD images
 #       added in Calibration.Throughput.throughput
 # 0.1.5 repace --exclude_ccd_images with --minimum as applies to more than just the VIRUS CCD images
-#       include all additional original hdf5 info except the SuffleCfg
+#       include all additional original hdf5 info
 
 __version__ = '0.1.5'
 
@@ -1520,7 +1520,16 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 except:
                     log.debug(f"[{datevshot}] Exception adding Astrometry.QA", exc_info=True)
 
-                print(f"[{datevshot}] Deliberately skipping Astrometry.ShuffleCfg. This is by design.")
+                #print(f"[{datevshot}] Deliberately skipping Astrometry.ShuffleCfg. This is by design.")
+
+                try:
+                    blob = shot_h5.root.Astrometry.ShuffleCfg.read()
+                    if len(blob) > 0:
+                        fileh.create_array(groupAstrometry, 'ShuffleCfg', blob)
+                        shot_h5.root.Astrometry.ShuffleCfg.flush()
+                except:
+                    log.debug(f"[{datevshot}] Exception adding Astrometry.ShuffleCfg", exc_info=True)
+
 
                 try:
                     print(f"[{datevshot}] Astrometry.StarCatalog")
