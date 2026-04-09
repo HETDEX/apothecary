@@ -1009,7 +1009,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
         outfn = "ssr_" + os.path.basename(shot_fn)
 
-        log.debug(f"[{datevshot}] Creating new SingleShot Reduction HDF5 catalog (%s)" % (outfn))
+        log.debug(f"[{datevshot}] ***START*** Creating new SingleShot Reduction HDF5 catalog (%s)" % (outfn))
 
         fileh = tables.open_file(outfn, 'w', 'SingleShot Reduction Catalog')
 
@@ -1574,14 +1574,15 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
                     for node in shot_h5.root.Astrometry.CatalogMatches: #this is "exp01", "exp02", ...
                         scmtb = fileh.create_table(subgroup, node.name, StarCatalogMatches, 'Match Catalog Info')
-                        new_row = scmtb.row
+                        for row in node:
+                            new_row = scmtb.row
 
-                        #there is no need for the int64 and float64, but int16 and float16 is not enough
-                        #so cast to 32bit
-                        for col in int_cols:
-                            new_row[col] = row[col].astype(np.int32)
-                        for col in float_cols:
-                            new_row[col] = row[col].astype(np.float32)
+                            #there is no need for the int64 and float64, but int16 and float16 is not enough
+                            #so cast to 32bit
+                            for col in int_cols:
+                                new_row[col] = np.int32(row[col])#.astype(np.int32)
+                            for col in float_cols:
+                                new_row[col] = np.float32(row[col])#.astype(np.float32)
 
                         scmtb.flush()
 
@@ -1595,11 +1596,12 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
                     for node in shot_h5.root.Astrometry.Dithall:  # this is "exp01", "exp02", ...
                         datb = fileh.create_table(subgroup, node.name, Dithall, 'Fiber Astrometry Info')
-                        new_row = datb.row
-                        copy_cols = fileh.root.Astrometry.Dithall.colnames
+                        for row in node:
+                            new_row = datb.row
+                            copy_cols = node.colnames
 
-                        for col in copy_cols:
-                            new_row[col] = row[col]
+                            for col in copy_cols:
+                                new_row[col] = row[col]
 
                         datb.flush()
                 except:
@@ -1613,14 +1615,15 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                     int_cols = ['ifuslot']
                     float_cols = ['xoffset','yoffset','ra_dex','dec_dex','ra_cat','dec_cat']
 
-                    for node in shot_h5.root.Astrometry.Dithall:  # this is "exp01", "exp02", ...
+                    for node in shot_h5.root.Astrometry.PositionOffsets:  # this is "exp01", "exp02", ...
                         potb = fileh.create_table(subgroup, node.name, PositionOffsets, 'Offset in star matches')
-                        new_row = potb.row
+                        for row in node:
+                            new_row = potb.row
 
-                        for col in float_cols:
-                            new_row[col] = row[col].astype(np.float32)
-                        for col in int_cols:
-                            new_row[col] = row[col].astype(np.int32)
+                            for col in float_cols:
+                                new_row[col] = np.float32(row[col])#.astype(np.float32)
+                            for col in int_cols:
+                                new_row[col] = np.int32(row[col])#.astype(np.int32)
 
                         potb.flush()
                 except:
