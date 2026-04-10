@@ -110,6 +110,7 @@ except:
     print(f"Fatal. Could not load {elixer_h5_fn}",traceback.format_exc())
     exit(-1)
 
+
 EOTab = Table(elixer_h5.root.ExtractedObjects.read_where("(selected==True) & ((filter_name==b'g')|(filter_name==b'r')|(filter_name==b'f606w'))"))
 #note: this will be applied in a loop just a bit further down
 #EOTab = EOTab[~eo_sel] #do not restrict here ... this is the general case, not the OII specific case
@@ -276,6 +277,9 @@ def evaluate_z_hetdex(row):
     """
     try:
         det = row['detectid']
+
+
+
         srcid = row['source_id']
         z = None  # the z we will adjust
         z_src = None
@@ -287,11 +291,13 @@ def evaluate_z_hetdex(row):
         flags = row['flags']  # elixer flags
         good = True  # start with this assumption
 
+        #print(f"*** DEBUG. evaluate_z_hetdex for {det}. Initial z_hetdex = {z_hetdex:0.4f}")
+
         # we are normally to trust z_agn as they are set manually
         # 2em are two emission lines that match LyA + CIV and are assigned by Erin ... not a Chenxu manual check AGN
         # is this from Chenxu
         if z_hetdex_src == "liu_agn":
-            # print("Chenxu AGN")
+            #print(f"*** DEBUG: Chenxu AGN")
             return True, z_hetdex, z_hetdex_src
 
         # if (z_agn is not None and z_agn > 0) or z_hetdex_src == "liu_agn":
@@ -318,36 +324,60 @@ def evaluate_z_hetdex(row):
             z = z_elixer
             z_src = 'elixer'
             good = False
-        elif row['gmag'] < 23.0:  # normally we use 22 but will give it some room here
+            #print(f"*** DEBUG: zx <= 0.1")
+        elif row['gmag'] <= 22.5:  # normally we use 22 but will give it some room here
             # which one to use?
             # if it is bright, probably z_diagnose
             # or if z_diagnose matches with a line in elixer that could be OII?
             # BUT !!! what about, say a star that really does not have a line? the emission line is bogus?
+            sn = row['sn']
+            chi2 = row['chi2']
+            gmag = row['gmag']
 
+            elix_det_row = elixer_h5.root.Detections.read_where("detectid==det")
+            if len(elix_det_row) != 1:
+                obs_EW = 0.0
+            else:
+                elix_det_row = elix_det_row[0]
+                obs_EW = elix_det_row['flux_line'] / elix_det_row['combined_continuum'] if elix_det_row['combined_continuum'] > 0 else 0.0
+
+            #print(f"*** DEBUG. evaluate_z_hetdex for {det}: EW = {obs_EW:0.2f}, gmag = {gmag:0.2f}")
             lines = elixer_h5.root.SpectraLines.read_where("detectid==det")
             line_waves = np.array(list([row['wave']]) + list(lines['wavelength'])).flatten()
 
             lines_consistent = line_z_consistency_check(z_diagnose, line_waves, max_delta_aa=6.0)
 
+            #print(f"*** DEBUG lines_consistent: {lines_consistent}")
+
             if len(lines_consistent) >= 1:
                 # keep the z_diagnose but tweak it to the best fit line?
                 # print(f"*** test: {row['wave']} {lines_consistent}")
                 if row['wave'] >= 3470.0:
+                    #for each possible REST wave divide by the detections anchor wave to get a possible z
                     z_consistent = np.array([w / row['wave'] + 1.0 for w in lines_consistent])
+
                     # which z_consistent is closest to z_diganose
                     z = z_consistent[np.abs(z_consistent - z_diagnose).argmin()]
+
+                    #is this actually consistent?
+                    zx = 2. * abs((z_diagnose - z) / (z_diagnose + z))
+                    if zx <= 0.1:
+                        #print(f"*** DEBUG: set z consistent: {z:0.4}")
+                        #keep the z, it is consistent
+                        z_src = 'diagnose'
+                        good = False
+                    else:
+                        z = None
                 else:  # this is a continuum source, just keep it as is
                     z = z_diagnose
-                z_src = 'diagnose'
-                good = False
-            else:
+                    z_src = 'diagnose'
+                    good = False
+
+
+            if z is None:
                 # this COULD still be something like a star (continuum source) with a bad line
                 # maybe there is imaging? If it is very round and Diagnose says z = 0 (or nearly 0) take it as a star
-                if z_diagnose < 0.001:
-
-                    sn = row['sn']
-                    chi2 = row['chi2']
-                    gmag = row['gmag']
+                if -0.1 < z_diagnose < 0.001:
                     eo_rows = EOTab[EOTab['detectid'] == det]
                     for eo_row in eo_rows:
                         if eo_row['filter_name'] == b'f606w':
@@ -375,7 +405,8 @@ def evaluate_z_hetdex(row):
                             break  # no need to check the next one
 
                     # if sel_eo_dist[i]: #if it is still True, give it the elixer redshift
-                    if flags & (G.DETFLAG_BAD_EMISSION_LINE | G.DETFLAG_BAD_FIBERTRACE):
+                    if (flags & (G.DETFLAG_BAD_EMISSION_LINE | G.DETFLAG_BAD_FIBERTRACE)) or \
+                       (row['gmag'] < 21 and obs_EW < 5.0):
                         z = z_diagnose
                         z_src = 'diagnose'
                         good = False
@@ -399,7 +430,8 @@ def evaluate_z_hetdex(row):
                             questionable_z_dets.append(det)
 
                 else:
-                    if flags & (G.DETFLAG_BAD_EMISSION_LINE | G.DETFLAG_BAD_FIBERTRACE):
+                    if z_diagnose > -0.1 and ( (flags & (G.DETFLAG_BAD_EMISSION_LINE | G.DETFLAG_BAD_FIBERTRACE))
+                            or (row['gmag'] < 21 and obs_EW < 5.0)):
                         z = z_diagnose
                         z_src = 'diagnose'
                         good = False
@@ -415,7 +447,28 @@ def evaluate_z_hetdex(row):
             z_src = 'elixer'
             good = False
 
+
+        #last sanity check
+        if z is None:
+            z = z_hetdex  # unchanged, but possibly wrong
+        elif z < -0.1: #usually -1, -999 or -999.9 ... something is wrong
+            if -0.01 < z < 0.0:
+                z = 0.0
+            elif z_hetdex < -0.1: #was something wrong to begin with
+                if z_elixer < -0.1: #still very wrong ... can't do anything about it
+                    z = z_hetdex #unchanged, but wrong
+                else:
+                    z = z_elixer
+                    z_src = 'elixer'
+            else:
+                z = z_hetdex #don't change it
+
+
+        #print(f"*** DEBUG: [{row['detectid']}] z: {z:0.4f} "
+        #      f"z_hetdex: {z_hetdex:0.4f}  z_diagnose: {z_diagnose:0.4f}  z_elixer: {z_elixer:0.4f}")
+
         if z == z_hetdex:  # it did not change
+            #still, force negative, near zero to be 0
             return True, z_hetdex, z_hetdex_src
         else:
             return False, z, z_src
@@ -779,6 +832,7 @@ for i, row in tqdm(enumerate(SrcTab),total= len(SrcTab),disable=not SHOW_TQDM):
             changed_counterpart_dets.append(row['detectid'])
 
     if not check_z_hetdex:
+        #print(f"*** DEBUG skip check_z_hetdex")
         continue
 
     det = row['detectid']
@@ -813,9 +867,11 @@ for i, row in tqdm(enumerate(SrcTab),total= len(SrcTab),disable=not SHOW_TQDM):
     # then we assume good and move on
     # that is, every contributor to z agrees or is not set
     if ((z_agn < 0) or (np.isclose(z_agn, z_hetdex, atol=atol_strong))) and \
-            ((z_diagnose < 0) or (np.isclose(z_diagnose, z_hetdex, atol=atol_weak))) and \
+            ((z_diagnose < -0.1) or (np.isclose(z_diagnose, z_hetdex, atol=atol_weak))) and \
             ((z_elixer < 0) or (np.isclose(z_elixer, z_hetdex, atol=atol_strong))):
         # print(f"{det} PASS {z_hetdex:0.4f} {z_agn:0.4f} {z_diagnose:0.4f} {z_elixer:0.4f}")
+        #print(f"*** DEBUG pass (no change)")
+        #print(f"[{det}] {z_hetdex:0.4f} {z_diagnose:0.4f} {z_elixer:0.4f}")
         continue
         # else:
     #    #just for testing
@@ -840,6 +896,7 @@ for i, row in tqdm(enumerate(SrcTab),total= len(SrcTab),disable=not SHOW_TQDM):
         if z_hetdex_src == 'liu_agn':  # z_agn is not necessarily from Chenxu
             # if (z_hetdex_src == 'liu_agn' and (np.isclose(z_agn,z_hetdex,atol=atol_strong)):
             # print(f"{det} Chenxu AGN")
+            #print(f"*** DEBUG pass (Chenxu AGN)")
             continue  # this is good as is
 
         # otherwise there is disagrement and we need to check
@@ -952,7 +1009,7 @@ for i, row in tqdm(enumerate(SrcTab),total= len(SrcTab),disable=not SHOW_TQDM):
         keep_cluster = evaluate_cluster(row, row_z_hetdex)
 
         if keep_cluster:  # fine as is
-            # print(f"{det} KEEP cluster")
+            #print(f"*** DEBUG {det} KEEP cluster")
             pass
         else:
             # need to split up?
@@ -1069,6 +1126,10 @@ try:
     SrcTab.add_index('detectid')
 except:
     pass
+
+#print(f"*** DEBUG: cat out")
+# for row in SrcTab:
+#     print(f"[{row['detectid']}] z_hetdex: {row['z_hetdex']}")
 
 if overwrite:
     print(f"[{catchunk_fn}] Done. (Over)Writing to cwd.")
