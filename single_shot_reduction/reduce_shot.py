@@ -344,7 +344,7 @@ if "-help" in args:
 
 len_args = len(args)
 queue_elixer = False
-prep_compress = 0 #not just a boolean, use as the max simultaneous shots to process
+prep_compress = -1 #not just a boolean, use as the max simultaneous shots to process
 
 if "-clear_mutex" in args:
     print("Hidden switch: clearing mutex, resetting allowed concurrent active processes.")
@@ -380,13 +380,17 @@ if "-prep_compress" in args:
     i = args.index("-prep_compress")
     try:
         prep_compress = int(args[i+1])
+        if prep_compress < 0:
+            print(f"Invalid -prep_compress specified. Must be non-negative")
+            exit(-1)
     except:
         print(f"Invalid -prep_compress specified")
         exit(-1)
 
     del args[i + 1]
     args.remove("-prep_compress")
-
+else:
+    prep_compress = -1
 
 if "-clean" in args:
     i = args.index("-clean")
@@ -519,6 +523,9 @@ if len(args) != 1:
     #could be just an update or a help (but help is handled earlier)
     if cfg.update_local_repo and len_args == 1: #was just an update
         cfg.update_only = True
+    elif prep_compress >= 0: #use all the sci* directores under the cwd
+        cfg.shotid =  None
+        cfg.datevshot = None
     else:
         print(f"Fatal: Problem with remaining args: {args}")
         print(f"exititing....")
@@ -664,8 +671,14 @@ def run_prep_compress(cfg,max_simultaneous=3):
     """
     bg = max_simultaneous #run in the background
     cwd = os.getcwd()
-    fns = glob.glob(f"sci{cfg.datevshot}")
-    print(f"Attempting to prepare default SSR compression using pattern: sci{cfg.datevshot}")
+    if cfg.datevshot is not None:
+        print(f"Attempting to prepare default SSR compression using pattern: sci{cfg.datevshot}")
+        fns = glob.glob(f"sci{cfg.datevshot}")
+    else:
+        print(f"Attempting to prepare default SSR compression using pattern: sci*")
+        fns = glob.glob(f"sci*")
+
+    #must be of form sciYYYYMMDDvSSS ... exclude other matches
     print(f"  matches: {fns}")
 
     for cpath in fns: #fn is the full path to the sciXXX directory, not the files
@@ -673,7 +686,7 @@ def run_prep_compress(cfg,max_simultaneous=3):
             datevshot = os.path.basename(cpath).replace("sci","")
 
             cmd = f"python ssr_hdf5.py --compression 2"
-            if bg:
+            if bg >= 0:
                 cmd += f" --bg {bg}"
 
             fn = os.path.join(cpath,f"{datevshot}.h5")
