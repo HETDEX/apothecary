@@ -524,14 +524,14 @@ if len(args) != 1:
     if cfg.update_local_repo and len_args == 1: #was just an update
         cfg.update_only = True
     elif prep_compress >= 0: #use all the sci* directores under the cwd
-        cfg.shotid =  None
+        cfg.shotid = None
         cfg.datevshot = None
     else:
         print(f"Fatal: Problem with remaining args: {args}")
         print(f"exititing....")
         exit(-1)
 else:
-    if not (queue_elixer or prep_compress):
+    if not (queue_elixer or prep_compress > -1):
         try:
             #might have 'v' or 'd' or 's' as the separator between date and shot number
             cfg.shotid = int(args[0].replace("v","").replace("s","").replace("d",""))
@@ -548,7 +548,7 @@ else:
 
 #check datevshot ... can only be numeric or in datevshot format, but could be truncated
 
-print(f"Evaluating with datevshot = {cfg.datevshot}")
+print(f"Evaluating with datevshot = {cfg.datevshot}",flush=True)
 
 ########################################################################
 # worker functions
@@ -2037,8 +2037,8 @@ def precheck(cfg):
     try:
 
         # echo a few key paths:
-        print(f"[{cfg.datevshot}] Precheck. HETDEX_API path: {hetdex_api_path}")
-        print(f"[{cfg.datevshot}] Precheck. ELiXer path: {elixer_path}")
+        print(f"[{cfg.datevshot}] Precheck. HETDEX_API path: {hetdex_api_path}",flush=True)
+        print(f"[{cfg.datevshot}] Precheck. ELiXer path: {elixer_path}",flush=True)
 
         month = cfg.datevshot[0:6]
         path_check = os.path.join(hetdex_projects_path,f"lib_calib/{month}")
@@ -5098,7 +5098,7 @@ if queue_elixer:
     run_queue_elixer(cfg)
     exit(0)
 
-if prep_compress:
+if prep_compress > -1:
     run_prep_compress(cfg,max_simultaneous=prep_compress)
     exit(0)
 
