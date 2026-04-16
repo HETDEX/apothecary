@@ -2321,18 +2321,32 @@ def copy_het_raw_file(cfg):
     rc = 0
     try:
         virus_path, is_dvs_tar, is_local = get_het_raw_archive(cfg)
-        if virus_path is None: #problem cannot contineu
+        if virus_path is None: #problem, cannot continue
             print(f"[{cfg.datevshot}] Fatal! Cannot find het_raw data.")
             return -1
 
         if is_local: #already have it OR it is being copied ... check for the mutex
-            copy_check = virus_path[:-3] + "copy"  #always ends in .tar, use .copy to indicate in progress copy
-            #use this as both the mutex and the copy in progress indicator
-            while os.path.exists(copy_check):
-                #some other process is copying it ... wait for it to be done.
-                print(f"[{cfg.datevshot}] Waiting on copy of: {virus_path}")
-                time.sleep(SafeActiveShotsSleep) #reuse the sleep delay
-            print(f"[{cfg.datevshot}] Using {virus_path}")
+
+            #if it is being copied or untarred, the lock will be held by the other process that is doing it
+            #so, wait on the lock ... once we have it, the copy or untar should be complete
+            copy_lock_file = os.path.join(cfg.local_het_raw_path, f"{cfg.datevshot}.lock")
+            lock = FileLock(copy_lock_file)
+            with lock:  # we have the lock now
+                destination_path = os.path.join(cfg.local_het_raw_path,
+                                                f"{cfg.datevshot[:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar")
+                if os.path.exists(destination_path):  # good copy
+                    print(f"[{cfg.datevshot}] Using {destination_path}")
+                else:
+                    print(f"[{cfg.datevshot}] Unexpected error. {destination_path} does not exist")
+                    return -1
+
+            # copy_check = virus_path[:-3] + "copy"  #always ends in .tar, use .copy to indicate in progress copy
+            # #use this as both the mutex and the copy in progress indicator
+            # while os.path.exists(copy_check):
+            #     #some other process is copying it ... wait for it to be done.
+            #     print(f"[{cfg.datevshot}] Waiting on copy of: {virus_path}")
+            #     time.sleep(SafeActiveShotsSleep) #reuse the sleep delay
+            # print(f"[{cfg.datevshot}] Using {virus_path}")
             return 0 #ready to go
         else: #this needs to be copied
             #get the copy mutex ... this also handles limits on /corral
@@ -2340,7 +2354,9 @@ def copy_het_raw_file(cfg):
             #once we have the mutex ... check again if the file already exists ... could be another
             #process got to it first and it is ready now
 
-            copy_lock_file = os.path.join(cfg.local_het_raw_path, os.path.basename(virus_path)[0:-3] +"lock")
+
+            #copy_lock_file = os.path.join(cfg.local_het_raw_path, os.path.basename(virus_path)[0:-3] +"lock")
+            copy_lock_file = os.path.join(cfg.local_het_raw_path,  f"{cfg.datevshot}.lock")
             lock = FileLock(copy_lock_file)
             with lock: #we have the lock now
                 #does the tar file already exist? someone else already copied got it?
@@ -2355,85 +2371,91 @@ def copy_het_raw_file(cfg):
                 #if not okay, releast the mutex, sleep then try again
                 #Once copy is complete, wait on mutex, decriment the counter
 
-                counter_file = get_het_raw_copy_mutex(cfg, virus_path)
+                destination_path = os.path.join(cfg.local_het_raw_path,
+                                                f"{cfg.datevshot[:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar")
+                if os.path.exists(destination_path):  # good copy ... someone else already handled it
+                    print(f"[{cfg.datevshot}] Using {destination_path}")
+                else: #do the copy or untar
 
-                #start the copy
-                #make sure the recieving location exists
-                if not os.path.exists(cfg.local_het_raw_path):
-                    os.makedirs(cfg.local_het_raw_path, exist_ok=True)
+                    counter_file = get_het_raw_copy_mutex(cfg, virus_path)
 
-                # if True:
-                #     ct = 0
-                #     while ct < 10:
-                #         ct += 1
-                #         destination_path = os.path.join(cfg.local_het_raw_path,
-                #                                         f"{cfg.datevshot[:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar")
-                #         print(f"*** DEBUG FAKE COPY *** {virus_path} to {destination_path}")
-                #         time.sleep(30.0)
-                # else:
-                if is_dvs_tar:
-                    # IF this is the datevshottar then just copy it (probably this is on /work)
-                    # still need to check for the gc1 and gc2 stuff
-                    destination_path = os.path.join(cfg.local_het_raw_path,
-                                                    f"{cfg.datevshot[:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar")
-                    cmd = f"cp {virus_path} {destination_path}"
-                    system_command(cfg, cmd)
-                    if os.path.exists(destination_path): #good copy
+                    #start the copy
+                    #make sure the recieving location exists
+                    if not os.path.exists(cfg.local_het_raw_path):
+                        os.makedirs(cfg.local_het_raw_path, exist_ok=True)
 
-                        try:
-                            ix = virus_path.index(cfg.datevshot[-3:])
-                            basepath = virus_path[:ix] + f"/cfg.datevshot[-3:]/"
-                        except:
-                            basepath = None
-
-                        if basepath is not None:
-                            destination_path = os.path.join(cfg.local_het_raw_path, f"{cfg.datevshot[:8]}/gc1")
-                            #e.g. /work/03946/hetdex/maverick/20260411/gc1
-                            # NOTICE: *.tar as sometimes it is gc2.tar or images.tar
-                            source_path = os.path.join(basepath,"gc1/*.tar")
-                            if not os.path.exists(destination_path):
-                                cmd = f"cp {source_path} {destination_path}"
-                                system_command(cfg, cmd)
-
-                            destination_path = os.path.join(cfg.local_het_raw_path, f"{cfg.datevshot[:8]}/gc2")
-                            #e.g. /work/03946/hetdex/maverick/20260411/gc2
-                            #NOTICE: *.tar as sometimes it is gc2.tar or images.tar
-                            source_path = os.path.join(basepath,"gc2/*.tar")
-                            if not os.path.exists(destination_path):
-                                cmd = f"cp {source_path} {destination_path}"
-                                system_command(cfg, cmd)
-
-                    else:
-                        print(f"[{cfg.datevshot}] Failed to copy/extract date tar file.", traceback.format_exc())
-                        rc = -1
-                else:
-                    #this is the date.tar, then need to extract parts of it
-                    try:
+                    # if True:
+                    #     ct = 0
+                    #     while ct < 10:
+                    #         ct += 1
+                    #         destination_path = os.path.join(cfg.local_het_raw_path,
+                    #                                         f"{cfg.datevshot[:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar")
+                    #         print(f"*** DEBUG FAKE COPY *** {virus_path} to {destination_path}")
+                    #         time.sleep(30.0)
+                    # else:
+                    if is_dvs_tar:
+                        # IF this is the datevshottar then just copy it (probably this is on /work)
+                        # still need to check for the gc1 and gc2 stuff
                         destination_path = os.path.join(cfg.local_het_raw_path,
                                                         f"{cfg.datevshot[:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar")
-                        cmd = f"tar -xvf {virus_path} {destination_path}"
+                        Path(os.path.dirname(destination_path)).mkdir(parents=True, exist_ok=True)
+                        cmd = f"cp {virus_path} {destination_path}"
                         system_command(cfg, cmd)
-                        if os.path.exists(destination_path): #good copy, continue with the other 2 but don't check them
-                            # this MIGHT already exist if another process got it
-                            destination_path = os.path.join(cfg.local_het_raw_path,f"{cfg.datevshot[:8]}/gc1")
-                            if not os.path.exists(destination_path):
-                                cmd = f"tar -xvf {virus_path} {destination_path}"
+                        if os.path.exists(destination_path): #good copy
+                            try:
+                                ix = virus_path.index(cfg.datevshot[:8])
+                                basepath = virus_path[:ix] + f"{cfg.datevshot[:8]}/"
+                            except:
+                                basepath = None
+
+                            if basepath is not None:
+                                destination_path = os.path.join(cfg.local_het_raw_path, f"{cfg.datevshot[:8]}/gc1")
+                                Path(destination_path).mkdir(parents=True, exist_ok=True)
+                                #e.g. /work/03946/hetdex/maverick/20260411/gc1
+                                # NOTICE: *.tar as sometimes it is gc2.tar or images.tar
+                                source_path = os.path.join(basepath,"gc1/*.tar")
+                                cmd = f"cp {source_path} {destination_path}"
                                 system_command(cfg, cmd)
 
-                            destination_path = os.path.join(cfg.local_het_raw_path,f"{cfg.datevshot[:8]}/gc2")
-                            if not os.path.exists(destination_path):
-                                cmd = f"tar -xvf {virus_path} {destination_path}"
+                                destination_path = os.path.join(cfg.local_het_raw_path, f"{cfg.datevshot[:8]}/gc2")
+                                Path(destination_path).mkdir(parents=True, exist_ok=True)
+                                #e.g. /work/03946/hetdex/maverick/20260411/gc2
+                                #NOTICE: *.tar as sometimes it is gc2.tar or images.tar
+                                source_path = os.path.join(basepath,"gc2/*.tar")
+                                cmd = f"cp {source_path} {destination_path}"
                                 system_command(cfg, cmd)
+
                         else:
                             print(f"[{cfg.datevshot}] Failed to copy/extract date tar file.", traceback.format_exc())
                             rc = -1
-                    except:
-                        print(f"[{cfg.datevshot}] Failed to copy/extract date tar file.", traceback.format_exc())
-                        rc = -1
+                    else:
+                        #this is the date.tar, then need to extract parts of it
+                        try:
+                            destination_path = os.path.join(cfg.local_het_raw_path,
+                                                            f"{cfg.datevshot[:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar")
+                            cmd = f"tar -xvf {virus_path} {destination_path}"
+                            system_command(cfg, cmd)
+                            if os.path.exists(destination_path): #good copy, continue with the other 2 but don't check them
+                                # this MIGHT already exist if another process got it
+                                destination_path = os.path.join(cfg.local_het_raw_path,f"{cfg.datevshot[:8]}/gc1")
+                                if not os.path.exists(destination_path):
+                                    cmd = f"tar -xvf {virus_path} {destination_path}"
+                                    system_command(cfg, cmd)
 
-                #release the mutex/counter decrement
-                if counter_file is not None:
-                    get_het_raw_copy_mutex(cfg, virus_path,release=counter_file)
+                                destination_path = os.path.join(cfg.local_het_raw_path,f"{cfg.datevshot[:8]}/gc2")
+                                if not os.path.exists(destination_path):
+                                    cmd = f"tar -xvf {virus_path} {destination_path}"
+                                    system_command(cfg, cmd)
+                            else:
+                                print(f"[{cfg.datevshot}] Failed to copy/extract date tar file.", traceback.format_exc())
+                                rc = -1
+                        except:
+                            print(f"[{cfg.datevshot}] Failed to copy/extract date tar file.", traceback.format_exc())
+                            rc = -1
+
+                    #release the mutex/counter decrement
+                    if counter_file is not None:
+                        get_het_raw_copy_mutex(cfg, virus_path,release=counter_file)
 
                 # if True:
                 #     print(f"*** DEBUG FORCE EXIT *** ")
@@ -2532,11 +2554,11 @@ def initial_setup(cfg):
 
     #check for virus.tar files
 
-    if True: #new way
-        if copy_het_raw_file(cfg) < 0:
-            #FATAL
-            print(f"[{cfg.datevshot}] FATAL! Could not obtain het_raw data.")
-            return -1
+    #if True: #new way
+    if copy_het_raw_file(cfg) < 0:
+        #FATAL
+        print(f"[{cfg.datevshot}] FATAL! Could not obtain het_raw data.")
+        return -1
     # else: #old way
     #     virustar = f"{cfg.datevshot[0:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar"
     #     if cfg.local_het_raw_path is None or len(cfg.local_het_raw_path) == 0:
@@ -5526,7 +5548,7 @@ if cfg.special == 1:
 
 if cfg.numexp < 3 or not cfg.hetdex_original:
     #print(f"Fewer than 3 exposures (assume dithers). Checking guider for seeing FWHM...")
-    print(f"[{cfg.datevshot}] Checking guider for seeing FWHM...")
+    print(f"[{cfg.datevshot}] Checking guider for seeing FWHM (this can take a while) ...")
     cfg.guider_fwhm = get_guider_fwhm(cfg) #this also gets the exposure times
     if cfg.guider_fwhm is not None:
         print(f"Using guider FWHM = {cfg.guider_fwhm}")
