@@ -70,7 +70,8 @@ plt.style.use('default')
 ########################################################################
 # CONFIGURATION
 ########################################################################
-CorralMaxCopyLimit = 11
+CorralMaxCopyLimit = 10
+WorkMaxCopyLimit = 20
 EchoCmds = True  #if True echo system commands to the log
 FilterDetsOnBadAmps = True # if True, do NOT pass detections that are on reported bad amps to elixer for processing
 DefaultClean = 1 #clean 0 does nothing, 1 cleans script files and temporary stuff, 2,3,4,5 are increasingly agressive
@@ -2212,11 +2213,11 @@ def get_het_raw_copy_mutex(cfg,virus_path,release=None):
     :return: the counter file to decrement (or None) if not needed
     """
 
-    global CorralMaxCopyLimit
+    global CorralMaxCopyLimit, WorkMaxCopyLimit
 
     try:
         if "/corral" == virus_path[:7]: #needs a limit
-            mux_root = "/".join(cfg.cwd_orig.split("/")[:4]) + "/ssr_mux"
+            mux_root = "/".join(cfg.cwd_orig.split("/")[:4]) + "/ssr_mux/corral"
             if not os.path.exists(mux_root):
                 Path(mux_root).mkdir(parents=True, exist_ok=True)
 
@@ -2234,18 +2235,72 @@ def get_het_raw_copy_mutex(cfg,virus_path,release=None):
                     with lock:
                         fns = glob.glob(os.path.join(mux_root, "*.sync"))
                         active = len(fns)
-                        if active < CorralMaxCopyLimit:
-                            with open(os.path.join(mux_root,sync_fn), "w") as f:
-                                f.write(f"BEGIN {str(datetime.now())}\n")
-                                print(f"[{cfg.datevshot}] cleared to copy from /corral.")
-                                redlight = False
+                        if active < CorralMaxCopyLimit: #strictly less than since THIS one will be +1
+                            #what if this file is already being copied ... also need to wait
+                            if os.path.exists(os.path.join(mux_root, sync_fn)):
+                                line = None
+                                try:
+                                    with open(os.path.join(mux_root, sync_fn), "r") as f:
+                                        line = f.readline()
+                                except:
+                                    line = "Unable to read .sync file"
+                                print(f"[{cfg.datevshot}] copy must wait. Archive tar already being copied by another process: {line}")
+                            else:
+                                with open(os.path.join(mux_root,sync_fn), "w") as f:
+                                    f.write(f"PID: {os.getpid()} BEGAN {str(datetime.now())} from {cfg.cwd_orig}\n")
+                                    print(f"[{cfg.datevshot}] cleared to copy from /corral. {active} other active copies.")
+                                    redlight = False
                         else:
-                            print(f"[{cfg.datevshot}] too many active copies from /corral ({active}). Must wait ...")
+                            print(f"[{cfg.datevshot}] too many active ({active}) copies from /corral. Limit ({CorralMaxCopyLimit}) . Must wait ...")
 
                     if redlight:
                         time.sleep(SafeActiveShotsSleep)
 
                 return sync_fn #name of the sync file
+        elif "/work" == virus_path[:5]:  # needs a limit
+            mux_root = "/".join(cfg.cwd_orig.split("/")[:4]) + "/ssr_mux/work"
+            if not os.path.exists(mux_root):
+                Path(mux_root).mkdir(parents=True, exist_ok=True)
+
+            if release is None:  # starting a copy request
+                # need a user level storage location for the mutex and the counter so it does not matter
+                # how many nodes or jobs are in use, they will all check here
+                # I think I can assume the top level to be the first three tokens of the cwd()
+
+                io_lock_file = os.path.join(mux_root, "ssr_io.lock")
+                redlight = True
+
+                sync_fn = f"{cfg.datevshot}.sync"
+                while redlight:
+                    lock = FileLock(io_lock_file)
+                    with lock:
+                        fns = glob.glob(os.path.join(mux_root, "*.sync"))
+                        active = len(fns)
+                        if active < WorkMaxCopyLimit:  # strictly less than since THIS one will be +1
+
+                            #what if this file is already being copied ... also need to wait
+                            if os.path.exists(os.path.join(mux_root, sync_fn)):
+                                line = None
+                                try:
+                                    with open(os.path.join(mux_root, sync_fn), "r") as f:
+                                        line = f.readline()
+                                except:
+                                    line = "Unable to read .sync file"
+                                print(f"[{cfg.datevshot}] copy must wait. Archive tar already being copied by another process: {line}")
+                            else:
+                                with open(os.path.join(mux_root, sync_fn), "w") as f:
+                                    f.write(f"PID: {os.getpid()} BEGAN {str(datetime.now())} from {cfg.cwd_orig}\n")
+                                    print(
+                                        f"[{cfg.datevshot}] cleared to copy from /work. {active} other active copies.")
+                                    redlight = False
+                        else:
+                            print(
+                                f"[{cfg.datevshot}] too many active ({active}) copies from /work. Limit ({WorkMaxCopyLimit}) . Must wait ...")
+
+                    if redlight:
+                        time.sleep(SafeActiveShotsSleep)
+
+                return sync_fn  # name of the sync file
             else: #we are done with the copy, just delete our sync file
                 os.remove(os.path.join(mux_root, f"{cfg.datevshot}.sync"))
         else:
@@ -2307,6 +2362,15 @@ def copy_het_raw_file(cfg):
                 if not os.path.exists(cfg.local_het_raw_path):
                     os.makedirs(cfg.local_het_raw_path, exist_ok=True)
 
+                # if True:
+                #     ct = 0
+                #     while ct < 10:
+                #         ct += 1
+                #         destination_path = os.path.join(cfg.local_het_raw_path,
+                #                                         f"{cfg.datevshot[:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar")
+                #         print(f"*** DEBUG FAKE COPY *** {virus_path} to {destination_path}")
+                #         time.sleep(30.0)
+                # else:
                 if is_dvs_tar:
                     # IF this is the datevshottar then just copy it (probably this is on /work)
                     # still need to check for the gc1 and gc2 stuff
@@ -2370,6 +2434,10 @@ def copy_het_raw_file(cfg):
                 #release the mutex/counter decrement
                 if counter_file is not None:
                     get_het_raw_copy_mutex(cfg, virus_path,release=counter_file)
+
+                # if True:
+                #     print(f"*** DEBUG FORCE EXIT *** ")
+                #     rc = -1
     except:
         print(f"[{cfg.datevshot}] Exception in copy_het_raw_file: {traceback.format_exc()}")
         rc = -1
