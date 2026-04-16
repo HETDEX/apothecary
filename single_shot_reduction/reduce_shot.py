@@ -2229,7 +2229,7 @@ def get_het_raw_copy_mutex(cfg,virus_path,release=None):
                 io_lock_file = os.path.join(mux_root,"ssr_io.lock")
                 redlight = True
 
-                sync_fn = f"{cfg.datevshot}.sync"
+                sync_fn = f"{cfg.datevshot}.sync" #no PID here ... want it common to any of the save datevshot
                 while redlight:
                     lock = FileLock(io_lock_file)
                     with lock:
@@ -2270,7 +2270,7 @@ def get_het_raw_copy_mutex(cfg,virus_path,release=None):
                 io_lock_file = os.path.join(mux_root, "ssr_io.lock")
                 redlight = True
 
-                sync_fn = f"{cfg.datevshot}.sync"
+                sync_fn = f"{cfg.datevshot}.sync" #no PID here, want it common to any of the same datevshot
                 while redlight:
                     lock = FileLock(io_lock_file)
                     with lock:
@@ -2786,8 +2786,9 @@ def node_setup(cfg): #,safelimit=0):
                     active = len(fns)
                     if active < MaxSafeActiveShots: #good to go
                         os.makedirs(Node_basedir, exist_ok=True)
-                        with open(os.path.join(Node_basedir, f"{cfg.datevshot}.sync"), "w") as f:
-                            f.write(f"BEGIN {str(datetime.now())}\n")
+                        with open(os.path.join(Node_basedir, f"{cfg.datevshot}_{os.getpid()}.sync"), "w") as f:
+                            #f.write(f"BEGIN {str(datetime.now())}\n")
+                            f.write(f"PID: {os.getpid()} BEGAN {str(datetime.now())} from {cfg.cwd_orig}\n")
                         redlight = False
                         print(f"[{cfg.datevshot}] cleared to start.")
                     else:
@@ -2802,8 +2803,9 @@ def node_setup(cfg): #,safelimit=0):
                 #a bit later this will then be the count of simulataneous datevshots and used to tune the num of processes
 
                 os.makedirs(Node_basedir, exist_ok=True)
-                with open(os.path.join(Node_basedir,f"{cfg.datevshot}.sync"), "w") as f:
-                    f.write(f"BEGIN {str(datetime.now())}\n")
+                with open(os.path.join(Node_basedir,f"{cfg.datevshot}_{os.getpid()}.sync"), "w") as f:
+                    f.write(f"PID: {os.getpid()} BEGAN {str(datetime.now())} from {cfg.cwd_orig}\n")
+                    #f.write(f"BEGIN {str(datetime.now())}\n")
 
         # lock auto releases
     except:
@@ -2823,7 +2825,7 @@ def node_clean(cfg):
             #clean up my sync
             try:
                 #this might have already been removed (e.g. if post_clean() ran successfully)
-                os.remove(os.path.join(Node_basedir,f"{cfg.datevshot}.sync"))
+                os.remove(os.path.join(Node_basedir,f"{cfg.datevshot}_{os.getpid()}.sync"))
             except:
                 pass
 
