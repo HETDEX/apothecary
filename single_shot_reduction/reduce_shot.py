@@ -1557,6 +1557,8 @@ def get_guider_fwhm(cfg):
         #     #try based on the virus_tar_path, up two levels
         #     base_tarfn = os.path.join(cfg.virus_tar_path.rstrip(".tar"),"gc1.tar")
 
+        print(f"[{cfg.datevshot}] Computing guider for seeing FWHM (this can take a while) ...")
+
         base_tarfn = get_gc_path(cfg,"gc1",path)
         if os.path.exists(base_tarfn):
             with tar.open(base_tarfn, "r") as tarfh:
@@ -2792,7 +2794,7 @@ def node_setup(cfg): #,safelimit=0):
                         redlight = False
                         print(f"[{cfg.datevshot}] cleared to start.")
                     else:
-                        print(f"[{cfg.datevshot}] too many active shots ({active}). Must wait ...")
+                        print(f"[{cfg.datevshot}] too many active shots ({active}). Limit {MaxSafeActiveShots}. Must wait ...")
 
                 if redlight:
                     time.sleep(SafeActiveShotsSleep)
@@ -5550,7 +5552,7 @@ if cfg.special == 1:
 
 if cfg.numexp < 3 or not cfg.hetdex_original:
     #print(f"Fewer than 3 exposures (assume dithers). Checking guider for seeing FWHM...")
-    print(f"[{cfg.datevshot}] Checking guider for seeing FWHM (this can take a while) ...")
+    #print(f"[{cfg.datevshot}] Checking guider for seeing FWHM (this can take a while) ...")
     cfg.guider_fwhm = get_guider_fwhm(cfg) #this also gets the exposure times
     if cfg.guider_fwhm is not None:
         print(f"Using guider FWHM = {cfg.guider_fwhm}")
