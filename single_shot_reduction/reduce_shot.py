@@ -359,6 +359,17 @@ if "-clear_mutex" in args:
     fns = glob.glob(f"{Node_basedir}/*.sync")
     print(f"Clearing {len(fns)} active sync files.\n{[os.path.basename(x) for x in fns]}")
     os.system(f"rm {Node_basedir}/*.sync")
+
+    mux_root = "/".join(os.getcwd().split("/")[:4]) + "/ssr_mux/corral"
+    fns = glob.glob(f"{mux_root}/*.sync")
+    print(f"Clearing {len(fns)} /corral sync files.\n{[os.path.basename(x) for x in fns]}")
+    os.system(f"rm {mux_root}/*.sync")
+
+    mux_root = "/".join(os.getcwd().split("/")[:4]) + "/ssr_mux/work"
+    fns = glob.glob(f"{mux_root}/*.sync")
+    print(f"Clearing {len(fns)} /work sync files.\n{[os.path.basename(x) for x in fns]}")
+    os.system(f"rm {mux_root}/*.sync")
+
     print("Done. Exiting.")
     exit(0)
 
@@ -2231,14 +2242,17 @@ def get_het_raw_copy_mutex(cfg,virus_path,release=None):
                 io_lock_file = os.path.join(mux_root,"ssr_io.lock")
                 redlight = True
 
-                sync_fn = f"{cfg.datevshot}.sync" #no PID here ... want it common to any of the save datevshot
+                # no PID here and no shot, just date ... want it common to any of the save datevshot
+                sync_fn = f"{cfg.datevshot[:8]}.sync"
                 while redlight:
                     lock = FileLock(io_lock_file)
                     with lock:
                         fns = glob.glob(os.path.join(mux_root, "*.sync"))
                         active = len(fns)
                         if active < CorralMaxCopyLimit: #strictly less than since THIS one will be +1
-                            #what if this file is already being copied ... also need to wait
+                            #what if this file is already being copied/untarred ... also need to wait
+                            #since this same file is date based, multiple datevshots could be trying to hit it
+                            #at the same time
                             if os.path.exists(os.path.join(mux_root, sync_fn)):
                                 line = None
                                 try:
@@ -2272,6 +2286,7 @@ def get_het_raw_copy_mutex(cfg,virus_path,release=None):
                 io_lock_file = os.path.join(mux_root, "ssr_io.lock")
                 redlight = True
 
+                #these are datevshot based, not just date
                 sync_fn = f"{cfg.datevshot}.sync" #no PID here, want it common to any of the same datevshot
                 while redlight:
                     lock = FileLock(io_lock_file)
@@ -2413,19 +2428,25 @@ def copy_het_raw_file(cfg):
                             if basepath is not None:
                                 destination_path = os.path.join(cfg.local_het_raw_path, f"{cfg.datevshot[:8]}/gc1")
                                 Path(destination_path).mkdir(parents=True, exist_ok=True)
-                                #e.g. /work/03946/hetdex/maverick/20260411/gc1
-                                # NOTICE: *.tar as sometimes it is gc2.tar or images.tar
-                                source_path = os.path.join(basepath,"gc1/*.tar")
-                                cmd = f"cp {source_path} {destination_path}"
-                                system_command(cfg, cmd)
+
+                                #!! since the gc?.tar (or images.tar) are part of the top level date
+                                #   and not tied directly to datevshot, they might already exist locally even if this
+                                #   specific datevshot did not
+                                if len(glob.glob(destination_path + "/*.tar")) == 0:
+                                    #e.g. /work/03946/hetdex/maverick/20260411/gc1
+                                    # NOTICE: *.tar as sometimes it is gc2.tar or images.tar
+                                    source_path = os.path.join(basepath,"gc1/*.tar")
+                                    cmd = f"cp {source_path} {destination_path}"
+                                    system_command(cfg, cmd)
 
                                 destination_path = os.path.join(cfg.local_het_raw_path, f"{cfg.datevshot[:8]}/gc2")
                                 Path(destination_path).mkdir(parents=True, exist_ok=True)
-                                #e.g. /work/03946/hetdex/maverick/20260411/gc2
-                                #NOTICE: *.tar as sometimes it is gc2.tar or images.tar
-                                source_path = os.path.join(basepath,"gc2/*.tar")
-                                cmd = f"cp {source_path} {destination_path}"
-                                system_command(cfg, cmd)
+                                if len(glob.glob(destination_path + "/*.tar")) == 0:
+                                    #e.g. /work/03946/hetdex/maverick/20260411/gc2
+                                    #NOTICE: *.tar as sometimes it is gc2.tar or images.tar
+                                    source_path = os.path.join(basepath,"gc2/*.tar")
+                                    cmd = f"cp {source_path} {destination_path}"
+                                    system_command(cfg, cmd)
 
                         else:
                             print(f"[{cfg.datevshot}] Failed to copy/extract date tar file.", traceback.format_exc())
@@ -2439,13 +2460,16 @@ def copy_het_raw_file(cfg):
                             system_command(cfg, cmd)
                             if os.path.exists(destination_path): #good copy, continue with the other 2 but don't check them
                                 # this MIGHT already exist if another process got it
+                                #  since the gc?.tar (or images.tar) are part of the top level date
+                                #  and not tied directly to datevshot, they might already exist locally even if this
+                                #  specific datevshot did not
                                 destination_path = os.path.join(cfg.local_het_raw_path,f"{cfg.datevshot[:8]}/gc1")
-                                if not os.path.exists(destination_path):
+                                if not os.path.exists(destination_path) or len(glob.glob(destination_path + "/*.tar")) == 0:
                                     cmd = f"tar -xvf {virus_path} {destination_path}"
                                     system_command(cfg, cmd)
 
                                 destination_path = os.path.join(cfg.local_het_raw_path,f"{cfg.datevshot[:8]}/gc2")
-                                if not os.path.exists(destination_path):
+                                if not os.path.exists(destination_path) or len(glob.glob(destination_path + "/*.tar")) == 0:
                                     cmd = f"tar -xvf {virus_path} {destination_path}"
                                     system_command(cfg, cmd)
                             else:
