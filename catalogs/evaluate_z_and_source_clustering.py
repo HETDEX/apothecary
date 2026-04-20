@@ -10,8 +10,9 @@ import os
 import sys
 import numpy as np
 import tables
-from astropy.table import Table
+from astropy.table import Table, vstack
 from elixer import global_config as G
+from elixer import utilities as utils
 from hetdex_api.extinction import *  #includes deredden_spectra also gets config?
 import traceback
 from tqdm import tqdm
@@ -35,7 +36,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*alltru
 ##########################
 # edit as needed
 ##########################
-SHOW_TQDM = False
+SHOW_TQDM = True
 catchunk_format = "fits" #for use with astropy table read/write
 overwrite = True # overwrite the input file after correction, if False, write out as a new file
                  # note: always writes out in the cwd, so if the input is in another directory
@@ -111,7 +112,28 @@ except:
     exit(-1)
 
 
-EOTab = Table(elixer_h5.root.ExtractedObjects.read_where("(selected==True) & ((filter_name==b'g')|(filter_name==b'r')|(filter_name==b'f606w'))"))
+
+if False:
+    print("*** DEBUG *** loading limited EOTab ***")
+    EOTab = None
+    #dlist = [3000010591,3000010641,3000010779,3000010752,3000006367,3000006374,3090000042]
+    dlist = [3000408560,
+ 3000408552,
+ 3000408550,
+ 3000408549,
+ 3000408548,
+ 3000408547,
+ 3000408546,
+ 3090007345]
+    for d in dlist:
+        ex = Table(elixer_h5.root.ExtractedObjects.read_where("(detectid==d) & (selected==True) & ((filter_name==b'g')|(filter_name==b'r')|(filter_name==b'f606w'))"))
+        if EOTab is None:
+            EOTab = ex
+        else:
+            EOTab = vstack([EOTab,ex])
+else:
+    EOTab = Table(elixer_h5.root.ExtractedObjects.read_where("(selected==True) & ((filter_name==b'g')|(filter_name==b'r')|(filter_name==b'f606w'))"))
+
 #note: this will be applied in a loop just a bit further down
 #EOTab = EOTab[~eo_sel] #do not restrict here ... this is the general case, not the OII specific case
 EOTab.add_index('detectid')
@@ -129,7 +151,7 @@ def get_source_id_counter():
 
     :return:
     """
-
+    global global_source_id_counter
     lock = FileLock(source_id_counter_mutex)
     with lock:
         #if it already exists, read in and use the ID, if not, create it and use the default ID
@@ -138,6 +160,7 @@ def get_source_id_counter():
             current = np.loadtxt(source_id_counter_fn,dtype=np.int64)
             current = np.int64(current) #some weirdness with np.loadtxt, insists on returnedin 0 length array
         else:
+            global_source_id_counter += 1
             current = global_source_id_counter
 
         np.savetxt(source_id_counter_fn, [current + 1], fmt='%d')
@@ -246,20 +269,23 @@ def line_z_consistency_check(z, found_lines, max_delta_aa=6.0):
     # consistent = False
 
     close_lines = []
+    close_z = []
     # is the redshift consistent with any?
     for line in found_lines:
         w_rest = line / (1.0 + z)
         w_close = np.isclose(w_rest, common_rest_lines, atol=max_delta_aa)
         if np.any(w_close):
             close_lines.append(common_rest_lines[w_close])
+            close_z.append(line/common_rest_lines[w_close] - 1.0)
     try:
         # print(f"*** test *** close_lines pre, {close_lines}")
         close_lines = np.array(flatten_list(close_lines))
+        close_z = np.array(flatten_list(close_z))
         # print(f"*** test *** close_lines, post, {close_lines}")
-        close_lines = np.array(close_lines).flatten()
+        #close_lines = np.array(close_lines).flatten()
     except:
         print(f"Exception in line_z_consistency_check; {traceback.format_exc()}")
-    return close_lines
+    return close_lines, close_z
 
 
 #
@@ -277,8 +303,6 @@ def evaluate_z_hetdex(row):
     """
     try:
         det = row['detectid']
-
-
 
         srcid = row['source_id']
         z = None  # the z we will adjust
@@ -333,6 +357,8 @@ def evaluate_z_hetdex(row):
             sn = row['sn']
             chi2 = row['chi2']
             gmag = row['gmag']
+            linewidth_sigma = row['linewidth']
+            qz = row['best_pz']
 
             elix_det_row = elixer_h5.root.Detections.read_where("detectid==det")
             if len(elix_det_row) != 1:
@@ -345,7 +371,7 @@ def evaluate_z_hetdex(row):
             lines = elixer_h5.root.SpectraLines.read_where("detectid==det")
             line_waves = np.array(list([row['wave']]) + list(lines['wavelength'])).flatten()
 
-            lines_consistent = line_z_consistency_check(z_diagnose, line_waves, max_delta_aa=6.0)
+            lines_consistent, lines_consistent_z = line_z_consistency_check(z_diagnose, line_waves, max_delta_aa=6.0)
 
             #print(f"*** DEBUG lines_consistent: {lines_consistent}")
 
@@ -354,10 +380,10 @@ def evaluate_z_hetdex(row):
                 # print(f"*** test: {row['wave']} {lines_consistent}")
                 if row['wave'] >= 3470.0:
                     #for each possible REST wave divide by the detections anchor wave to get a possible z
-                    z_consistent = np.array([w / row['wave'] + 1.0 for w in lines_consistent])
+                    #z_consistent = np.array([w / row['wave'] + 1.0 for w in lines_consistent])
 
                     # which z_consistent is closest to z_diganose
-                    z = z_consistent[np.abs(z_consistent - z_diagnose).argmin()]
+                    z = lines_consistent_z[np.abs(lines_consistent_z - z_diagnose).argmin()]
 
                     #is this actually consistent?
                     zx = 2. * abs((z_diagnose - z) / (z_diagnose + z))
@@ -374,10 +400,13 @@ def evaluate_z_hetdex(row):
                     good = False
 
 
+
             if z is None:
                 # this COULD still be something like a star (continuum source) with a bad line
+                # or even a resolved bright galaxy (low-z) with a bad line (bad meaning, not a real emission line
+                #  and might be broad and relatively weak vs the continuum)
                 # maybe there is imaging? If it is very round and Diagnose says z = 0 (or nearly 0) take it as a star
-                if -0.1 < z_diagnose < 0.001:
+                if -0.1 < z_diagnose < 0.001 or qz < 0.08 or (linewidth_sigma > 6.0 and obs_EW < 12.0 and gmag < 22.0):
                     eo_rows = EOTab[EOTab['detectid'] == det]
                     for eo_row in eo_rows:
                         if eo_row['filter_name'] == b'f606w':
@@ -387,12 +416,15 @@ def evaluate_z_hetdex(row):
                             major = eo_row['major']
                             minor = eo_row['minor']
                             e = (major - minor) / major
+                            eo_mag = eo_row['mag']
                         except:
                             e = 999.  # so won't trip the next if
                             major = 999.
                             minor = 999.
+                            eo_mag = 999.9
 
-                        if (e < 0.1 and major < 6.0) or ((e > 99) and (sn < 6.5) and (chi2 > 1.5) and (gmag < 21.0)):
+                        if (e < 0.1 and major < 6.0) or ((e > 99) and (sn < 6.5) and (chi2 > 1.5) and (gmag < 22.0)) or \
+                            (major >= 6.0 and gmag < 21.0 and (chi2 > 1.75 or (linewidth_sigma > 6.0 or obs_EW < 12.0))) :
                             # pretty circular, reasonably pointsource plausible, could still be an elliptical, but may as well assume a star
                             # or bright with weak line
                             # todo: could do better by seeing if can find H & K (common)
@@ -403,6 +435,31 @@ def evaluate_z_hetdex(row):
                             # sel_eo_dist[i] = False #remove from the list
                             # print(f"remove from list: {det}")
                             break  # no need to check the next one
+                        elif qz < 0.02 and -0.1 < z_diagnose : #it is bright and elixer has no handle on it
+                            z = z_diagnose
+                            z_src = 'diagnose'
+                            good = False
+                            # actually, in this case, we'd say NOT a galaxy
+                            # sel_eo_dist[i] = False #remove from the list
+                            # print(f"remove from list: {det}")
+                            break  # no need to check the next one
+
+                        # elif e < 0.5 and major >= 6.0 and gmag < 21.0 and \
+                        #         (chi2 > 1.75 or (linewidth_sigma > 6.0 or obs_EW < 12.0)):
+                        #
+                        #     #NOTE: done' want  (or eo_mag < 20.0) as it could be we are wrongly associated with a bright object
+                        #     # nearby but are a separate object ... if really associated with the bright object the HETDEX gmag
+                        #     # will also be bright
+                        #     #OR we could be up against something big and bright, and we still want to keep diagnose if the line
+                        #     # is not a good line
+                        #     z = z_diagnose
+                        #     z_src = 'diagnose'
+                        #     good = False
+                        #     # actually, in this case, we'd say NOT a galaxy
+                        #     # sel_eo_dist[i] = False #remove from the list
+                        #     # print(f"remove from list: {det}")
+                        #     break  # no need to check the next one
+
 
                     # if sel_eo_dist[i]: #if it is still True, give it the elixer redshift
                     if (flags & (G.DETFLAG_BAD_EMISSION_LINE | G.DETFLAG_BAD_FIBERTRACE)) or \
@@ -467,7 +524,7 @@ def evaluate_z_hetdex(row):
         #print(f"*** DEBUG: [{row['detectid']}] z: {z:0.4f} "
         #      f"z_hetdex: {z_hetdex:0.4f}  z_diagnose: {z_diagnose:0.4f}  z_elixer: {z_elixer:0.4f}")
 
-        if z == z_hetdex:  # it did not change
+        if np.isclose(z,z_hetdex,atol=0.000015):  # it did not change
             #still, force negative, near zero to be 0
             return True, z_hetdex, z_hetdex_src
         else:
@@ -547,12 +604,12 @@ def evaluate_cluster(row, row_seldet):
 
         # first is the row_seldet a good z_hetdex?
         # evaluate each independently
-        keep_z_hetdex, new_z_hetdex, new_z_hetdex_src = evaluate_z_hetdex(row)
-        seldet_keep_z_hetdex, seldet_new_z_hetdex, seldet_new_z_hetdex_src = evaluate_z_hetdex(row_seldet)
+        #keep_z_hetdex, new_z_hetdex, new_z_hetdex_src = evaluate_z_hetdex(row)
+        #seldet_keep_z_hetdex, seldet_new_z_hetdex, seldet_new_z_hetdex_src = evaluate_z_hetdex(row_seldet)
 
         # if neither changed, assume the grouping is still good?
-        if keep_z_hetdex == seldet_keep_z_hetdex == True:
-            return True  # keep the cluster
+        #if keep_z_hetdex == seldet_keep_z_hetdex == True:
+        #    return True  # keep the cluster
 
         # one or the other needs to change
         # could be they are both wrong in the same way and still belong together
@@ -698,10 +755,10 @@ def evaluate_counterpart_dist(row):
     return out_dict
 
 
-#####################################
-# make sure every entry has a sourceId
-# and every soruceID has a selected_det
-#####################################
+###########################################################
+# make sure every entry has a source_id
+# and every source_id has a selected_det and flag_seldet
+############################################################
 
 u_srcs, u_cts = np.unique(SrcTab['source_id'], return_counts=True)
 sel = u_cts > 1
@@ -779,11 +836,95 @@ print(f"[{catchunk_fn}] Now SubSrcTab has one entry for every source_id and that
 # main loop
 #############################
 
+##############################
+# every source_id has a flag_seldet and selected_det, BUT, they might not make sense
+# e.g. example:
+#  source_id 5020000000192 has 4 members: [3000010591,3000010641,3000010779,3000010752]
+#                         3000010752 is the flag_seldet BUT none of its possible redshifts match the z_hetdex
+#                         3000010591 is the detectid that has the matching redshift and should be the seldet
+##############################
+failed_seldet_sources = []
+changed_seldet_sources = []
+u_srcs = np.unique(SrcTab['source_id'])
+for src in tqdm(u_srcs,disable=not SHOW_TQDM):
+    sel_srcs = np.array(SrcTab['source_id']==src)
+    sel_seldet = np.array(SrcTab['flag_seldet'][sel_srcs]==1)
+
+    row_seldet = SrcTab[sel_srcs][sel_seldet]
+    #if row_seldet['z_hetdex'] in [row_seldet['z_agn'],row_seldet['z_diagnose'],row_seldet['z_elixer']]:
+    if any(np.isclose(row_seldet['z_hetdex'], [row_seldet['z_agn'], row_seldet['z_diagnose'], row_seldet['z_elixer']], atol=0.0015)):
+        #notice, these could be off a little, but we should fix that later
+        continue #this one should be fine ... the seldet could reasonably be the source of the z_hetdex
+
+    #otherwise, we have a problem
+    #need to choose a new flag_seldet, but not alter the source grouping itself (that can happen later)
+    sel_matching_z = np.full(len(sel_seldet),False)
+    for i,row in enumerate(SrcTab[sel_srcs]): #exact match preferred
+        if row['z_hetdex'] in [row['z_agn'],row['z_diagnose'],row['z_elixer']]:
+            sel_matching_z[i] = True
+
+    if not any(sel_matching_z): #try again with a little room
+        for i, row in enumerate(SrcTab[sel_srcs]):
+            if any(np.isclose(row['z_hetdex'], [row['z_agn'],row['z_diagnose'],row['z_elixer']], atol=0.0015)):
+                sel_matching_z[i] = True
+
+    best_row = None
+    if np.count_nonzero(sel_matching_z) == 0: #this is a problem and should be rare or never?
+        print(f"[{src}] could not find an appropriate seldet.")
+        failed_seldet_sources.append(src)
+
+        #break up each detection into its own source
+        for row in SrcTab[sel_srcs]:
+            det = row['detectid']
+            SrcTab['source_id'][SrcTab['detectid'] == det] = get_source_id_counter()
+            SrcTab['flag_seldet'][SrcTab['detectid'] == det] = 1
+            SrcTab['selected_det'][SrcTab['detectid'] == det] = True
+            #and make it its own seldet
+
+        continue
+    else:
+        #pick the best detectid
+        # if mixed or both lines choose the higher SNR if line
+        # if both cont, choose the brighter gmag t
+
+        for row in SrcTab[sel_srcs][sel_matching_z]:
+            if best_row is None:
+                best_row = row
+            else:
+                if row['det_type'] == 'cont':
+                    if best_row['det_type'] == 'cont':
+                        if row['gmag'] < best_row['gmag']:
+                            best_row = row
+                else: #new row is a line type
+                    if['det_type'] == 'line':
+                        if row['sn'] > best_row['sn']:
+                            best_row = row
+                    else: #best_row was continuum, so switch to the new row as a line
+                        best_row = row
+
+    #do the update
+    #zero out the old seldet (just hit them all)
+    SrcTab['flag_seldet'][sel_srcs] = 0
+    SrcTab['selected_det'][sel_srcs] = False
+    #set the new one
+    sel_det = SrcTab['detectid'][sel_srcs] == best_row['detectid']
+    SrcTab['flag_seldet'][sel_srcs][sel_det] = 1
+    SrcTab['selected_det'][sel_srcs][sel_det] = True
+    changed_seldet_sources.append(src)
+
+#always write it, in case an overwrite is needed and can see zero sizes if there are none
+with open(f"{catchunk_fn[0:3]}_failed_seldet.srcs","w") as f:
+    for s in failed_seldet_sources:
+        f.write(f"{s}\n")
+
+#always write it, in case an overwrite is needed and can see zero sizes if there are none
+with open(f"{catchunk_fn[0:3]}_changed_seldet.srcs","w") as f:
+    for s in changed_seldet_sources:
+        f.write(f"{s}\n")
+
 #
 # a check of z_hetdex both in terms of detectid (single detetctid for a source_id) and as a result of clustering
 #
-
-
 
 questionable_z_dets = []  # list of detectids that we really are not certain about the redshift
 changed_z_dets = []  # dets where z_hetdex changed
@@ -808,7 +949,14 @@ sel_row = None  # SrcTab['detectid'] == 4018105236
 dets_with_errors = []
 dets_with_errors_reason = []
 
-source_id_mismatches = []
+#redefined later
+#source_id_mismatches = []
+
+
+#
+#
+# todo: only evaluate and update z_hetdex on a per detectd basis ... do not evaluate source_id yet ... do that in next loop
+
 
 # sdet = SrcTab['detectid'] == check_det
 print(f"[{catchunk_fn}] Main z_hetdex evaluation loop ...")
@@ -885,218 +1033,310 @@ for i, row in tqdm(enumerate(SrcTab),total= len(SrcTab),disable=not SHOW_TQDM):
     # if z_agn is set or the z_hetdex_src is "liu_agn", it wins. We keep z_hetdex and move on (noteL 2em is an auto-set by Erin if LyA + CIV)
     # if z_hetdex
 
+
+    keep_z_hetdex, new_z_hetdex, new_z_hetdex_src = evaluate_z_hetdex(row)
+    if not keep_z_hetdex:  # it changed
+        # update the source_id (might just be a single detection or may be multiples)
+        update_sel_det = np.array(SrcTab['detectid'] == det)
+        SrcTab['z_hetdex'][update_sel_det] = new_z_hetdex
+        SrcTab['z_hetdex_src'][update_sel_det] = new_z_hetdex_src
+        changed_z_dets.append(det)
+
+
     # print(f"iter: {i}")
 
-    sel_src = np.array(SrcTab['source_id'] == srcid)
-    src_ct = np.count_nonzero(sel_src)
-    det_seldet = None  #by default only the one, so don't need to set this(iu\f needed, is set later)
-    row_z_hetdex = None
-    if src_ct == 1:  # this is not clustered, simple case
-        # BUT z_agn might not be set ... could be -1
-        if z_hetdex_src == 'liu_agn':  # z_agn is not necessarily from Chenxu
-            # if (z_hetdex_src == 'liu_agn' and (np.isclose(z_agn,z_hetdex,atol=atol_strong)):
-            # print(f"{det} Chenxu AGN")
-            #print(f"*** DEBUG pass (Chenxu AGN)")
-            continue  # this is good as is
 
-        # otherwise there is disagrement and we need to check
-        z = None
-        row_z_hetdex = None
+#now the second loop
+#the invidual detectIDs have had their z_hetdex checked and possibly updated to make z_agn, z_diagnose or z_elixer
+#regardless of any source_id grouping
+# for i, row in tqdm(enumerate(SrcTab), total=len(SrcTab), disable=not SHOW_TQDM):
+#
+#     det = row['detectid']
+#     z_elixer = row['z_elixer']
+#     z_diagnose = row['z_diagnose']
+#
+#     sel_src = np.array(SrcTab['source_id'] == srcid)
+#     src_ct = np.count_nonzero(sel_src)
+#     det_seldet = None  #by default only the one, so don't need to set this(iu\f needed, is set later)
+#     row_z_hetdex = None
+#     if src_ct == 1:  # this is not clustered, simple case
+#         # BUT z_agn might not be set ... could be -1
+#         if z_hetdex_src == 'liu_agn':  # z_agn is not necessarily from Chenxu
+#             # if (z_hetdex_src == 'liu_agn' and (np.isclose(z_agn,z_hetdex,atol=atol_strong)):
+#             # print(f"{det} Chenxu AGN")
+#             #print(f"*** DEBUG pass (Chenxu AGN)")
+#             continue  # this is good as is
+#
+#         # otherwise there is disagrement and we need to check
+#         z = None
+#         row_z_hetdex = None
+#
+#     elif src_ct == 0:  # this is an error case, should not happen
+#         print(f"[{catchunk_fn}] {det} WFT? has not source_id??")
+#         dets_with_errors.append(det)
+#         dets_with_errors_reason.append("no source_id")
+#         continue  # have to just ignore it and move on to the next
+#     else:
+#         # this is clustered and the mismatch COULD be due to a bad clustering
+#         # either it does not belong in the cluster OR the cluster has a bad redshift
+#         # print(f"{det} clustered")
+#
+#         # for reference which one is the selected det
+#         # this is a complicated subselection of a subselection BE CAREFUL
+#         which_is_seldet = SrcTab['flag_seldet'][sel_src] != 0
+#         if np.count_nonzero(which_is_seldet) != 1:
+#             # this is a problem ... most likely due to early cuts, the one with the flag_seldet was excluded
+#             # this PROBABLY means that it is a poorly chosen seldet for this clustering
+#             print(
+#                 f"[{catchunk_fn}] [{det}] Error. Source_id {srcid} has no flag_seldet. Claims {src_ct} members. selection = {np.count_nonzero(which_is_seldet)}")
+#
+#             # alternate check
+#             which_is_seldet = SrcTab['selected_det'][sel_src] == True
+#             if np.count_nonzero(which_is_seldet) != 1:
+#                 print(
+#                     f"[{catchunk_fn}] [{det}] Error. Alternate check: Source_id {srcid} has no flag_seldet. Claims {src_ct} members. selection = {np.count_nonzero(which_is_seldet)}")
+#
+#                 det_seldet = det #make it itself
+#         else:
+#             det_seldet = SrcTab[sel_src][which_is_seldet]['detectid']
+#             # print(f"*** test: det_seldet = {det_seldet}")
+#
+#         # which det in the cluster is the source of this redshift? note that it need not be the one that is the "flag_seldet"
+#         # what if there is more than one?
+#         s1 = np.array(SrcTab['z_hetdex'][sel_src] == z_hetdex)
+#         s1_ct = np.count_nonzero(s1)
+#         if s1_ct == 0:  # this is an error case, no one has this z ??
+#             print(f"{det} [{srcid}] Error! none have matching z_hetdex = {z_hetdex}")
+#             # what do we want to do ?
+#             row_z_hetdex = None
+#             dets_with_errors.append(det)
+#             dets_with_errors_reason.append("none match z_hetdex")
+#             # we do NOT know the origin of this z_hetdex ... so just re-evaluate it?
+#             # could it be that it was set manually?
+#             print("todo: need to rebuild the source_id ...")
+#         elif s1_ct > 1:  # which one to use?
+#             # again, it might be that none of these are the flag_seldet
+#             # print(f"{det} {s1_ct} matches to z_hetdex in source_id")
+#             try:
+#                 # print(f"*** test *** {len(sel_src)} {np.count_nonzero(sel_src)} {len(s1)} {np.count_nonzero(s1)} {det_seldet}")
+#                 s2 = np.array(SrcTab['detectid'][sel_src][s1] == det_seldet)
+#                 row_z_hetdex = SrcTab[sel_src][s1][s2]
+#                 if len(row_z_hetdex) != 1:  # this is an error
+#                     print(f"{det} [{srcid}] ERROR! multiple flag_seldet")
+#                     # do we give up here?
+#                     dets_with_errors.append(det)
+#                     dets_with_errors_reason.append("multiple flag_seldet")
+#
+#                     #but pick one and move on ... pick the one that is angularly closest
+#                     adist = 9999.9
+#                     for test_row in SrcTab[sel_src][s1][s2]:
+#                         zdist = utils.angular_distance(row['ra'],row['dec'],test_row['ra'],test_row['dec'])
+#                         if zdist < adist:
+#                             row_z_hetdex = test_row
+#                             adist = zdist
+#                 else:
+#                     row_z_hetdex = row_z_hetdex[0]  # take out of the list
+#             except:
+#                 print(f"Exception: det = {det}, det_seldet == {det_seldet}: {traceback.format_exc()}")
+#         else:  # ct is exactly 1, use this one
+#             row_z_hetdex = SrcTab[sel_src][s1][0]
+#             # print(f"{det} exactly 1 match to z_hetdex in source_id")
+#
+#     # okay so we have the detectid we want to investigate and (possibly) the row (row_z_hetdex) that is the source of the z_hetdex value
+#     # row is THIS row, row_z_hetdex is the source of the z_hetdex IF this detection is clustered with other detections
+#     #    and in that case it could be that row == row_z_hetdex or it could be another detection
+#
+#     # so options:
+#     #  1. this is a single, lone detection OR could not find a z_hetdex match in cluster. Either way, treat as an individual
+#     #     row is populated, row_z_hetdex is None, src_ct = 1
+#     #  2. this is in a cluster but could not find a z_hetdex match in the cluster.
+#     #     row is populated, row_z_hetdex is None, src_ct > 1
+#     #  3. this is in a cluster and we found a single z_hetdex match (or selected the flag_seldet one) in the cluster.
+#     #     row is populated, row_z_hetdex is populated, src_ct > 1
+#     #  4. it already looks correct, we don't get this far and we just continue (earlier)
+#     #
+#     #  5. errors that we will have to handle later ... we don't get this far. The error list is populated and continue is triggered
+#
+#     # first if there is a row_z_hetdex, should we be clustered with it?
+#     #  if row != row_z_hetdex (and row_z_hetdex is not None)
+#     #    evaluate:  should we be clustered with it?
+#     #    if NO, uncluster
+#     #      then re-evaluate the z for THIS row (needs to be its own function)
+#     #    else
+#     #      keep the z_hetdex and the cluster and move one (*note: later when we hit the row == row_z_hetdex, it will may get updated)
+#     #  else: # this row IS the z_hetdex_row
+#     #    re-evaluate the z for THIS row
+#     #    did the z_hetdex change?
+#     #    if Yes
+#     #      find all other detections on this source_id and update their z_hetdex
+#     #    else:
+#     #      do nothing
+#
+#
+#     if (row_z_hetdex is not None) and (row['detectid'] != row_z_hetdex['detectid']):
+#         # this is a clustering and THIS detection is NOT the seldet
+#         # print("todo: evaluate_cluster()")
+#         keep_cluster = evaluate_cluster(row, row_z_hetdex)
+#
+#         if keep_cluster:  # fine as is
+#             #print(f"*** DEBUG {det} KEEP cluster")
+#             pass
+#         else:
+#             # need to split up?
+#             # print(f"{det} need to uncluster")
+#
+#             # mark this Source_id to be re-clustered (keep a list of source_ids to be re-worked)
+#             #  but don't change it yet, will do that later as a separate loop as it is not
+#             #  sufficient to break this detectid out of the source, we may need to split the old source up into
+#             #  multiple new sources
+#
+#             source_id_mismatches.append(srcid)
+#
+#             # if srcid not in source_id_mismatches:
+#             #    #or could blindly add then do unique at the end
+#             #    source_id_mismatches.append(srcid)
+#
+#             keep_z_hetdex, new_z_hetdex, new_z_hetdex_src = evaluate_z_hetdex(row)
+#             if not keep_z_hetdex:  # it changed
+#                 # update the source_id (might just be a single detection or may be multiples)
+#                 # remeber this is either a single OR it is the seldet for the source
+#
+#                 update_sel_det = SrcTab['detectid']==det
+#                 SrcTab['z_hetdex'][update_sel_det] = new_z_hetdex
+#                 SrcTab['z_hetdex_src'][update_sel_det] = new_z_hetdex_src
+#                 changed_z_dets.append(det)
+#
+#     else:  # this is a single detection OR it is the cluster's seldet
+#         # print("Calling evaluate")
+#         keep_z_hetdex, new_z_hetdex, new_z_hetdex_src = evaluate_z_hetdex(row)
+#         if not keep_z_hetdex:  # it changed
+#             # update the source_id (might just be a single detection or may be multiples)
+#             # remeber this is either a single OR it is the seldet for the source
+#
+#             update_sel_det = np.array(SrcTab['detectid'] == det)
+#             SrcTab['z_hetdex'][update_sel_det] = new_z_hetdex
+#             SrcTab['z_hetdex_src'][update_sel_det] = new_z_hetdex_src
+#             changed_z_dets.append(det)
+#
+#             # AND update the others in the source only IF they match the old z_hetdex
+#             # now it could be that we have not gotten to some of these yet and they will end up being un-clustered,
+#             # but if we hit them later, they will still have their redshift evaluated and can get updated z_hetdex then
+#             #  and then when we run the re-clustering, they can be broken out
+#             update_sel_src = sel_src & np.array(SrcTab['z_hetdex'] == z_hetdex)
+#             # print(f"{det} changing {np.count_nonzero(update_sel_src)} others in source. From {z_hetdex:0.4f} to {new_z_hetdex:0.4f}")
+#             SrcTab['z_hetdex'][update_sel_src] = new_z_hetdex
+#             SrcTab['z_hetdex_src'][update_sel_src] = new_z_hetdex_src
+#
+#         # else: it did not change so do nothing
 
-    elif src_ct == 0:  # this is an error case, should not happen
-        print(f"[{catchunk_fn}] {det} WFT? has not source_id??")
-        dets_with_errors.append(det)
-        dets_with_errors_reason.append("no source_id")
-        continue  # have to just ignore it and move on to the next
-    else:
-        # this is clustered and the mismatch COULD be due to a bad clustering
-        # either it does not belong in the cluster OR the cluster has a bad redshift
-        # print(f"{det} clustered")
 
-        # for reference which one is the selected det
-        # this is a complicated subselection of a subselection BE CAREFUL
-        which_is_seldet = SrcTab['flag_seldet'][sel_src] != 0
-        if np.count_nonzero(which_is_seldet) != 1:
-            # this is a problem ... most likely due to early cuts, the one with the flag_seldet was excluded
-            # this PROBABLY means that it is a poorly chosen seldet for this clustering
-            print(
-                f"[{catchunk_fn}] [{det}] Error. Source_id {srcid} has no flag_seldet. Claims {src_ct} members. selection = {np.count_nonzero(which_is_seldet)}")
+#second loop, after the individual z_hetdex have been updated, should they stay in the same source_ids?
+print(f"[{catchunk_fn}] Main source_id evaluation (2nd) loop ...")
+#todo: this should be like the notebook
+# iterate over the source_ids, not the detectids
+#  then inside each source_id, keep those together that have the same z_hetdex
+#    (branching split and (re)assign seldet as needed)
 
-            # alternate check
-            which_is_seldet = SrcTab['selected_det'][sel_src] == True
-            if np.count_nonzero(which_is_seldet) != 1:
-                print(
-                    f"[{catchunk_fn}] [{det}] Error. Alternate check: Source_id {srcid} has no flag_seldet. Claims {src_ct} members. selection = {np.count_nonzero(which_is_seldet)}")
-                continue
 
-            # if z_hetdex_src == 'liu_agn':  # z_agn is not necessarily from Chenxu
-            #     continue  # this is good as is
-            #
-            # # otherwise there is disagrement and we need to check
-            # z = None
-            # row_z_hetdex = None
-        else:
-            det_seldet = SrcTab[sel_src][which_is_seldet]['detectid']
-            # print(f"*** test: det_seldet = {det_seldet}")
 
-        # which det in the cluster is the source of this redshift? note that it need not be the one that is the "flag_seldet"
-        # what if there is more than one?
-        s1 = np.array(SrcTab['z_hetdex'][sel_src] == z_hetdex)
-        s1_ct = np.count_nonzero(s1)
-        if s1_ct == 0:  # this is an error case, no one has this z ??
-            print(f"{det} [{srcid}] Error! none have matching z_hetdex = {z_hetdex}")
-            # what do we want to do ?
-            row_z_hetdex = None
-            dets_with_errors.append(det)
-            dets_with_errors_reason.append("none match z_hetdex")
-            # we do NOT know the origin of this z_hetdex ... so just re-evaluate it?
-            # could it be that it was set manually?
-            print("todo: need to rebuild the source_id ...")
-        elif s1_ct > 1:  # which one to use?
-            # again, it might be that none of these are the flag_seldet
-            # print(f"{det} {s1_ct} matches to z_hetdex in source_id")
-            try:
-                # print(f"*** test *** {len(sel_src)} {np.count_nonzero(sel_src)} {len(s1)} {np.count_nonzero(s1)} {det_seldet}")
-                s2 = np.array(SrcTab['detectid'][sel_src][s1] == det_seldet)
-                row_z_hetdex = SrcTab[sel_src][s1][s2]
-                if len(row_z_hetdex) != 1:  # this is an error
-                    print(f"{det} [{srcid}] ERROR! multiple flag_seldet")
-                    # do we give up here?
-                    dets_with_errors.append(det)
-                    dets_with_errors_reason.append("multiple flag_seldet")
-                    continue
-                else:
-                    row_z_hetdex = row_z_hetdex[0]  # take out of the list
-            except:
-                print(f"Exception: det = {det}, det_seldet == {det_seldet}: {traceback.format_exc()}")
-        else:  # ct is exactly 1, use this one
-            row_z_hetdex = SrcTab[sel_src][s1][0]
-            # print(f"{det} exactly 1 match to z_hetdex in source_id")
 
-    # okay so we have the detectid we want to investigate and (possibly) the row (row_z_hetdex) that is the source of the z_hetdex value
-    # row is THIS row, row_z_hetdex is the source of the z_hetdex IF this detection is clustered with other detections
-    #    and in that case it could be that row == row_z_hetdex or it could be another detection
+# todo: could we put a redshift BACK the way it was if the object should still be clustered with other sources
+#  and those other sources have secure redshifts
 
-    # so options:
-    #  1. this is a single, lone detection OR could not find a z_hetdex match in cluster. Either way, treat as an individual
-    #     row is populated, row_z_hetdex is None, src_ct = 1
-    #  2. this is in a cluster but could not find a z_hetdex match in the cluster.
-    #     row is populated, row_z_hetdex is None, src_ct > 1
-    #  3. this is in a cluster and we found a single z_hetdex match (or selected the flag_seldet one) in the cluster.
-    #     row is populated, row_z_hetdex is populated, src_ct > 1
-    #  4. it already looks correct, we don't get this far and we just continue (earlier)
-    #
-    #  5. errors that we will have to handle later ... we don't get this far. The error list is populated and continue is triggered
 
-    # first if there is a row_z_hetdex, should we be clustered with it?
-    #  if row != row_z_hetdex (and row_z_hetdex is not None)
-    #    evaluate:  should we be clustered with it?
-    #    if NO, uncluster
-    #      then re-evaluate the z for THIS row (needs to be its own function)
-    #    else
-    #      keep the z_hetdex and the cluster and move one (*note: later when we hit the row == row_z_hetdex, it will may get updated)
-    #  else: # this row IS the z_hetdex_row
-    #    re-evaluate the z for THIS row
-    #    did the z_hetdex change?
-    #    if Yes
-    #      find all other detections on this source_id and update their z_hetdex
-    #    else:
-    #      do nothing
+print(f"[{catchunk_fn}] Secondary z_hetdex based on source_id evaluation loop ...")
+u_src, cts_src = np.unique(SrcTab['source_id'],return_counts=True)
+#only care about those with 2 or more
+scts = cts_src > 1
+source_id_mismatches = []
+sid_atol = 0.005  # this seems experimentally good, but there are AGN assignments that vary by more than this, up to around 0.1 in delta z)
+for src in tqdm(u_src[scts],disable=not SHOW_TQDM):
+    rows = SrcTab[SrcTab['source_id'] == src]
+    avg = np.mean(rows['z_hetdex'])
+    if not np.allclose(avg, rows['z_hetdex'],atol=sid_atol):  # or (std > std_max): #basically, match to 2 decimals with some slop
+        # this could be a problem
+        source_id_mismatches.append(src)
 
-    if (row_z_hetdex is not None) and (row['detectid'] != row_z_hetdex['detectid']):
-        # this is a clustering and THIS detection is NOT the seldet
-        # print("todo: evaluate_cluster()")
-        keep_cluster = evaluate_cluster(row, row_z_hetdex)
 
-        if keep_cluster:  # fine as is
-            #print(f"*** DEBUG {det} KEEP cluster")
-            pass
-        else:
-            # need to split up?
-            # print(f"{det} need to uncluster")
 
-            # mark this Source_id to be re-clustered (keep a list of source_ids to be re-worked)
-            #  but don't change it yet, will do that later as a separate loop as it is not
-            #  sufficient to break this detectid out of the source, we may need to split the old source up into
-            #  multiple new sources
 
-            source_id_mismatches.append(srcid)
-
-            # if srcid not in source_id_mismatches:
-            #    #or could blindly add then do unique at the end
-            #    source_id_mismatches.append(srcid)
-
-            keep_z_hetdex, new_z_hetdex, new_z_hetdex_src = evaluate_z_hetdex(row)
-            if not keep_z_hetdex:  # it changed
-                # update the source_id (might just be a single detection or may be multiples)
-                # remeber this is either a single OR it is the seldet for the source
-                SrcTab['z_hetdex'][sel_src] = new_z_hetdex
-                SrcTab['z_hetdex_src'][sel_src] = new_z_hetdex_src
-                changed_z_dets.append(det)
-
-    else:  # this is a single detection OR it is the cluster's seldet
-        # print("Calling evaluate")
-        keep_z_hetdex, new_z_hetdex, new_z_hetdex_src = evaluate_z_hetdex(row)
-        if not keep_z_hetdex:  # it changed
-            # update the source_id (might just be a single detection or may be multiples)
-            # remeber this is either a single OR it is the seldet for the source
-
-            update_sel_det = np.array(SrcTab['detectid'] == det)
-            SrcTab['z_hetdex'][update_sel_det] = new_z_hetdex
-            SrcTab['z_hetdex_src'][update_sel_det] = new_z_hetdex_src
-            changed_z_dets.append(det)
-
-            # AND update the others in the source only IF they match the old z_hetdex
-            # now it could be that we have not gotten to some of these yet and they will end up being un-clustered,
-            # but if we hit them later, they will still have their redshift evaluated and can get updated z_hetdex then
-            #  and then when we run the re-clustering, they can be broken out
-            update_sel_src = sel_src & np.array(SrcTab['z_hetdex'] == z_hetdex)
-            # print(f"{det} changing {np.count_nonzero(update_sel_src)} others in source. From {z_hetdex:0.4f} to {new_z_hetdex:0.4f}")
-            SrcTab['z_hetdex'][update_sel_src] = new_z_hetdex
-            SrcTab['z_hetdex_src'][update_sel_src] = new_z_hetdex_src
-
-        # else: it did not change so do nothing
 
 source_id_mismatches = np.unique(source_id_mismatches)
-# changed_counterpart_dets
-print(f"[{catchunk_fn}] Changed continuum counterpart: {len(changed_counterpart_dets)}")
-print(f"[{catchunk_fn}] Changed z assignments: {len(changed_z_dets)}")
-print(f"[{catchunk_fn}] Questionable z assignments: {len(questionable_z_dets)}")
-# print(f"Changed: {changed_z_dets}")
-print(f"[{catchunk_fn}] Source IDs to update ({len(source_id_mismatches)})")#: {source_id_mismatches}")
-print(f"[{catchunk_fn}] Errors: {len(dets_with_errors)}")
 
-with open(f"{catchunk_fn[0:3]}_errors.dets","w") as f:
-    for d,e in zip(dets_with_errors,dets_with_errors_reason):
-        f.write(f"{d}\t{e}\n")
+#need to evalute these ... now, individually, they have had z_hetdex checked vs AGN and Diagnose, but not vs cluster
+# ... should they be grouped together?
+# ... should individual source z_hetdex be re-assigned to match the cluster?
 
-with open(f"{catchunk_fn[0:3]}_questionble_z.dets","w") as f:
-    for d in zip(questionable_z_dets):
-        f.write(f"{d}\n")
+for src in tqdm(source_id_mismatches,disable=not SHOW_TQDM):
+    #get all the detectids for this source AND the one that is the anchor
+    sel = SrcTab['source_id'] == src
+    det_rows = SrcTab[sel]
+    sel_anchor = det_rows['flag_seldet']==1
+    try:
+        anchor_row = det_rows[sel_anchor][0]
+    except:
+        anchor_row = None
+        continue #there is no anchor row?? does that make any sense? no, but it will get cleaned up in the last section
+
+    #now, re-evaluate the redshift
+    for det_row in det_rows:
+        if det_row['detectid'] != anchor_row['detectid'] and not np.isclose(det_row['z_hetdex'],anchor_row['z_hetdex'],atol=atol_strong):
+            keep_cluster = evaluate_cluster(det_row, anchor_row)
+            if keep_cluster:
+                #need to reset the det_row z_hetdex and reason
+                xsel = SrcTab['detectid'] == det_row['detectid']
+                SrcTab['z_hetdex'][xsel] = anchor_row['z_hetdex']
+                SrcTab['z_hetdex_src'][xsel] = anchor_row['z_hetdex_src']
+                #now, these will be kept together in the last check, rather than assigned to new source_ids
+
+
+#clean up the  source_id_mismatches
+cleaned_source_id_mismatches = []
+for src in tqdm(source_id_mismatches,disable=not SHOW_TQDM):
+    sel = SrcTab['source_id'] == src
+    det_rows = SrcTab[sel]
+    avg = np.mean(det_rows['z_hetdex'])
+
+    if not np.allclose(avg,rows['z_hetdex'],atol=atol_strong):
+        cleaned_source_id_mismatches.append(src)
+
 
 
 ####################################
 #update the source_ids
 ###################################
-# now, go through those mismatches and assign new source_ids
+# now, go through those potential mismatches and assign new source_ids
 print(f"[{catchunk_fn}] Updating source_ids ...")
 try:
     SrcTab.remove_indices('source_id')
 except:
     pass
 
-for i in tqdm(range(len(source_id_mismatches)),disable=not SHOW_TQDM):
-    src = source_id_mismatches[i]
+for i in tqdm(range(len(cleaned_source_id_mismatches)),disable=not SHOW_TQDM):
+    src = cleaned_source_id_mismatches[i]
     rows = SrcTab[SrcTab['source_id'] == src]
     new_clusters = split_cluster(rows)
-    for clu in new_clusters:
+    if len(new_clusters) < 2: #there is only one list, then no need to split up
+        continue
+
+    #the longest sublist should keep the original ID
+    sublist_lengths = [len(x) for x in new_clusters]
+    max_length = np.argmax(sublist_lengths)
+
+
+    for j, clu in enumerate(new_clusters):
+        if j == max_length: #let the longest one keep the original source_id
+            continue
+
         # each one is a list
-        global_source_id_counter += 1
         r0 = None
         comp_col = 'sn'
 
+        new_src_id = get_source_id_counter()
+
+        #update the souce_id and define one of them to be the anchor, the selectd_det
         for det in clu:
-            SrcTab['source_id'][SrcTab['detectid'] == det] = get_source_id_counter()
+            SrcTab['source_id'][SrcTab['detectid'] == det] = new_src_id
             if r0 is None:
                 r0 = SrcTab[SrcTab['detectid'] == det]
                 if r0['z_hetdex'] == r0['z_elixer']:
@@ -1126,6 +1366,23 @@ try:
     SrcTab.add_index('detectid')
 except:
     pass
+
+
+# changed_counterpart_dets
+print(f"[{catchunk_fn}] Changed continuum counterpart: {len(changed_counterpart_dets)}")
+print(f"[{catchunk_fn}] Changed z assignments: {len(changed_z_dets)}")
+print(f"[{catchunk_fn}] Questionable z assignments: {len(questionable_z_dets)}")
+# print(f"Changed: {changed_z_dets}")
+print(f"[{catchunk_fn}] Source IDs to update ({len(cleaned_source_id_mismatches)})")#: {cleaned_source_id_mismatches}")
+print(f"[{catchunk_fn}] Errors: {len(dets_with_errors)}")
+
+with open(f"{catchunk_fn[0:3]}_errors.dets","w") as f:
+    for d,e in zip(dets_with_errors,dets_with_errors_reason):
+        f.write(f"{d}\t{e}\n")
+
+with open(f"{catchunk_fn[0:3]}_questionble_z.dets","w") as f:
+    for d in zip(questionable_z_dets):
+        f.write(f"{d}\n")
 
 #print(f"*** DEBUG: cat out")
 # for row in SrcTab:
