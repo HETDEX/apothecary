@@ -36,7 +36,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*alltru
 ##########################
 # edit as needed
 ##########################
-SHOW_TQDM = True
+SHOW_TQDM = False
 catchunk_format = "fits" #for use with astropy table read/write
 overwrite = True # overwrite the input file after correction, if False, write out as a new file
                  # note: always writes out in the cwd, so if the input is in another directory
@@ -117,14 +117,7 @@ if False:
     print("*** DEBUG *** loading limited EOTab ***")
     EOTab = None
     #dlist = [3000010591,3000010641,3000010779,3000010752,3000006367,3000006374,3090000042]
-    dlist = [3000408560,
- 3000408552,
- 3000408550,
- 3000408549,
- 3000408548,
- 3000408547,
- 3000408546,
- 3090007345]
+    dlist = [3090120343]
     for d in dlist:
         ex = Table(elixer_h5.root.ExtractedObjects.read_where("(detectid==d) & (selected==True) & ((filter_name==b'g')|(filter_name==b'r')|(filter_name==b'f606w'))"))
         if EOTab is None:
@@ -553,7 +546,7 @@ def split_cluster(rows, atol=0.005):
             # print(f"({iterct}): ids={ids} uids={uid} xid={xid} done={np.count_nonzero(done)}")
             iterct += 1
             if iterct > 10:
-                print(f"WTF? Breaking ... too many iterations. original source_id = {rows['source_id'][0]}")
+                print(f"WTF? Breaking ... too many iterations. original source_id = {rows['source_id'][0]}. Member ct = {len(ids)}")
                 done = np.full(len(rows), True)
                 break
 
@@ -851,10 +844,15 @@ for src in tqdm(u_srcs,disable=not SHOW_TQDM):
     sel_seldet = np.array(SrcTab['flag_seldet'][sel_srcs]==1)
 
     row_seldet = SrcTab[sel_srcs][sel_seldet]
-    #if row_seldet['z_hetdex'] in [row_seldet['z_agn'],row_seldet['z_diagnose'],row_seldet['z_elixer']]:
-    if any(np.isclose(row_seldet['z_hetdex'], [row_seldet['z_agn'], row_seldet['z_diagnose'], row_seldet['z_elixer']], atol=0.0015)):
-        #notice, these could be off a little, but we should fix that later
-        continue #this one should be fine ... the seldet could reasonably be the source of the z_hetdex
+    if len(row_seldet) == 1:
+        row_seldet = row_seldet[0]
+
+        #if row_seldet['z_hetdex'] in [row_seldet['z_agn'],row_seldet['z_diagnose'],row_seldet['z_elixer']]:
+        np_close = np.isclose(row_seldet['z_hetdex'], [row_seldet['z_agn'], row_seldet['z_diagnose'], row_seldet['z_elixer']],
+                   atol=0.0015)
+        if len(np_close) > 0 and any(np_close):
+            #notice, these could be off a little, but we should fix that later
+            continue #this one should be fine ... the seldet could reasonably be the source of the z_hetdex
 
     #otherwise, we have a problem
     #need to choose a new flag_seldet, but not alter the source grouping itself (that can happen later)
@@ -1018,9 +1016,13 @@ for i, row in tqdm(enumerate(SrcTab),total= len(SrcTab),disable=not SHOW_TQDM):
             ((z_diagnose < -0.1) or (np.isclose(z_diagnose, z_hetdex, atol=atol_weak))) and \
             ((z_elixer < 0) or (np.isclose(z_elixer, z_hetdex, atol=atol_strong))):
         # print(f"{det} PASS {z_hetdex:0.4f} {z_agn:0.4f} {z_diagnose:0.4f} {z_elixer:0.4f}")
-        #print(f"*** DEBUG pass (no change)")
-        #print(f"[{det}] {z_hetdex:0.4f} {z_diagnose:0.4f} {z_elixer:0.4f}")
-        continue
+
+        #sanity ... except if z_hetdex = -999
+        if z_hetdex > -0.1: #e.g. usually -999
+            print(f"*** DEBUG pass (no change)")
+            print(f"[{det}] {z_hetdex:0.4f} {z_diagnose:0.4f} {z_elixer:0.4f}")
+            continue
+        #else keep going
         # else:
     #    #just for testing
     #    print(f"{det} FAIL {z_hetdex:0.4f} {z_agn:0.4f} {z_diagnose:0.4f} {z_elixer:0.4f}")
