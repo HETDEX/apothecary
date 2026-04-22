@@ -12,6 +12,8 @@ import numpy as np
 import tables
 from astropy.table import Table, vstack
 from elixer import global_config as G
+from elixer import spectrum_utilities as SU
+from astropy.cosmology import Planck18 as cosmo
 from elixer import utilities as utils
 from hetdex_api.extinction import *  #includes deredden_spectra also gets config?
 import traceback
@@ -300,6 +302,12 @@ def evaluate_z_hetdex(row):
         srcid = row['source_id']
         z = None  # the z we will adjust
         z_src = None
+
+        #no need for this here ... explicitly check for liu-agn just a bit below
+        # if row['z_hetdex_src'] == 'liu-agn':
+        #     z_agn = row['z_hetdex']
+        # else:
+
         z_agn = row['z_agn']
         z_diagnose = row['z_diagnose']
         z_elixer = row['z_elixer']
@@ -977,7 +985,8 @@ for i, row in tqdm(enumerate(SrcTab),total= len(SrcTab),disable=not SHOW_TQDM):
             SrcTab['counterpart_image_depth_mag'][sel_src_det] = cp_dict['counterpart_image_depth_mag']
             changed_counterpart_dets.append(row['detectid'])
 
-    if not check_z_hetdex:
+    if not check_z_hetdex or row['z_hetdex_src'] == 'liu-agn':
+        #Chenxu assigned redshift, keep it
         #print(f"*** DEBUG skip check_z_hetdex")
         continue
 
@@ -1005,13 +1014,16 @@ for i, row in tqdm(enumerate(SrcTab),total= len(SrcTab),disable=not SHOW_TQDM):
     srcid = row['source_id']
     flags = row['flags']  # elixer flags
     z = None  # the z we will adjust
-    z_agn = row['z_agn']
+
+    z_agn = row['z_agn']  #note this might not be Chenxu's AGN redshift, though that condition was explicitly checked above
     z_hetdex = row['z_hetdex']
     z_hetdex_src = row['z_hetdex_src']
 
     # first check if z_hetdex agrees with z_elixer and z_diagnose and z_agn (or they are < -1, not to be used)
     # then we assume good and move on
     # that is, every contributor to z agrees or is not set
+
+
     if ((z_agn < 0) or (np.isclose(z_agn, z_hetdex, atol=atol_strong))) and \
             ((z_diagnose < -0.1) or (np.isclose(z_diagnose, z_hetdex, atol=atol_weak))) and \
             ((z_elixer < 0) or (np.isclose(z_elixer, z_hetdex, atol=atol_strong))):
@@ -1019,7 +1031,7 @@ for i, row in tqdm(enumerate(SrcTab),total= len(SrcTab),disable=not SHOW_TQDM):
 
         #sanity ... except if z_hetdex = -999
         if z_hetdex > -0.1: #e.g. usually -999
-            print(f"*** DEBUG pass (no change)")
+           # print(f"*** DEBUG pass (no change)")
             print(f"[{det}] {z_hetdex:0.4f} {z_diagnose:0.4f} {z_elixer:0.4f}")
             continue
         #else keep going
@@ -1368,6 +1380,66 @@ try:
     SrcTab.add_index('detectid')
 except:
     pass
+
+
+
+#################################################
+#Last pass, redshift and source_ids are set
+# need to update lum_ and flux_ LyA and OII
+# for those that changed
+#################################################
+
+#todo: if OII to not OII, then
+#            set lum_ flux_ oii to -999  source_type to "n/a"
+#            if LAE then compute and set lum_ flux_ LyA  #e.g. if the rest wavelensth is LyA
+#                 to values
+#                 and set source_type to "lae"
+#      if LAE to not LAE, then
+#             set lum_ flux_ LyA to -999 source_type to "n/a"
+#             if OII, then set lum_ flux _OII #e.g. if the rest wavelensth is oii
+#                 to values
+#               and set source_type to "oii"  (or maybe lzg ???)
+
+#OII to not OII
+print("Updating OII -> possible LyA ...")
+sel = np.array(SrcTab['lum_oii'] > 0) * np.array(SrcTab['z_hetdex'] > 0.4865)
+SrcTab['source_type'][sel] = "n/a"
+SrcTab['flux_oii'][sel] = -999.0
+SrcTab['flux_oii_err'][sel] = -999.0
+SrcTab['lum_oii'][sel] = -999.0
+SrcTab['lum_oii_err'][sel] = -999.0
+
+#some of these can be updated to flux_lya
+for row in tqdm(SrcTab[sel],total=np.count_nonzero(sel),disable=not SHOW_TQDM):
+    if abs(row['wave'] / (row['z_hetdex'] + 1) - 1215.67) < 10.0: #within 10AA    prob LyA
+        s = SrcTab['detectid'] == row['detectid']
+        SrcTab['source_type'][s] = "lae"
+        SrcTab['flux_lya'][s] = row['flux']
+        SrcTab['flux_lya_err'][s] = row['flux_err']
+        lum, lum_err = SU.rest_line_luminosity(row['z_hetdex'],row['flux'] * 1e-17,row['flux_err'] * 1e-17,cosmo)
+        SrcTab['lum_lya'][s] = lum
+        SrcTab['lum_lya_err'][s] = lum_err
+
+
+
+#LAE to not LAE
+print("Updating LAE -> possible OII ...")
+sel = np.array(SrcTab['lum_lya'] > 0) * (np.array(SrcTab['z_hetdex'] < 1.856) | np.array(SrcTab['z_hetdex'] > 3.5597))
+SrcTab['source_type'][sel] = "n/a"
+SrcTab['flux_lya'][sel] = -999.0
+SrcTab['flux_lya_err'][sel] = -999.0
+SrcTab['lum_lya'][sel] = -999.0
+SrcTab['lum_lya_err'][sel] = -999.0
+
+for row in tqdm(SrcTab[sel],total=np.count_nonzero(sel),disable=not SHOW_TQDM):
+    if abs(row['wave'] / (row['z_hetdex'] + 1) - 3727.8) < 8.0: #within 8AA    prob OII ... be a little tighter than LyA
+        s = SrcTab['detectid'] == row['detectid']
+        SrcTab['source_type'][s] = "oii"
+        SrcTab['flux_oii'][s] = row['flux']
+        SrcTab['flux_oii_err'][s] = row['flux_err']
+        lum, lum_err = SU.rest_line_luminosity(row['z_hetdex'],row['flux'] * 1e-17,row['flux_err'] * 1e-17,cosmo)
+        SrcTab['lum_oii'][s] = lum
+        SrcTab['lum_oii_err'][s] = lum_err
 
 
 # changed_counterpart_dets
