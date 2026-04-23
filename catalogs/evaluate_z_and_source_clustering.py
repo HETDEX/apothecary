@@ -1442,6 +1442,32 @@ for row in tqdm(SrcTab[sel],total=np.count_nonzero(sel),disable=not SHOW_TQDM):
         SrcTab['lum_oii_err'][s] = lum_err
 
 
+
+#other, within the same z range
+print("Updating NOT LyA  ...")
+sel = np.array(SrcTab['lum_lya'] > 0)
+for row in tqdm(SrcTab[sel],total=np.count_nonzero(sel),disable=not SHOW_TQDM):
+    if abs(row['wave'] / (row['z_hetdex'] + 1) - 1215.67) > 10.0: #too far
+        s = SrcTab['detectid'] == row['detectid']
+        SrcTab['source_type'][s] = "n/a"
+        SrcTab['flux_lya'][s] = -999.0
+        SrcTab['flux_lya_err'][s] = -999.0
+        SrcTab['lum_lya'][s] = -999.0
+        SrcTab['lum_lya_err'][s] = -999.0
+
+
+#other, within the same z range
+print("Updating NOT OII  ...")
+sel = np.array(SrcTab['lum_oii'] > 0)
+for row in tqdm(SrcTab[sel],total=np.count_nonzero(sel),disable=not SHOW_TQDM):
+    if abs(row['wave'] / (row['z_hetdex'] + 1) - 3727.8) > 8.0: #too far
+        s = SrcTab['detectid'] == row['detectid']
+        SrcTab['source_type'][s] = "n/a"
+        SrcTab['flux_oii'][s] = -999.0
+        SrcTab['flux_oii_err'][s] = -999.0
+        SrcTab['lum_oii'][s] = -999.0
+        SrcTab['lum_oii_err'][s] = -999.0
+
 # changed_counterpart_dets
 print(f"[{catchunk_fn}] Changed continuum counterpart: {len(changed_counterpart_dets)}")
 print(f"[{catchunk_fn}] Changed z assignments: {len(changed_z_dets)}")
