@@ -2273,6 +2273,11 @@ def get_het_raw_copy_mutex(cfg,virus_path,release=None):
                         time.sleep(SafeActiveShotsSleep)
 
                 return sync_fn #name of the sync file
+            else:  # we are done with the copy, just delete our sync file
+                try:
+                    os.remove(os.path.join(mux_root, release))
+                except:
+                    print(f"[{cfg.datevshot}] Exception in get_het_raw_copy_mutex, release corral: {traceback.format_exc()}")
         elif "/work" == virus_path[:5]:  # needs a limit
             mux_root = "/".join(cfg.cwd_orig.split("/")[:4]) + "/ssr_mux/work"
             if not os.path.exists(mux_root):
@@ -2319,7 +2324,11 @@ def get_het_raw_copy_mutex(cfg,virus_path,release=None):
 
                 return sync_fn  # name of the sync file
             else: #we are done with the copy, just delete our sync file
-                os.remove(os.path.join(mux_root, f"{cfg.datevshot}.sync"))
+                try:
+                    os.remove(os.path.join(mux_root, release))
+                    #os.remove(release)
+                except:
+                    print(f"[{cfg.datevshot}] Exception in get_het_raw_copy_mutex, release work: {traceback.format_exc()}")
         else:
             return None #no limit needed
     except:
@@ -2454,9 +2463,9 @@ def copy_het_raw_file(cfg):
                     else:
                         #this is the date.tar, then need to extract parts of it
                         try:
-                            destination_path = os.path.join(cfg.local_het_raw_path,
-                                                            f"{cfg.datevshot[:8]}/virus/") #virus0000{cfg.datevshot[-3:]}.tar")
-                            file_to_extract = f"virus/virus0000{cfg.datevshot[-3:]}.tar"
+                            destination_path = cfg.local_het_raw_path
+                            file_to_extract = f"{cfg.datevshot[:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar"
+                            Path(destination_path).mkdir(parents=True, exist_ok=True)
                             cmd = f"tar -xvf {virus_path} -C {destination_path} {file_to_extract}"
                             system_command(cfg, cmd)
                             if os.path.exists(destination_path): #good copy, continue with the other 2 but don't check them
@@ -2464,14 +2473,16 @@ def copy_het_raw_file(cfg):
                                 #  since the gc?.tar (or images.tar) are part of the top level date
                                 #  and not tied directly to datevshot, they might already exist locally even if this
                                 #  specific datevshot did not
-                                destination_path = os.path.join(cfg.local_het_raw_path,f"{cfg.datevshot[:8]}/gc1")
-                                file_to_extract = f"gc1/*.tar"
+                                #destination_path = os.path.join(cfg.local_het_raw_path,f"{cfg.datevshot[:8]}/gc1")
+                                file_to_extract = f"{cfg.datevshot[:8]}/gc1/*.tar"
+                                #Path(destination_path).mkdir(parents=True, exist_ok=True)
                                 if not os.path.exists(destination_path) or len(glob.glob(destination_path + "/*.tar")) == 0:
                                     cmd = f"tar -xvf {virus_path} -C {destination_path} {file_to_extract}"
                                     system_command(cfg, cmd)
 
-                                destination_path = os.path.join(cfg.local_het_raw_path,f"{cfg.datevshot[:8]}/gc2")
-                                file_to_extract = f"gc2/*.tar"
+                                #destination_path = os.path.join(cfg.local_het_raw_path,f"{cfg.datevshot[:8]}/gc2")
+                                file_to_extract = f"{cfg.datevshot[:8]}/gc2/*.tar"
+                                #Path(destination_path).mkdir(parents=True, exist_ok=True)
                                 if not os.path.exists(destination_path) or len(glob.glob(destination_path + "/*.tar")) == 0:
                                     cmd = f"tar -xvf {virus_path} -C {destination_path} {file_to_extract}"
                                     system_command(cfg, cmd)
