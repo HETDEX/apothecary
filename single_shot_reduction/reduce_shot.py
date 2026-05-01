@@ -2449,14 +2449,15 @@ def copy_het_raw_file(cfg):
                                     system_command(cfg, cmd)
 
                         else:
-                            print(f"[{cfg.datevshot}] Failed to copy/extract date tar file.", traceback.format_exc())
+                            print(f"[{cfg.datevshot}] (1) Failed to copy/extract date tar file.", traceback.format_exc())
                             rc = -1
                     else:
                         #this is the date.tar, then need to extract parts of it
                         try:
                             destination_path = os.path.join(cfg.local_het_raw_path,
-                                                            f"{cfg.datevshot[:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar")
-                            cmd = f"tar -xvf {virus_path} {destination_path}"
+                                                            f"{cfg.datevshot[:8]}/virus/") #virus0000{cfg.datevshot[-3:]}.tar")
+                            file_to_extract = f"virus/virus0000{cfg.datevshot[-3:]}.tar"
+                            cmd = f"tar -xvf {virus_path} -C {destination_path} {file_to_extract}"
                             system_command(cfg, cmd)
                             if os.path.exists(destination_path): #good copy, continue with the other 2 but don't check them
                                 # this MIGHT already exist if another process got it
@@ -2464,19 +2465,21 @@ def copy_het_raw_file(cfg):
                                 #  and not tied directly to datevshot, they might already exist locally even if this
                                 #  specific datevshot did not
                                 destination_path = os.path.join(cfg.local_het_raw_path,f"{cfg.datevshot[:8]}/gc1")
+                                file_to_extract = f"gc1/*.tar"
                                 if not os.path.exists(destination_path) or len(glob.glob(destination_path + "/*.tar")) == 0:
-                                    cmd = f"tar -xvf {virus_path} {destination_path}"
+                                    cmd = f"tar -xvf {virus_path} -C {destination_path} {file_to_extract}"
                                     system_command(cfg, cmd)
 
                                 destination_path = os.path.join(cfg.local_het_raw_path,f"{cfg.datevshot[:8]}/gc2")
+                                file_to_extract = f"gc2/*.tar"
                                 if not os.path.exists(destination_path) or len(glob.glob(destination_path + "/*.tar")) == 0:
-                                    cmd = f"tar -xvf {virus_path} {destination_path}"
+                                    cmd = f"tar -xvf {virus_path} -C {destination_path} {file_to_extract}"
                                     system_command(cfg, cmd)
                             else:
-                                print(f"[{cfg.datevshot}] Failed to copy/extract date tar file.", traceback.format_exc())
+                                print(f"[{cfg.datevshot}] (2) Failed to copy/extract date tar file.", traceback.format_exc())
                                 rc = -1
                         except:
-                            print(f"[{cfg.datevshot}] Failed to copy/extract date tar file.", traceback.format_exc())
+                            print(f"[{cfg.datevshot}] (3) Failed to copy/extract date tar file.", traceback.format_exc())
                             rc = -1
 
                     #release the mutex/counter decrement
@@ -5718,6 +5721,10 @@ if s03_fluxcal and not dtprog["s03_fluxcal"]:
     #todo: optional: update  /scratch/projects/hetdex/detect/fwhm.all and norm.all
     #                see update_fwhm_norm script
     #
+
+    if cfg.hetdex_original:
+        print(f"[{cfg.datevshot}] If replacing, update /corral and /scratch/projects   detect/tp/<datevshot>sedtp_f.dat")
+        print(f"[{cfg.datevshot}] If replacing, update /scratch/projects/hetdex/detect/fwhm.all and norm.all ... see update_fwhm_norm script")
 
     #update the fwhm.out with the cfg.guider_fwhm, if it is set
     if cfg.guider_fwhm is not None and cfg.guider_fwhm > 0:
