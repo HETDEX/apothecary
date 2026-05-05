@@ -283,6 +283,12 @@ if "-help" in args:
            where <shot> is YYYYMMDDSSS or YYYYMMDDvSSS
     
     switches (all optional):
+    --cal_flux <str>: Choose one of "gaia" or "sdss" as the primary star catalog for flux calibration. The other becomes
+                      the secondary and PanSTARRS is always the tertiary. "sdss" is the default.
+                      
+    --cal_astro <str>: Choose one of "gaia" or "sdss" as the primary star catalog for astrometric calibration. 
+                       The other becomes the secondary and PanSTARRS is always the tertiary. "gaia" is the default.
+    
     --clean <integer> : -5 to 5; 0 performs no cleanup (e.g. for full debugging). Default = (1) if not specified.
                       negatives do the same as positives except they force the clean-up immediately and as the only action
                       0 = No clean up at all. Intermediate files and all tempory scripts reamin. Good for debugging.
@@ -352,6 +358,39 @@ if "-help" in args:
 len_args = len(args)
 queue_elixer = False
 prep_compress = -1 #not just a boolean, use as the max simultaneous shots to process
+
+
+if "-cal_flux" in args:
+    i = args.index("-cal_flux")
+    try:
+        cfg.starcat_cal = str(args[i+1]).lower()
+        if cfg.starcat_cal in ["sdss","gaia"]:
+            pass #all is good
+        else:
+            print(f"Invalid -cal_flux specified: {args[i+1]} ; must be 'sdss' or 'gaia' ")
+            exit(-1)
+    except:
+        print(f"Invalid -cal_flux specified")
+        exit(-1)
+
+    del args[i+1]  # args.pop(0) #remove THIS file
+    args.remove("-cal_flux")
+
+if "-cal_astro" in args:
+    i = args.index("-cal_astro")
+    try:
+        cfg.starcat_ast = str(args[i+1]).lower()
+        if cfg.starcat_ast in ["sdss","gaia"]:
+            pass #all is good
+        else:
+            print(f"Invalid -cal_astro specified: {args[i+1]} ; must be 'sdss' or 'gaia' ")
+            exit(-1)
+    except:
+        print(f"Invalid -cal_astro specified")
+        exit(-1)
+
+    del args[i+1]  # args.pop(0) #remove THIS file
+    args.remove("-cal_astro")
 
 if "-clear_mutex" in args:
     print("Hidden switch: clearing mutex, resetting allowed concurrent active processes.")
@@ -3165,6 +3204,65 @@ def run_vdrp(cfg):
     :return:
     """
 
+    def do_gaia(cfg):
+        #command is based on rta.YYYYMM
+        #run_shifts 20240730 009 16.317927 33.689304 1  20240730 GAIA
+        fail_gaia = False
+        print(f"[{cfg.datevshot}] VDRP: GAIA")
+        try:
+            with open(f"rta.{cfg.datevshot[0:6]}", "r") as rta:
+                for line in rta:  # really should only be one line
+                    if len(line) > 10:
+                        # we DON'T want the carriage return
+                        line = line.rstrip('\n')
+                        system_command(cfg, f"{line} {cfg.datevshot[0:8]} GAIA")
+
+            vdrp_check_norms(cfg)
+            vdrp_check_shout_ifu(cfg)
+            vdrp_cp2dithall(cfg, "gaia")
+            # move the output under gaia
+            os.makedirs("gaia", exist_ok=True)
+            system_command(cfg, f"mv {cfg.datevshot[0:6]}??v??? gaia")
+
+            # check the dithall.gaia exists
+            if not os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.gaia")):
+                fail_gaia = True
+
+        except Exception as e:
+            print(f"[{cfg.datevshot}] VDRP: GAIA fail.", e, "\n", traceback.format_exc())
+            fail_gaia = True
+
+        return fail_gaia
+
+    def do_sdss(cfg):
+        #command is based on rta.YYYYMM
+        #run_shifts 20240730 009 16.317927 33.689304 1  20240730 SDSS
+        fail_sdss = False
+        print(f"[{cfg.datevshot}] VDRP: SDSS")
+        try:
+            with open(f"rta.{cfg.datevshot[0:6]}", "r") as rta:
+                for line in rta:  # really should only be one line
+                    if len(line) > 10:
+                        # we DON'T want the carriage return
+                        line = line.rstrip('\n')
+                        system_command(cfg, f"{line} {cfg.datevshot[0:8]} SDSS")
+
+            vdrp_check_norms(cfg)
+            vdrp_check_shout_ifu(cfg)
+            vdrp_cp2dithall(cfg, "sdss")
+            # move the output under sdss
+            os.makedirs("sdss", exist_ok=True)
+            system_command(cfg, f"mv {cfg.datevshot[0:6]}??v??? sdss")
+
+            # check the dithall.sdss exists
+            if not os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.sdss")):
+                fail_sdss = True
+
+        except Exception as e:
+            print(f"[{cfg.datevshot}] VDRP: SDSS fail.", e, "\n", traceback.format_exc())
+            fail_sdss = True
+
+        return fail_sdss
 
     #change to the vdrp/shifts directory
     # since we do not know if we will need all of GAIA, SDSS and PanSTARRS at this point,
@@ -3176,37 +3274,32 @@ def run_vdrp(cfg):
     fail_gaia = False
     fail_sdss = False
     fail_panstarrs = False
+    #not quite the opposite of the fail_xxx
+    used_gaia = False
+    used_sdss = False
+    used_panstarrs = False
 
 
-    #GAIA first
-    #command is based on rta.YYYYMM
-    #run_shifts 20240730 009 16.317927 33.689304 1  20240730 GAIA
-
-    print(f"[{cfg.datevshot}] VDRP: GAIA")
-    try:
-        with open(f"rta.{cfg.datevshot[0:6]}","r") as rta:
-            for line in rta: #really should only be one line
-                if len(line) > 10:
-                    #we DON'T want the carriage return
-                    line = line.rstrip('\n')
-                    system_command(cfg,f"{line} {cfg.datevshot[0:8]} GAIA")
-
-
-        vdrp_check_norms(cfg)
-        vdrp_check_shout_ifu(cfg)
-        vdrp_cp2dithall(cfg,"gaia")
-        #move the output under gaia
-        os.makedirs("gaia",exist_ok=True)
-        system_command(cfg,f"mv {cfg.datevshot[0:6]}??v??? gaia")
-
-        #check the dithall.gaia exists
-        if not os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.gaia")):
-            fail_gaia = True
-
-    except Exception as e:
-        print(f"[{cfg.datevshot}] VDRP: GAIA fail.",e,  "\n", traceback.format_exc())
-        fail_gaia = True
-
+    if cfg.strcat_ast == None or cfg.starcat_ast == 'gaia':
+        #GAIA first
+        fail_gaia = do_gaia(cfg)
+        if fail_gaia:
+            fail_sdss = do_sdss(cfg)
+        else:
+            used_gaia = True
+    elif cfg.strcat_ast == 'sdss':
+        fail_sdss = do_sdss(cfg)
+        if fail_sdss:
+            fail_gaia = do_sdss(cfg)
+        else:
+             used_sdss  = True
+    else: #should not happend
+        print(f"[{cfg.datevshot}] VDRP: unexpected strcat_ast value [{cfg.strcat_ast}] ; using GAIA as default ")
+        fail_gaia = do_gaia(cfg)
+        if fail_gaia:
+            fail_sdss = do_sdss(cfg)
+        else:
+            used_gaia = True
 
     #!!! notice: we are doing limited checking here ... that will be done later
     # previously would run: check_norms YYYYMM   (included)
@@ -3216,32 +3309,7 @@ def run_vdrp(cfg):
     #                       cp2dithall YYYYMM  (included)
 
 
-    #SDSS
-    print(f"[{cfg.datevshot}] VDRP: SDSS")
-    try:
-        with open(f"rta.{cfg.datevshot[0:6]}","r") as rta:
-            for line in rta: #really should only be one line
-                if len(line) > 10:
-                    #we DON'T want the carriage return
-                    line = line.rstrip('\n')
-                    system_command(cfg,f"{line} {cfg.datevshot[0:8]} SDSS")
-
-        vdrp_check_norms(cfg)
-        vdrp_check_shout_ifu(cfg)
-        vdrp_cp2dithall(cfg,"sdss")
-        #move the output under sdss
-        os.makedirs("sdss",exist_ok=True)
-        system_command(cfg,f"mv {cfg.datevshot[0:6]}??v??? sdss")
-
-        #check the dithall.sdss exists
-        if not os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.sdss")):
-            fail_sdss = True
-
-    except Exception as e:
-        print(f"[{cfg.datevshot}] VDRP: SDSS fail.", e, "\n", traceback.format_exc())
-        fail_sdss = True
-
-
+    #always third
     if do_panstarrs or (fail_gaia and fail_sdss):
         #PanSTARRS
         print(f"[{cfg.datevshot}] VDRP: PANSTARRS")
@@ -3263,10 +3331,30 @@ def run_vdrp(cfg):
             # check the dithall.panstarrs exists
             if not os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.panstarrs")):
                 fail_panstarrs = True
+            else:
+                used_panstarrs = True
 
         except Exception as e:
             print(f"[{cfg.datevshot}] VDRP: PANSTARRS fail.", e, "\n", traceback.format_exc())
             fail_panstarrs = True
+
+
+    #update to which one was actually used (should be 0 or 1 at most)
+    if used_gaia:
+        if cfg.starcat_ast != 'gaia':
+            print(print(f"[{cfg.datevshot}] VDRP: updating astrometry catalog used to GAIA"))
+            cfg.starcat_ast = "gaia"
+    elif used_sdss:
+        if cfg.starcat_ast != 'sdss':
+            print(print(f"[{cfg.datevshot}] VDRP: updating astrometry catalog used to SDSS"))
+            cfg.starcat_ast = "sdss"
+    elif used_panstarrs:
+        if cfg.starcat_ast != 'panstarrs':
+            print(print(f"[{cfg.datevshot}] VDRP: updating astrometry catalog used to PANSTARRS"))
+            cfg.starcat_ast = "panstarrs"
+    else: #going to be fatal
+        print(print(f"[{cfg.datevshot}] VDRP: unable to fix astrometry."))
+
 
     #todo: which is the main dithall, etc???? (normally it is SDSS for calibration and gaia for astrometry)
     #print("!!! todo: copy GAIA dithaall to /scatch/projects and /corral-repl ???")
@@ -4060,20 +4148,28 @@ def build_shot_h5(cfg):
         cmd += f" -of \"{cfg.datevshot}.h5\""
         cmd += f" --rootdir \"{cfg.cwd}\""
 
-        if os.path.exists(f"{cfg.cwd}/vdrp/shifts/dithall.gaia"):
+        if cfg.starcat_ast =='gaia' and os.path.exists(f"{cfg.cwd}/vdrp/shifts/dithall.gaia"):
             cmd += f" --detect_path \"{cfg.cwd}/vdrp/shifts/dithall.gaia\""
             cfg.starcat_ast = "gaia"
-        elif os.path.exists(f"{cfg.cwd}/vdrp/shifts/dithall.sdss"):
+        elif cfg.starcat_ast =='sdss' and os.path.exists(f"{cfg.cwd}/vdrp/shifts/dithall.sdss"):
             cmd += f" --detect_path \"{cfg.cwd}/vdrp/shifts/dithall.sdss\""
             cfg.starcat_ast = "sdss"
-        elif os.path.exists(f"{cfg.cwd}/vdrp/shifts/dithall.panstarrs"):
+        elif cfg.starcat_ast =='panstarrs' and os.path.exists(f"{cfg.cwd}/vdrp/shifts/dithall.panstarrs"):
             cmd += f" --detect_path \"{cfg.cwd}/vdrp/shifts/dithall.panstarrs\""
             cfg.starcat_ast = "panstarrs"
-        else:
-            print("Fatal: cannot find *.dithall file for this shot")
-            return -1
-
-
+        else: #should not happen, but choose one, if exists
+            if  os.path.exists(f"{cfg.cwd}/vdrp/shifts/dithall.gaia"):
+                cmd += f" --detect_path \"{cfg.cwd}/vdrp/shifts/dithall.gaia\""
+                cfg.starcat_ast = "gaia"
+            elif os.path.exists(f"{cfg.cwd}/vdrp/shifts/dithall.sdss"):
+                cmd += f" --detect_path \"{cfg.cwd}/vdrp/shifts/dithall.sdss\""
+                cfg.starcat_ast = "sdss"
+            elif os.path.exists(f"{cfg.cwd}/vdrp/shifts/dithall.panstarrs"):
+                cmd += f" --detect_path \"{cfg.cwd}/vdrp/shifts/dithall.panstarrs\""
+                cfg.starcat_ast = "panstarrs"
+            else:
+                print("Fatal: cannot find *.dithall file for this shot")
+                return -1
 
         system_command(cfg, cmd)
 
@@ -5695,25 +5791,51 @@ if s03_fluxcal and not dtprog["s03_fluxcal"]:
     #this is largely for parallels and we want GAIA for that, so have it first
     # note: for HETDEX it was SDSS first for flux calibration and GAIA for astrometry
 
-    if cfg.hetdex:
-        #SDSS for flux calibration and GAIA for astrometry
+    # if cfg.hetdex:
+    #     #SDSS for flux calibration and GAIA for astrometry
+    #     if os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.sdss")):
+    #         star_cat_list.append("sdss")
+    #
+    #     if os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.gaia")):
+    #         star_cat_list.append("gaia")
+    #
+    #     if os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.panstarrs")):
+    #         star_cat_list.append("panstarrs")
+    # else:
+    #     if os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.gaia")):
+    #         star_cat_list.append("gaia")
+    #
+    #     if os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.sdss")):
+    #         star_cat_list.append("sdss")
+    #
+    #     if os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.panstarrs")):
+    #          star_cat_list.append("panstarrs")
+
+
+    if cfg.starcat_cal is None or cfg.starcat_cal == 'sdss':
+        if os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.sdss")):
+            star_cat_list.append("sdss")
+
+        if os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.gaia")):
+            star_cat_list.append("gaia")
+    elif cfg.starcat_cal == 'gaia':
+        if os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.gaia")):
+            star_cat_list.append("gaia")
+
+        if os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.sdss")):
+            star_cat_list.append("sdss")
+    else: #shold not happen
+        print(f"[{cfg.datevshot}] flux calibration: unexpected value in cfg.starcat_cal {cfg.starcat_cal}. Using SDSS default.")
+
         if os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.sdss")):
             star_cat_list.append("sdss")
 
         if os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.gaia")):
             star_cat_list.append("gaia")
 
-        if os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.panstarrs")):
-            star_cat_list.append("panstarrs")
-    else:
-        if os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.gaia")):
-            star_cat_list.append("gaia")
-
-        if os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.sdss")):
-            star_cat_list.append("sdss")
-
-        if os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.panstarrs")):
-             star_cat_list.append("panstarrs")
+    #regardless, panstarrs is always third
+    if os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.panstarrs")):
+        star_cat_list.append("panstarrs")
 
     if len(star_cat_list) == 0:
         Quit(cfg, -1, "FATAL. Something wrong. No star catalogs available under vdrp/shifts.")
