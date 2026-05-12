@@ -923,7 +923,7 @@ class StarCatalog(tables.IsDescription):
 
 class StarCatalogMatches(tables.IsDescription):
     RA_det = tables.Float32Col(pos=0)
-    DEC_det = tables.Float32Col((28), pos=1)
+    DEC_det = tables.Float32Col(pos=1)
     IFUSLOT_det = tables.Int32Col(pos=2)
     xifu_det = tables.Float32Col(pos=3)
     yifu_det = tables.Float32Col(pos=4)
@@ -934,6 +934,13 @@ class StarCatalogMatches(tables.IsDescription):
     xifu_cat = tables.Float32Col(pos=9)
     yifu_cat = tables.Float32Col(pos=10)
     ifuslot_cat = tables.Int32Col(pos=11)
+
+class TP_All(tables.IsDescription):
+    refid = tables.Int32Col(pos=0)
+    tp = tables.Float32Col(pos=1)
+    c2 = tables.Int32Col(pos=2)
+    c3 = tables.Int32Col(pos=3)
+    c4 = tables.Float32Col(pos=4)
 
 def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
     """
@@ -1075,9 +1082,39 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 except:
                     print(f"[{datevshot}] Non fatal. Will ignore. Fail on Calibration/Throughput/tp_png: {traceback.format_exc()}")
 
+
+                # TP_All (e.g. /sci<datevshot>/detect/<datevshot>/res/tp.all)
+                try:
+
+                    #need to load the file first
+
+                    tp_all_path = os.path.join(os.path.dirname(shot_h5_path),f"detect/{datevshot}/res/tp.all")
+                    if os.path.exists(tp_all_path):
+
+                        refid, c2,c3 = np.loadtxt(tp_all_path,usecols=[0,2,3],unpack=True,dtype=int)
+                        tpfloat, c4 = np.loadtxt(tp_all_path, usecols=[1,4], unpack=True, dtype=float)
+
+                        fileh.create_table(fileh.root.Calibration.Throughput, "TP_All", TP_All, 'TP All')
+                        for i in range(len(refid)):
+                            new_row = fileh.root.Calibration.Throughput.TP_All.row
+
+                            new_row['refid'] = refid[i]
+                            new_row['tp'] = tpfloat[i]
+                            new_row['c2'] = c2[i]
+                            new_row['c3'] = c3[i]
+                            new_row['c4'] = c4[i]
+                            new_row.append()
+
+                        fileh.root.Calibration.Throughput.TP_All.flush()
+                    else:
+                        log.info(f"[{datevshot}] Could not locate tp.all file ({tp_all_path}). Cannot add Calibration.Throughput.TP_All")
+                except:
+                    log.debug(f"[{datevshot}] Exception adding Calibration.Throughput.TP_All", exc_info=True)
+
             except:
                 #log.debug("Non fatal. Will ignore. Fail on Calibration/Throughput/throughput table", exc_info=True)
                 print(f"[{datevshot}] Non fatal. Will ignore. Fail on Calibration/Throughput: {traceback.format_exc()}")
+
 
 
         #######################################
@@ -1639,6 +1676,9 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                     potb.flush()
             except:
                 log.debug(f"[{datevshot}] Exception adding Astrometry.PositionOffsets.expXX", exc_info=True)
+
+
+
 
         #end if not minimum
 
