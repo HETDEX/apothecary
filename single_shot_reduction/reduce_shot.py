@@ -19,6 +19,8 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 
 """
 
+# start limited tracking version ... starting from 20260513
+__version__ = '1.0.0'
 
 import numpy as np
 import sys
@@ -3346,21 +3348,21 @@ def run_vdrp(cfg):
     used_panstarrs = False
 
 
-    if cfg.strcat_ast == None or cfg.starcat_ast == 'gaia':
+    if cfg.starcat_ast == None or cfg.starcat_ast == 'gaia':
         #GAIA first
         fail_gaia = do_gaia(cfg)
         if fail_gaia:
             fail_sdss = do_sdss(cfg)
         else:
             used_gaia = True
-    elif cfg.strcat_ast == 'sdss':
+    elif cfg.starcat_ast == 'sdss':
         fail_sdss = do_sdss(cfg)
         if fail_sdss:
             fail_gaia = do_sdss(cfg)
         else:
              used_sdss  = True
     else: #should not happend
-        print(f"[{cfg.datevshot}] VDRP: unexpected strcat_ast value [{cfg.strcat_ast}] ; using GAIA as default ")
+        print(f"[{cfg.datevshot}] VDRP: unexpected starcat_ast value [{cfg.starcat_ast}] ; using GAIA as default ")
         fail_gaia = do_gaia(cfg)
         if fail_gaia:
             fail_sdss = do_sdss(cfg)
