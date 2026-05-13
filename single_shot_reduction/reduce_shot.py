@@ -3009,6 +3009,16 @@ def make_local_gettar_file(cfg):
     """
 
     try:
+        outfile = os.path.join(cfg.cwd, f"{cfg.datevshot}.local_gettar")
+        try:
+            if os.path.exists(outfile):
+                print(f"[{cfg.datevshot}] Using existing local gettar file {outfile}")
+                all_exp = np.loadtxt(outfile,dtype=str,usecols=3,unpack=True)
+                return len(np.unique(all_exp)) , outfile
+        except:
+            print(f"[{cfg.datevshot}] Exception using existing local gettar file {outfile}. Will rebuild.",traceback.format_exc())
+
+
         print(f"[{cfg.datevshot}] Building local gettar file for run1s and run2s ... " )
 
         tarfile_path = os.path.join(cfg.local_het_raw_path,f"{cfg.datevshot[:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar")
