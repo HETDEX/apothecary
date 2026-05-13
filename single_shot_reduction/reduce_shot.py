@@ -2967,7 +2967,8 @@ def num_exposures_in_shot(shotid):
         dse = sorted(np.unique([d + s + e for d, s, e in zip(date, shot, exp)]))
         ds = np.array([x[:-5] for x in dse])
         ct = np.count_nonzero(ds == str(shotid))
-        fn = fn.replace('?', 's')
+        if ct > 0:
+            fn = fn.replace('?', 's')
     except:
         ct = 0
 
@@ -2980,13 +2981,79 @@ def num_exposures_in_shot(shotid):
             ds = np.array([x[:-5] for x in dse])
             ct = np.count_nonzero(ds==str(shotid))
             fn = fn.replace('?', 't')
-
         except:
             pass
+
+    #might not be fatal ... could be a newer observation that is not in the gettars yet, but is still accessible
+    # after this call will try to locate the tar file and build a local gettar (make_local_gettar_file)
 
     #otherwise we did find it ... how may exposures?
     return ct, fn
 
+
+
+def make_local_gettar_file(cfg):
+    """
+    if we don't have a file from Karl's maveverick/gettar, then just make our own
+    using the raw tar file we already copied
+
+     build up a local file that looks like the entries from maverick/gettar/202600 (for example)
+     write out that file locally, under this datevshot
+     and return the file name
+     this will be passed to run1s and run2s
+
+    :param cfg:
+    :return: the number of exposures and file name or None
+    """
+
+    try:
+        print(f"[{cfg.datevshot}] Building local gettar file for run1s and run2s ... " )
+
+        tarfile_path = os.path.join(cfg.local_het_raw_path,f"{cfg.datevshot[:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar")
+
+        tf = tar.open(tarfile_path)
+        tarpaths = np.array(tf.getnames())
+        obstype = os.path.basename(tarpaths[0]).split('.')[-2][-3:]
+        #only want if is "sci" ... if not, this is an error and the reduction should stop
+        if obstype != 'sci':
+            print(f"[{cfg.datevshot}] {obstype} != sci")
+            tf.close()
+            return 0 , None
+
+        filestring = ""
+        all_exp = []
+        for subtar_fits in tarpaths:
+            fileh = tf.extractfile(subtar_fits)  # open the fits
+            with fits.open(fileh) as hdu:
+                # get the cards
+                exp = subtar_fits.split("/")[1]
+                all_exp.append(exp)
+                specid = str(int(hdu[0].header['IFUSLOT'])).zfill(3)
+                ifuslot = str(int(hdu[0].header['SPECID'])).zfill(3)
+
+                # example:
+                # virus0000009/exp01/virus/20260512T041220.2_013LL_sci.fits',
+                # rback 20260131 006 exp01 093 507 202601 0
+                # note: the last integer is NOT used in run1s or run2s and is replaced with '2'
+                filestring += f"rback {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} {exp} {specid} {ifuslot} {str(cfg.datevshot)[0:6]} 2\n"
+
+            fileh.close()
+
+        tf.close()
+
+        if len(filestring) > 1:
+            outfile = os.path.join(cfg.cwd,f"{cfg.datevshot}.local_gettar")
+            with open(outfile, "w") as f:
+                for fs in filestring:
+                    f.write(fs)
+
+            print(f"[{cfg.datevshot}] Wrote {outfile} for run1s and run2s ... ")
+            cfg.gettar_fn = outfile
+            return len(np.unique(all_exp)) , outfile
+
+    except:
+        print(f"[{cfg.datevshot}] Exception! in make_local_gettar_file()", traceback.format_exc())
+        return 0 , None
 
 def run_run1s(cfg):
     """
@@ -2996,7 +3063,6 @@ def run_run1s(cfg):
 
     :return:
     """
-
 
     print("run1s ...")
     #probably should change to use subprocess
@@ -5626,9 +5692,21 @@ if rc < 0:
 
 cfg.numexp, cfg.gettar_fn = num_exposures_in_shot(cfg.shotid)
 
+do_initial_setup = True
 if cfg.numexp <= 0 and not cfg.multifits_only:
-    Quit(cfg, -1, f"FATAL! Could not find shot {cfg.datevshot}",write_status=False)
-
+    # might not be fatal ... could be a newer observation that is not in the gettars yet, but is still accessible
+    #Quit(cfg, -1, f"FATAL! Could not find shot {cfg.datevshot}",write_status=False)
+    print(f"[{cfg.datevshot}] Did not find shot in standard gettar location. Not necessarily fatal. Will attempt to proceed ...")
+    #try the initial setup anyway
+    rc = initial_setup(cfg)
+    do_initial_setup = False
+    if rc < 0:
+        Quit(cfg, rc, "Could not complete initial setup.", write_status=False)
+    #now we need to build the local gettar
+    cfg.numexp, cfg.gettar_fn = make_local_gettar_file(cfg)
+    if cfg.gettar_fn is None:
+        #now this is fatal
+        Quit(cfg, -1, f"FATAL! Could not find shot {cfg.datevshot}", write_status=False)
 
 # if cfg.simul == 1:
 #     NumProcs_mp_rcal = 10
@@ -5665,10 +5743,11 @@ else:
         else:
             Quit(cfg, -1, f"Invalid exposure. Requesting exp #{cfg.exp} but {cfg.datevshot} has only {cfg.numexp}",write_status=False)
 
-rc = initial_setup(cfg)
+if do_initial_setup:
+    rc = initial_setup(cfg)
 
-if rc < 0:
-    Quit(cfg,rc,"Could not complete initial setup.",write_status=False)
+    if rc < 0:
+        Quit(cfg,rc,"Could not complete initial setup.",write_status=False)
 
 
 
