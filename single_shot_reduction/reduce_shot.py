@@ -264,6 +264,10 @@ class Config:
     multifits_only = False  #stop once the mutli*fits files have been generated
     sub_shot = None #special case useage, use this shotnum instead of that from the datevshoot for some IFU lookups
     ifuslot = None
+    build_rta = False #set to true if we need an rta file before calling into vdrp
+    shot_ra = -999.9
+    shot_dec = -999.9
+    shot_track = -1 #0 = east , 1 = west
 
 
 
@@ -2803,6 +2807,7 @@ def initial_setup(cfg):
         # (formerly, this was the "clean_rta" script
 
         if os.path.exists(os.path.join(karlgettar,f"rta.{cfg.datevshot[0:6]}")):
+            #rta_v is the track 0 or 1 for east/ west?
            rta_date, rta_shot, rta_ra, rta_dec, rta_v = np.loadtxt(os.path.join(karlgettar,f"rta.{cfg.datevshot[0:6]}"),
                                                                 usecols=[1,2,3,4,5],unpack=True,dtype=str)
         else:
@@ -2822,9 +2827,16 @@ def initial_setup(cfg):
                                                                 usecols=[1, 2, 3, 4, 5], unpack=True, dtype=str)
 
         sel = (rta_date == cfg.datevshot[0:8]) * (rta_shot == cfg.datevshot[-3:])
-        with open(os.path.join(cfg.cwd,f"vdrp/shifts/rta.{cfg.datevshot[0:6]}"),"w") as f:
-            for d,s,ra,dec,v in zip(rta_date[sel], rta_shot[sel], rta_ra[sel], rta_dec[sel], rta_v[sel]):
-                f.write(f"run_shifts.sh {d} {s} {ra} {dec} {v} \n")
+        if np.count_nonzero(sel) == 0:
+            #none found, so make up my own .... but we don't have this info yet
+            cfg.build_rta = True
+
+
+        else:
+            with open(os.path.join(cfg.cwd,f"vdrp/shifts/rta.{cfg.datevshot[0:6]}"),"w") as f:
+                for d,s,ra,dec,v in zip(rta_date[sel], rta_shot[sel], rta_ra[sel], rta_dec[sel], rta_v[sel]):
+                    #note ra here is in decimal hours
+                    f.write(f"run_shifts.sh {d} {s} {ra} {dec} {v} \n")
 
 
         #fix detect stuff
@@ -3009,14 +3021,16 @@ def make_local_gettar_file(cfg):
     """
 
     try:
-        outfile = os.path.join(cfg.cwd, f"{cfg.datevshot}.local_gettar")
-        try:
-            if os.path.exists(outfile):
-                print(f"[{cfg.datevshot}] Using existing local gettar file {outfile}")
-                all_exp = np.loadtxt(outfile,dtype=str,usecols=3,unpack=True)
-                return len(np.unique(all_exp)) , outfile
-        except:
-            print(f"[{cfg.datevshot}] Exception using existing local gettar file {outfile}. Will rebuild.",traceback.format_exc())
+        #since we need other info from the HDU that we do not save, may as well keep
+        # it simple and just regenerate the file on a --resume
+        # outfile = os.path.join(cfg.cwd, f"{cfg.datevshot}.local_gettar")
+        # try:
+        #     if os.path.exists(outfile):
+        #         print(f"[{cfg.datevshot}] Using existing local gettar file {outfile}")
+        #         all_exp = np.loadtxt(outfile,dtype=str,usecols=3,unpack=True)
+        #         return len(np.unique(all_exp)) , outfile
+        # except:
+        #     print(f"[{cfg.datevshot}] Exception using existing local gettar file {outfile}. Will rebuild.",traceback.format_exc())
 
 
         print(f"[{cfg.datevshot}] Building local gettar file for run1s and run2s ... " )
@@ -3030,10 +3044,13 @@ def make_local_gettar_file(cfg):
         if obstype != 'sci':
             print(f"[{cfg.datevshot}] {obstype} != sci")
             tf.close()
-            return 0 , None
+            return 0, None
 
         filestring = ""
         all_exp = []
+        all_ra = []
+        all_dec = []
+        all_track = []
         for subtar_fits in tarpaths:
             fileh = tf.extractfile(subtar_fits)  # open the fits
             with fits.open(fileh) as hdu:
@@ -3042,6 +3059,9 @@ def make_local_gettar_file(cfg):
                 all_exp.append(exp)
                 specid = str(int(hdu[0].header['IFUSLOT'])).zfill(3)
                 ifuslot = str(int(hdu[0].header['SPECID'])).zfill(3)
+                all_ra.append(float(hdu[0].header['TRAJRA'])) #these should acutally all be the same (also note decimal hours)
+                all_dec.append(float(hdu[0].header['TRAJDEC']))
+                all_track.append(float(hdu[0].header['STRUCTAZ']))
 
                 # example:
                 # virus0000009/exp01/virus/20260512T041220.2_013LL_sci.fits',
@@ -3051,21 +3071,31 @@ def make_local_gettar_file(cfg):
 
             fileh.close()
 
+        if len(all_ra) > 0:
+            cfg.shot_ra = np.nanmean(all_ra) * 15.0 #remember this is TRAJRA in decimal hours and we normally want degrees
+            cfg.shot_dec = np.nanmean(all_dec)
+            az = np.nanmean(all_track)
+            if az <= 180.0:
+                cfg.shot_track = 0 #east
+            else:
+                cfg.shot_track = 1  #west
+            print(f"[{cfg.datevshot}] Set shot RA, Dec to ({cfg.shot_ra:0.6f},{cfg.shot_dec:0.6f}) or (hours) ({cfg.shot_ra/15.0:0.6f},{cfg.shot_dec:0.6f})")
+
         tf.close()
 
         if len(filestring) > 1:
             outfile = os.path.join(cfg.cwd,f"{cfg.datevshot}.local_gettar")
-            with open(outfile, "w") as f:
+            with open(outfile, "w") as fgt:
                 for fs in filestring:
-                    f.write(fs)
+                    fgt.write(fs)
 
             print(f"[{cfg.datevshot}] Wrote {outfile} for run1s and run2s ... ")
             cfg.gettar_fn = outfile
-            return len(np.unique(all_exp)) , outfile
+            return len(np.unique(all_exp)), outfile
 
     except:
         print(f"[{cfg.datevshot}] Exception! in make_local_gettar_file()", traceback.format_exc())
-        return 0 , None
+        return 0, None
 
 def run_run1s(cfg):
     """
@@ -3348,6 +3378,11 @@ def run_vdrp(cfg):
 
 
     os.chdir(os.path.join(cfg.cwd,"vdrp/shifts"))
+
+    if cfg.build_rta:
+        #track is east (0) or west (1)
+        with open(f"rta.{cfg.datevshot[0:6]}", "w") as f:
+            f.write(f"run_shifts.sh {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} {cfg.shot_ra / 15.0} {cfg.shot_dec} {cfg.shot_track} \n")
 
     fail_gaia = False
     fail_sdss = False
