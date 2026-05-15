@@ -372,17 +372,24 @@ class SpectraLines(tables.IsDescription):
     continuum = tables.Float32Col(dflt=UNSET_FLOAT)
     continuum_err = tables.Float32Col(dflt=UNSET_FLOAT)
 
+#direct copy of elixer_hdf5.py table
+#note the increased wavelength dimension size (49 to 100) for use with Shiro's ML-CNN
 class Fiber2DCutouts (tables.IsDescription):
-
     detectid = tables.Int64Col(pos=0)
     ###needs to be array of 4 (top 4 fibers)
     fiber_id = tables.StringCol(shape=(4,),itemsize=38, pos=1)
-    distance = StdFloatCol(shape=(4,),pos=2)
-    weight = StdFloatCol(shape=(4,),pos=3)
-    wavelength = tables.Float32Col(shape=(49,),pos=4) #needs the extra sigfigs
-    img_sum = StdFloatCol(shape=(9,49),pos=5)
-    img_arr = StdFloatCol(shape=(4, 9, 49),pos=6)
-    err_arr = StdFloatCol(shape=(4, 9, 49),pos=7)
+    distance = tables.Float32Col(shape=(4,),pos=2)
+    weight = tables.Float32Col(shape=(4,),pos=3)
+    wavelength = tables.Float32Col(shape=(100,),pos=4)
+    img_sum = tables.Float32Col(shape=(9,100),pos=5)
+    img_arr = tables.Float32Col(shape=(4, 9, 100),pos=6)
+    err_arr = tables.Float32Col(shape=(4, 9, 100),pos=7)
+    # old form, based on the ELiXer size of the cutouts, not what is wanted for ML-CNN
+    # wavelength = tables.Float32Col(shape=(49,),pos=4) #needs the extra sigfigs
+    # img_sum = StdFloatCol(shape=(9,49),pos=5)
+    # img_arr = StdFloatCol(shape=(4, 9, 49),pos=6)
+    # err_arr = StdFloatCol(shape=(4, 9, 49),pos=7)
+
 
 
 #these next two tables decide on 16 or 32 at runtime, so can't use the predefs
