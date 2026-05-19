@@ -2890,7 +2890,7 @@ def get_avg_sky(cfg):
         #the lower level file may be deleted in the clean step, so save off here so can
         #update the h5 file in the ssr_hdf5 call in the next process
         if avg_sky is not None:
-            with open(os.path.join(cfg.cwd_orig,f"sci{cfg.datevshot}/avg_sky.dat","w") as f:
+            with open(os.path.join(cfg.cwd_orig,f"sci{cfg.datevshot}/avg_sky.dat"),"w") as f:
                 f.write(f"{avg_sky}\n")
 
     except:
