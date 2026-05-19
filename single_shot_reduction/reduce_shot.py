@@ -2873,6 +2873,10 @@ def get_avg_sky(cfg):
         #not sure where I want to call this, so lets use the top level as a base path
         pattern = os.path.join(cfg.cwd_orig,f"sci{cfg.datevshot}/alldet/output/d*amp.dat")
         fns = glob.glob(pattern)
+
+        if len(fns) == 0:
+            print(f"[{cfg.datevshot}] Can not collect avg_sky. Could not locate: {pattern}")
+            return None
         #column headers
         #Spc_slt_iid_am Factor N_c Avg Scale W0 W1 Nlo Avg_orig chi Frac_c2 Frac0
         avg = []
@@ -2885,7 +2889,7 @@ def get_avg_sky(cfg):
         elif len(avg) == 1:
             avg_sky = avg[0]
         else: #this is a problem
-            print(f"[{cfg.datevshot}] Warning! Could not compute an average sky in get_avg_sky()")
+            print(f"[{cfg.datevshot}] Warning! Could not compute an average sky in get_avg_sky(): avg={avg}")
 
         #the lower level file may be deleted in the clean step, so save off here so can
         #update the h5 file in the ssr_hdf5 call in the next process
@@ -3251,18 +3255,10 @@ def check_run1s(cfg):
     :return:
     """
 
-    print(f"[{cfg.datevshot}] check run1s ... see check_red1.ipynb")
+    print(f"[{cfg.datevshot}] todo:  check run1s ... see check_red1.ipynb")
 
     rc = 0
-    avg_sky = get_avg_sky(cfg)
-    if avg_sky is not None:
-        cfg.avg_sky = avg_sky
-        if avg_sky > 1000.0:
-            if avg_sky >= 9999.0:
-                print(f"[{cfg.datevshot}] Average Sky is catastrophically large / unfit: {avg_sky:0.1f}.")
-                rc = -1 #fatal
-            else:
-                print(f"[{cfg.datevshot}] Average Sky is problematically large: {avg_sky:0.1f}.")
+
     return rc
 
 
@@ -3870,6 +3866,16 @@ def run_rfft(cfg):
         rc = -1
         print(f"[{cfg.datevshot}] Exception! run_rfft", traceback.format_exc())
 
+    avg_sky = get_avg_sky(cfg)
+    if avg_sky is not None:
+        cfg.avg_sky = avg_sky
+        if avg_sky > 1000.0:
+            if avg_sky >= 9999.0:
+                print(f"[{cfg.datevshot}] Average Sky is catastrophically large and/or unable to be fit: {avg_sky:0.1f}.")
+                rc = -1  # fatal
+            else:
+                #not fatal, but still a warning
+                print(f"[{cfg.datevshot}] Average Sky is problematically large: {avg_sky:0.1f}. Non-fatal.")
     return rc
 
 
@@ -5965,6 +5971,8 @@ with open("status.run", "w") as f:
 ###########
 # step1
 ###########
+
+
 if s01_run1s and not dtprog["s01_run1s"]:
     run_run1s(cfg)
 
@@ -6148,6 +6156,7 @@ if s04_make_shot and not dtprog["s04_make_shot"]:
             progress_update(cfg,dtprog, "s04b_rfft")
     else:
         print(f"[{cfg.datevshot}] Skipping rfft")
+
 
     if s04c_rcal_all and not dtprog["s04c_rcal_all"]:
         print("Running rcal_all ...")
