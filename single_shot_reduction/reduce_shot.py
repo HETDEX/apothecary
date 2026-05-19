@@ -268,6 +268,8 @@ class Config:
     shot_ra = -999.9
     shot_dec = -999.9
     shot_track = -1 #0 = east , 1 = west
+    avg_sky = None #average sky after run_run1s values > 1000.0 are a problem
+                   #note: though related too, this is NOT exactly the same as the h5 AmpStats table "avg_orig" column
 
 
 
@@ -2853,6 +2855,89 @@ def initial_setup(cfg):
     return 0
 
 
+
+def get_avg_sky(cfg):
+    """
+    can run AFTER run1s is done
+    looks at sciXXXX/alldet/dXXXamp.dat
+    and gets averge of all IFUs for columns Avg_orig
+
+    values > 1000.0 are a problem
+    values >= 9999.0 are fatal
+
+    :param cfg:
+    :return:
+    """
+    avg_sky = None
+    try:
+        #not sure where I want to call this, so lets use the top level as a base path
+        pattern = os.path.join(cfg.cwd_orig,f"sci{cfg.datevshot}/alldet/output/d*amp.dat")
+        fns = glob.glob(pattern)
+        #column headers
+        #Spc_slt_iid_am Factor N_c Avg Scale W0 W1 Nlo Avg_orig chi Frac_c2 Frac0
+        avg = []
+
+        for fn in fns:
+            avg.append(np.nanmean(np.loadtxt(fn,dtype=float,usecols=8,skiprows=1,unpack=True)))
+
+        if len(avg) > 1:
+            avg_sky = np.nanmean(avg)
+        elif len(avg) == 1:
+            avg_sky = avg[0]
+        else: #this is a problem
+            print(f"[{cfg.datevshot}] Warning! Could not compute an average sky in get_avg_sky()")
+
+        #the lower level file may be deleted in the clean step, so save off here so can
+        #update the h5 file in the ssr_hdf5 call in the next process
+        if avg_sky is not None:
+            with open(os.path.join(cfg.cwd_orig,f"sci{cfg.datevshot}/avg_sky.dat","w") as f:
+                f.write(f"{avg_sky}\n")
+
+    except:
+        print(f"[{cfg.datevshot}] Exception! in get_avg_sky()", traceback.format_exc())
+
+    return avg_sky
+
+def update_vdrp_config_limits(cfg):
+    """
+    update the vmin/vmax stretch on the collapsed imaging and the faint maglimit for calibration stars
+    based on the total exposure time
+
+    :param cfg:
+    :return:
+    """
+
+    try:
+
+        if cfg.total_exp_time is not None and cfg.total_exp_time > 1800.0:
+
+            #figure out what to use: should go roughly as sqr of time, but lets go linear here
+            multiplier = (cfg.total_exp_time / 1080.0) ** 2 #HETDEX 3Dither standard
+            magmax = round(22.0 - 2.5 * np.log10(multiplier), 1) #22.0 is mktot_magmax (note 0.0 is always the min)
+            #range is 50 so, centered at 5 (+/-25)
+            # vmin = round(-20. * multiplier**2) #-20 is cofes_vis_vmin default
+            # vmax = round(30. * 100) #multiplier**2) #30 is cofes_vis_vmax default
+            # ctr = round(5.0 * multiplier)
+            # vmin = ctr - 25 * multiplier
+            # vmax = ctr + 25 * multiplier
+
+            #vmin = 0 #if both are zero, it will trigger a zScale calculation
+            #vmax = 0
+
+            print(f"[{cfg.datevshot}] Updating vdrp calibration star maglimit to {magmax}")# and contrast vmin/vmax to {vmin}/{vmax}.")
+
+            files = ['vdrp/vdrp.config','vdrp/vdrp.config.original',
+                     'vdrp/vdrp.config.gaia','vdrp/vdrp.config.sdss','vdrp/vdrp.config.panstarrs']
+
+            for file in files:
+                system_command(cfg, f"sed -i s/\"mktot_magmax = 22.\"/\"mktot_magmax = {magmax}\"/ {file}")
+                #leave the original scaling as is (DD 20260519)
+                #system_command(cfg, f"sed -i s/\"cofes_vis_vmin = -20\"/\"cofes_vis_vmin = {vmin}\"/ {file}")
+                #system_command(cfg, f"sed -i s/\"cofes_vis_vmax = 30\"/\"cofes_vis_vmax = {vmax}\"/ {file}")
+
+    except:
+        print(f"[{cfg.datevshot}] Exception! in update_vdrp_config_limits()", traceback.format_exc())
+
 def node_setup(cfg): #,safelimit=0):
     """
 
@@ -3166,8 +3251,19 @@ def check_run1s(cfg):
     :return:
     """
 
-    print("todo: check run1s ... see check_red1.ipynb")
-    return 0
+    print(f"[{cfg.datevshot}] check run1s ... see check_red1.ipynb")
+
+    rc = 0
+    avg_sky = get_avg_sky(cfg)
+    if avg_sky is not None:
+        cfg.avg_sky = avg_sky
+        if avg_sky > 1000.0:
+            if avg_sky >= 9999.0:
+                print(f"[{cfg.datevshot}] Average Sky is catastrophically large / unfit: {avg_sky:0.1f}.")
+                rc = -1 #fatal
+            else:
+                print(f"[{cfg.datevshot}] Average Sky is problematically large: {avg_sky:0.1f}.")
+    return rc
 
 
 def vdrp_check_norms(cfg):
@@ -3455,18 +3551,18 @@ def run_vdrp(cfg):
     #update to which one was actually used (should be 0 or 1 at most)
     if used_gaia:
         if cfg.starcat_ast != 'gaia':
-            print(print(f"[{cfg.datevshot}] VDRP: updating astrometry catalog used to GAIA"))
+            print(f"[{cfg.datevshot}] VDRP: updating astrometry catalog used to GAIA")
             cfg.starcat_ast = "gaia"
     elif used_sdss:
         if cfg.starcat_ast != 'sdss':
-            print(print(f"[{cfg.datevshot}] VDRP: updating astrometry catalog used to SDSS"))
+            print(f"[{cfg.datevshot}] VDRP: updating astrometry catalog used to SDSS")
             cfg.starcat_ast = "sdss"
     elif used_panstarrs:
         if cfg.starcat_ast != 'panstarrs':
-            print(print(f"[{cfg.datevshot}] VDRP: updating astrometry catalog used to PANSTARRS"))
+            print(f"[{cfg.datevshot}] VDRP: updating astrometry catalog used to PANSTARRS")
             cfg.starcat_ast = "panstarrs"
     else: #going to be fatal
-        print(print(f"[{cfg.datevshot}] VDRP: unable to fix astrometry."))
+        print(f"[{cfg.datevshot}] VDRP: unable to fix astrometry.")
 
 
     #todo: which is the main dithall, etc???? (normally it is SDSS for calibration and gaia for astrometry)
@@ -3476,7 +3572,8 @@ def run_vdrp(cfg):
     # note: this happens regardless of outcome
     # just in case something went badly wrong, make sure we are in the right directory
     os.chdir(os.path.join(cfg.cwd, "vdrp/shifts"))
-    system_command(cfg, f"ln -s {cfg.starcat_cal}/{cfg.datevshot} {cfg.datevshot}")
+    if os.path.exists(f"{cfg.starcat_cal}/{cfg.datevshot}"):
+        system_command(cfg, f"ln -s {cfg.starcat_cal}/{cfg.datevshot} {cfg.datevshot}")
 
     os.chdir(cfg.cwd)
 
@@ -3583,7 +3680,7 @@ def run_fluxcalibration(cfg,star_catalog='sdss'):
 
     # NOTICE: this operates under two directories ... there is a second directory change partway down
 
-    print(f"[{cfg.datevshot}] flux calibration ... ")
+    print(f"[{cfg.datevshot}] flux calibration using {star_catalog} ... ")
 
     #setup the softlink for the star_catalog
     os.chdir(os.path.join(cfg.cwd, "vdrp/shifts"))
@@ -3606,11 +3703,11 @@ def run_fluxcalibration(cfg,star_catalog='sdss'):
         system_command(cfg, f"unlink *.dithall")
     system_command(cfg, f"ln -s {os.path.join(cfg.cwd, 'vdrp/shifts/dithall/*.dithall')} .")
 
-    print(f"[{cfg.datevshot}] flux calibration (rsetstar) ... ")
+    print(f"[{cfg.datevshot}] flux calibration using {star_catalog} (rsetstar) ... ")
     #call rsetstar independently
     system_command(cfg, f"rsetstar {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} {star_catalog}")
 
-    print(f"[{cfg.datevshot}] flux calibration (rallcal) ... ")
+    print(f"[{cfg.datevshot}] flux calibration using {star_catalog} (rallcal) ... ")
     #no longer includes rsetstar
     system_command(cfg,f"rallcal {cfg.datevshot[0:8]} {cfg.datevshot[-3:]}")
 
@@ -5592,10 +5689,19 @@ def prep_elixer(cfg):
 
             which_elixer = f"python {elixer_path}/selixer.py" #"selixer.test "
             merge_name = f"elixer_{cfg.datevshot}_cat.h5"
+            #get the -A ASTXXXXX from the environment and pass it to --alloc for elixer
+            slurm_alloc = None
+            try:
+                slurm_alloc = os.getenv('SLURM_TACC_ACCOUNT')
+            except:
+                print(f"[{cfg.datevshot}] Could not get SLURM allocation account.")
             elixer_base_cmd = f" -f --slurm 0 --nodes 1 --log info --shot_h5 {shot_h5} --diagnose {diagnose_tab} " \
                               f" --png --error 3.0 --neighborhood 10.0 --ntasks_per_node {tasks_per_node} " \
                               f" --timex 0.8 --post_merge 2  --merge_name {merge_name}"
                             #reduce time by about 20% ... the neighborhood is faster since only checking THIS shot
+            if slurm_alloc is not None:
+                elixer_base_cmd += f" --alloc {slurm_alloc}"
+
 
             if len(cfg.email) > 5:
                 elixer_base_cmd += f" --email {cfg.email} "
@@ -5822,7 +5928,8 @@ if cfg.numexp < 3 or not cfg.hetdex_original:
 if cfg.total_exp_time is None or cfg.total_exp_time == 0:
     get_exposure_times(cfg)
 
-
+#update for long exposures
+update_vdrp_config_limits(cfg)
 
 #########
 # after the initial setup, move stdout and stderr to a log file
@@ -5861,8 +5968,10 @@ with open("status.run", "w") as f:
 if s01_run1s and not dtprog["s01_run1s"]:
     run_run1s(cfg)
 
-    # todo: run any checks
-    check_run1s(cfg)
+    # run any checks
+    if check_run1s(cfg) < 0:
+        Quit(cfg, -1, "FATAL. Initial extraction and/or base calibration failure.")
+
 
     #todo: this would be manual here, I think, but CAN copy /red1/xxx to /scratch/local/projects
     #  all the various CoFe*.fits and multi*.fits ... these are also in the
@@ -5966,8 +6075,9 @@ if s03_fluxcal and not dtprog["s03_fluxcal"]:
     if len(star_cat_list) == 0:
         Quit(cfg, -1, "FATAL. Something wrong. No star catalogs available under vdrp/shifts.")
 
+    print(f"[{cfg.datevshot}] attemping flux calibrations in this order: {star_cat_list} ...")
     for star_cat in star_cat_list:
-        print(f"[{cfg.datevshot}] flux calibration: {star_cat}")
+        #print(f"[{cfg.datevshot}] flux calibration: {star_cat}")
         run_fluxcalibration(cfg,star_cat)
 
         if check_fluxcalibration(cfg) < 0:
@@ -5980,6 +6090,8 @@ if s03_fluxcal and not dtprog["s03_fluxcal"]:
     #todo: optional: update  /scratch/projects/hetdex/detect/fwhm.all and norm.all
     #                see update_fwhm_norm script
     #
+
+    #could be that none worked
 
     if cfg.hetdex_original:
         print(f"[{cfg.datevshot}] If replacing, update /corral and /scratch/projects   detect/tp/<datevshot>sedtp_f.dat")

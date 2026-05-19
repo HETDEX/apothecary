@@ -581,6 +581,7 @@ class VIRUSShot(tables.IsDescription): #Shot table
     nstars_fit = tables.Int32Col((3))
 
     obsind = tables.Int32Col()
+    avg_sky= tables.Float32Col() #not the same as AmpStat table avg_orig, but related
 
 
 #these next two tables decide on 16 or 32 at runtime, so can't use the predefs
@@ -1034,7 +1035,22 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         fileh.create_table(fileh.root, 'Shot', VIRUSShot, 'Shot Summary Table')
 
         #just one row for Shot table, so just do a direct copy
-        fileh.root.Shot.append(shot_h5.root.Shot.read())
+        #but there is an additional column
+        for row in tqdm(shot_h5.root.Shot.read(),disable=not SHOW_TQDM):
+            # for row in shot_h5.root.Data.Fibers.read():
+            new_row = fileh.root.Shot.row
+            for col in shot_h5.root.Shot.colnames:
+                new_row[col] = row[col]
+
+            try:
+                avg_sky = np.loadtxt(os.path.join(os.path.dirname(shot_fn),"avg_sky.dat"),dtype=float,unpack=True)
+                new_row['avg_sky'] = float(avg_sky)
+            except:
+                new_row['avg_sky'] = -9999.0
+            new_row.append()
+
+
+        #fileh.root.Shot.append(shot_h5.root.Shot.read())
         fileh.root.Shot.flush()
 
         ############################
