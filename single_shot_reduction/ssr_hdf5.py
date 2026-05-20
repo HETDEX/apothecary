@@ -43,7 +43,7 @@ except:
     print("You need to install filelock (e.g.: pip install --user filelock) ")
     exit(-1)
 
-
+CodeArchiveDir = "/work/03261/polonius/hetdex/single_shot/"
 UNSET_FLOAT = -999.999
 UNSET_INT = -99999
 UNSET_STR = ""
@@ -112,6 +112,48 @@ class PrintLog:
     def debug(self,msg,exc_info=False):
         self.log(msg,exc_info)
 # end class def
+
+
+def check_version():
+    """
+    really basic check ... does this file's version match the "archived" version?
+
+    :return:
+    """
+
+    try:
+        fn = os.path.join(CodeArchiveDir,"ssr_hdf5.py")
+        arc_ver = None
+        if os.path.exists(fn):
+            with open(fn,"r") as f:
+                found_version = False
+                #near the top
+                while not found_version:
+                    line = f.readline()
+                    if not line:
+                        break
+                    if "__version__" in line:
+                        toks = line.split('=')
+                        arc_ver = str(toks[1].replace('\'', "").replace('\"', "").strip())
+                        found_version = True
+        else:
+            print(f"Could not check version. Counld not locate code archive: {fn}")
+
+        if arc_ver is not None:
+            if arc_ver != __version__:
+                print(f"**********************************************************************************************")
+                print(f"* Warning! Local version {__version__} does not match code archive version {arc_ver} at:")
+                print(f"* \t{fn}")
+                print(f"* You may want to cancel and update ssr_hdf5.py from the above path.")
+                print(f"* If you do not cancel, this code will continue as is in 30 seconds ... ")
+                print(f"**********************************************************************************************")
+                for _ in tqdm(range(30)):
+                    time.sleep(1.0)
+            # else:
+            #     print(f"Confirmed. Local version {__version__} matches code archive version {arc_ver} at {fn}")
+
+    except:
+        print(f"Could not check version. Exception!",traceback.format_exc())
 
 log = PrintLog('h5_merge.log')
 
@@ -2385,7 +2427,7 @@ del args[0] #args.pop(0) #remove THIS file
 args = [x.replace("--","-") for x in args]
 
 print(f"version {__version__}")
-
+check_version()
 
 if "-help" in args:
     help = """

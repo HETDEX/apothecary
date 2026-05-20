@@ -36,6 +36,7 @@ import json
 from datetime import datetime, timedelta
 import multiprocessing
 import subprocess
+from tqdm import tqdm
 
 try:
     from filelock import FileLock
@@ -75,6 +76,9 @@ plt.style.use('default')
 ########################################################################
 # CONFIGURATION
 ########################################################################
+
+CodeArchiveDir = "/work/03261/polonius/hetdex/single_shot/"
+
 CorralMaxCopyLimit = 10
 WorkMaxCopyLimit = 20
 EchoCmds = True  #if True echo system commands to the log
@@ -273,6 +277,7 @@ class Config:
     shot_track = -1 #0 = east , 1 = west
     avg_sky = None #average sky after run_run1s values > 1000.0 are a problem
                    #note: though related too, this is NOT exactly the same as the h5 AmpStats table "avg_orig" column
+    code_fn_to_copy = None
 
 
 
@@ -280,11 +285,59 @@ class Config:
 # Basic user input
 ########################################################################
 
+
+def check_version(cfg):
+    """
+    really basic check ... does this file's version match the "archived" version?
+
+    :return:
+    """
+
+    try:
+        fn = os.path.join(CodeArchiveDir,"reduce_shot.py")
+        arc_ver = None
+        if os.path.exists(fn):
+            with open(fn,"r") as f:
+                found_version = False
+                #near the top
+                while not found_version:
+                    line = f.readline()
+                    if not line:
+                        break
+                    if "__version__" in line:
+                        toks = line.split('=')
+                        arc_ver = str(toks[1].replace('\'', "").replace('\"', "").strip())
+                        found_version = True
+        else:
+            print(f"Could not check version. Counld not locate code archive: {fn}")
+
+        if arc_ver is not None:
+            if arc_ver != __version__:
+
+                cfg.code_fn_to_copy = fn
+                print(f"**********************************************************************************************")
+                print(f"* Warning! Local version {__version__} does not match code archive version {arc_ver} at:")
+                print(f"* \t{fn}")
+                print(f"* You may want to cancel and update reduce_shot.py from the above path.")
+                print(f"* If you do not cancel, this code will continue as is in 30 seconds ... ")
+                print(f"**********************************************************************************************")
+                for _ in tqdm(range(30)):
+                    time.sleep(1.0)
+            # else:
+            #     print(f"Confirmed. Local version {__version__} matches code archive version {arc_ver} at {fn}")
+
+    except:
+        print(f"Could not check version. Exception!",traceback.format_exc())
+
 args = list(sys.argv) #python3 map is no longer a list, so need to cast here
 del args[0] #args.pop(0) #remove THIS file
 args = [x.replace("--","-") for x in args]
 
+print(f"version {__version__}")
+
 cfg = Config()
+
+check_version(cfg)
 
 if "-help" in args:
     #do NOTHING else except print the help
@@ -638,6 +691,7 @@ print(f"Evaluating with datevshot = {cfg.datevshot}",flush=True)
 ########################################################################
 # worker functions
 ########################################################################
+
 
 def safe_cd(path):
     """
@@ -2179,10 +2233,17 @@ def update_only(cfg):
     lock = FileLock(Lock_mutex_fn)  # we are in the top directory (not sciXXXX)
     with lock:
         if cfg.update_local_repo:
-            print("(Only) Updating local repo ...")
+            print("(Only) Updating local repo ... (this may take 1-2 minutes).")
             shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
                             os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
             cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+
+            # if cfg.code_fn_to_copy is not None:
+            #     if cfg.cwd_orig is not None:
+            #         shutil.copy2(cfg.code_fn_to_copy,cfg.cwd_orig)
+            #     else:
+            #         shutil.copy2(cfg.code_fn_to_copy, os.getcwd())
+
 
 
 def set_fitradecsp(cfg):
@@ -2594,10 +2655,16 @@ def initial_setup(cfg):
             lock = FileLock(Lock_mutex_fn) #we are in the top directory (not sciXXXX)
             with lock:
                 if cfg.update_local_repo:
-                    print("Updating local repo ...")
+                    print("Updating local repo ... (this may take 1-2 minutes)")
                     shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
                                     os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
                     cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+
+                    # if cfg.code_fn_to_copy is not None:
+                    #     if cfg.cwd_orig is not None:
+                    #         shutil.copy2(cfg.code_fn_to_copy, cfg.cwd_orig)
+                    #     else:
+                    #         shutil.copy2(cfg.code_fn_to_copy, os.getcwd())
 
                 if os.path.exists(LocalScriptRepo): #we want to use it
                     print("Using local repo ...")
@@ -2620,7 +2687,7 @@ def initial_setup(cfg):
             with lock:
 
                 if cfg.update_local_repo:
-                    print("Updating local repo ...")
+                    print("Updating local repo ... (this may take 1-2 minutes)")
                     shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
                                     os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
                     cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
