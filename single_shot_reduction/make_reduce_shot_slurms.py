@@ -10,14 +10,16 @@ User should edit near the top to set the email address for notifications
 import numpy as np
 from astropy.table import Table
 
-NOTIFICATION_EMAIL = "dustin@astro.as.utexas.edu"
+NOTIFICATION_EMAIL = "XXX@astro.as.utexas.edu"
+SU_ACCOUNT = "AST25019"
+BASE_FILENAME = "parallel"
+
+QUEUE = "normal"
 MAX_NODES = 5 #this is a TACC request to limit
 MAX_TASKS_PER_NODE = 11 #this is a memory issue
-QUEUE = "normal"
 NOMINAL_TIME_REQUEST = "4:00:00"
-SU_ACCOUNT = "AST25019"
 BASE_CMD = "python reduce_shot.py --cal_flux 'sdss' --cal_astro 'gaia' --clean 1"
-BASE_FILENAME = "parallel"
+
 
 #read the table
 T = Table.read("virus_shot_summary_table.tab",format="ascii")
