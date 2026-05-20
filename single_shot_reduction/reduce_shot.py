@@ -56,6 +56,7 @@ from elixer import spectrum_utilities as SU
 # noinspection PyUnresolvedReferences
 from elixer import utilities as Utils
 
+from PIL import Image, ImageDraw, ImageFont
 
 #just want the path for hetdex_api (see later)
 import importlib.util
@@ -2856,6 +2857,63 @@ def initial_setup(cfg):
 
 
 
+def add_text_to_image(cfg, image_path: str, text: str):
+    """
+    Opens a PNG image, adds text to the upper right corner, and saves it.
+
+    Args:
+        image_path: Path to the input PNG file
+        text: Text to add to the image
+        output_path: Path to save the output (defaults to overwriting the input)
+    """
+
+
+    try:
+        # Open the image
+        img = Image.open(image_path).convert("RGBA")
+        draw = ImageDraw.Draw(img)
+
+        # Try to use a truetype font, fall back to default if not available
+        font_size = max(20, img.width // 30)  # Scale font size to image width
+        try:
+            #this is the default path on linux systems
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
+        except IOError:
+            #this will not work, does not give you a TrueType font needed to insert into png
+            #font = ImageFont.load_default()
+            print(f"[{cfg.datevshot}] Exception! in add_text_to_image(). Cannot find fonts.", traceback.format_exc())
+            return
+
+        # Measure text size
+        bbox = draw.textbbox((0, 0), text, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+
+        # Position: upper right corner with a small margin
+        margin = 10
+        x = img.width - text_width - margin
+        y = margin
+
+        # Draw a semi-transparent background rectangle for readability
+        padding = 5
+        bg_bbox = (x - padding, y - padding, x + text_width + padding, y + text_height + padding)
+        overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        overlay_draw = ImageDraw.Draw(overlay)
+        overlay_draw.rectangle(bg_bbox, fill=(0, 0, 0, 140))
+        img = Image.alpha_composite(img, overlay)
+
+        # Draw the text in white
+        draw = ImageDraw.Draw(img)
+        draw.text((x, y), text, font=font, fill=(255, 255, 255, 255))
+
+
+        # Save — convert back to RGBA-safe PNG
+        img.save(image_path, format="PNG")
+        print(f"[{cfg.datevshot}] Updated image: {image_path}")
+    except:
+        print(f"[{cfg.datevshot}] Exception! in add_text_to_image()", traceback.format_exc())
+
+
 def get_avg_sky(cfg):
     """
     can run AFTER run1s is done
@@ -2865,14 +2923,24 @@ def get_avg_sky(cfg):
     values > 1000.0 are a problem
     values >= 9999.0 are fatal
 
+
+    note: the d*amp.dat file under alldet/output is copied from /tmp (amp.out) during rfft run,
+             in the overall step4 ... so, fairly late, AFTER vdrp and not long before the h5 is created
+             *** you cannot stop at --multifits_only and get this
     :param cfg:
     :return:
     """
     avg_sky = None
     try:
         #not sure where I want to call this, so lets use the top level as a base path
+        #filename like:  d20250101s024exp01amp.dat
         pattern = os.path.join(cfg.cwd_orig,f"sci{cfg.datevshot}/alldet/output/d*amp.dat")
         fns = glob.glob(pattern)
+
+        #filename like: d20250101s024exp011de.png
+        pattern = os.path.join(cfg.cwd_orig, f"sci{cfg.datevshot}/d{cfg.datevshot[0:8]}*/d*.png")
+        img_fns = glob.glob(pattern)
+        img_exps = [os.path.basename(x).split("exp")[1][:2] for x in img_fns]
 
         if len(fns) == 0:
             print(f"[{cfg.datevshot}] Can not collect avg_sky. Could not locate: {pattern}")
@@ -2882,7 +2950,17 @@ def get_avg_sky(cfg):
         avg = []
 
         for fn in fns:
-            avg.append(np.nanmean(np.loadtxt(fn,dtype=float,usecols=8,skiprows=1,unpack=True)))
+            x_avg = np.nanmean(np.loadtxt(fn,dtype=float,usecols=8,skiprows=1,unpack=True))
+            if x_avg is not None:
+                avg.append(x_avg)
+                try:
+                    #which exposure:
+                    exp = os.path.basename(fn).split('exp')[1][:2] #should be a 2 digit string
+                    ix = img_exps.index(exp)
+                    img_path = img_fns[ix]
+                    add_text_to_image(cfg, img_path, f"sky {x_avg:0.1f}")
+                except:
+                    print(f"[{cfg.datevshot}] Exception! in get_avg_sky(), trying to add sky value to png", traceback.format_exc())
 
         if len(avg) > 1:
             avg_sky = np.nanmean(avg)
@@ -5941,6 +6019,9 @@ update_vdrp_config_limits(cfg)
 # after the initial setup, move stdout and stderr to a log file
 #########
 
+# print(f"**** DEBUG  collapsed image test ****")
+# avg_sky = get_avg_sky(cfg)
+# Quit(cfg,0,"Done Test")
 
 #
 # print(f"TESTING match_pngs... ")
