@@ -20,7 +20,9 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 """
 
 # start limited tracking version ... starting from 20260513
-__version__ = '1.0.0'
+# add check of *amp.dat avg_sky and plot on collapsed image
+
+__version__ = '1.0.1'
 
 import numpy as np
 import sys

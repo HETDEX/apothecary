@@ -21,8 +21,9 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 #       added in Calibration.Throughput.throughput
 # 0.1.5 repace --exclude_ccd_images with --minimum as applies to more than just the VIRUS CCD images
 #       include all additional original hdf5 info
+# 0.1.6 add "avg_sky" to Shot table (based on *amp.dat files; matching to collapsed images)
 
-__version__ = '0.1.5'
+__version__ = '0.1.6'
 
 
 import numpy as np
