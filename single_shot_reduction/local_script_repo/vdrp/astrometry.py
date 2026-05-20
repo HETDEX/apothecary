@@ -345,7 +345,7 @@ def mk_post_stamp_matrix(wdir, prefixes, cofes_vis_vmin, cofes_vis_vmax):
         Maximum value (= black) for matrix overview plot.
     """
     # create the IFU postage stamp matrix image
-    logging.info("Creating the IFU postage stamp matrix images ...")
+    logging.info(f"Creating the IFU postage stamp matrix images {cofes_vis_vmin} / {cofes_vis_vmax}...")
     exposures = np.unique([p[:15] for p in prefixes])
 
     with path.Path(wdir):

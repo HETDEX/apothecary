@@ -344,8 +344,12 @@ def mk_post_stamp_matrix(wdir, prefixes, cofes_vis_vmin, cofes_vis_vmax):
         Maximum value (= black) for matrix overview plot.
     """
     # create the IFU postage stamp matrix image
-    logging.info("Creating the IFU postage stamp matrix images ...")
+    #logging.info("Creating the IFU postage stamp matrix images ...")
+    logging.info(f"Creating the IFU postage stamp matrix images {cofes_vis_vmin} / {cofes_vis_vmax}...")
     exposures = np.unique([p[:15] for p in prefixes])
+
+
+#todo. if cofes_vis_vmax is -9999, load with zscale instead??(or that may be in cofes_4x4_plots()
 
     with path.Path(wdir):
         for exp in exposures:

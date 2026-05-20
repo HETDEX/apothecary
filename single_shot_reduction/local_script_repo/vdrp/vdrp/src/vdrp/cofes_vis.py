@@ -6,8 +6,35 @@ import numpy as np
 from glob import glob
 import argparse
 from collections import Counter
+from astropy.visualization import ZScaleInterval
 cmap = plt.get_cmap('Greys')
 
+
+def get_vrange(vals, scale=1.0):
+    vmin = None
+    vmax = None
+    if scale == 0:
+        scale = 1.0
+    try:
+        if len(vals) < 2:
+            return None, None
+    except:
+        return None, None
+
+    try:
+        zscale = ZScaleInterval(contrast=0.25, krej=2.5)  # nsamples=len(vals)
+        vmin, vmax = zscale.get_limits(values=vals.astype(np.float32))
+
+        if vmax - vmin > 100.0: #try again
+            zscale = ZScaleInterval(contrast=0.25, krej=3.0, max_reject=0.8)  # nsamples=len(vals)
+            vmin, vmax = zscale.get_limits(values=vals.astype(np.float32))
+
+        vmin = vmin / scale
+        vmax = vmax / scale
+    except:
+        pass
+
+    return vmin, vmax
 
 def cofes_plots(ifunums, filename_array, outfile_name, vmin=-15,
                 vmax=25, logging=None):
@@ -31,6 +58,36 @@ def cofes_plots(ifunums, filename_array, outfile_name, vmin=-15,
     rows = 10
     cols = 10
 
+
+    #double loop, just to get vmin, vmax extremes
+    # if vmin == vmax == 0:
+    #     a_vmin = []
+    #     a_vmax = []
+    #     for i in np.arange(10):
+    #         for j in np.arange(1, 11):
+    #             ifuname = '%02d%01d' % (j, i)
+    #             index = [ind for ind,  v in enumerate(ifunums) if ifuname == v]
+    #             if len(index):
+    #                 f = filename_array[index[0]]
+    #                 try:
+    #                     data = fits.open(f)[0].data
+    #                     _vmin,_vmax = get_vrange(data)
+    #                     a_vmin.append(_vmin)
+    #                     a_vmax.append(_vmax)
+    #                 except:
+    #                     pass
+    #     _vmin = np.nanmin(a_vmin)
+    #     _vmax = np.nanmax(a_vmax)
+    #
+    #     if logging is not None:
+    #         logging.info(f"cofes_plots: get_vrange updated vmin/vmax = {_vmin} / {_vmax} ")
+    # else:
+    #     _vmin = vmin
+    #     _vmax = vmax
+    #     if logging is not None:
+    #         logging.info(f"cofes_plots: using default vmin/vmax = {_vmin} / {_vmax} ")
+    #
+
     fig = plt.figure(figsize=(8, 8))
     # for i, f in zip(ifunums, filename_array):
     for i in np.arange(10):
@@ -45,7 +102,26 @@ def cofes_plots(ifunums, filename_array, outfile_name, vmin=-15,
                 ax.set_yticks([])
                 try:
                     data = fits.open(f)[0].data
-                    ax.imshow(data, vmin=vmin, vmax=vmax,
+
+                    #!!! DD HERE, do zScale individually
+                    if vmin == vmax == 0:
+                        _vmin,_vmax = get_vrange(data)
+                        if _vmin is not None and _vmax is not None:
+                            msg = f"cofes_plots: get_vrange updated vmin/vmax = {_vmin} / {_vmax} "
+                            if logging is not None:
+                                logging.info(msg)
+                        else:
+                            msg = f"cofes_plots: using default vmin/vmax = {vmin} / {vmax} "
+                            if logging is not None:
+                                logging.info(msg)
+
+                            _vmin = vmin
+                            _vmax = vmax
+                    else:
+                        _vmin = vmin
+                        _vmax = vmax
+
+                    ax.imshow(data, vmin=_vmin, vmax=_vmax,
                               interpolation='nearest', origin='lower',
                               cmap=cmap)
 
