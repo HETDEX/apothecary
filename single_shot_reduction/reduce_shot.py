@@ -132,6 +132,8 @@ hetdex_api_path = os.path.dirname(importlib.util.find_spec("hetdex_api").origin)
 #h5tools is actually a sibling
 hetdex_api_path = "/".join(hetdex_api_path.split("/")[0:-1])
 
+MAX_SAFE_AVG_SKY = 1000.0 #avg sky "background" from *amp.out (d*amp.dat) above this value is a problem
+FAIL_AVG_SKY = 9999.0 #avg sky "background" from *amp.out (d*amp.dat) above this value is a full fail
 
 #since this is done outside (that is, the SLURM sets this up) it is not useful here, in this code, to know this
 # A way to deal with it here, would be to change the mutex to a sempahore and have a resource count
@@ -1425,8 +1427,15 @@ def Quit(cfg,rc,msg=None,write_status=True):
                 with open("status.fail","w") as f:
                     f.write(f"[{cfg.datevshot}] ({rc}) {msg}\n")
             else:
-                with open("status.pass","w") as f:
-                    f.write(f"[{cfg.datevshot}] ({rc}) {msg}\n")
+                if cfg.avg_sky is not None and cfg.avg_sky > MAX_SAFE_AVG_SKY:
+                    #note: if avg_sky > FAIL_AVG_SKY, then the failure condition would have already tripped
+                    #and we would be in the case above (rc < 0)
+                    with open("status.warn", "w") as f:
+                        f.write(f"[{cfg.datevshot}] ({rc}) {msg}\n")
+                        f.write(f"[{cfg.datevshot}] warn. Avg Sky is large: {cfg.avg_sky} \n")
+                else:
+                    with open("status.pass","w") as f:
+                        f.write(f"[{cfg.datevshot}] ({rc}) {msg}\n")
     except:
         pass
 
@@ -4016,8 +4025,8 @@ def run_rfft(cfg):
     avg_sky = get_avg_sky(cfg)
     if avg_sky is not None:
         cfg.avg_sky = avg_sky
-        if avg_sky > 1000.0:
-            if avg_sky >= 9999.0:
+        if avg_sky > MAX_SAFE_AVG_SKY:
+            if avg_sky >= FAIL_AVG_SKY:
                 print(f"[{cfg.datevshot}] Average Sky is catastrophically large and/or unable to be fit: {avg_sky:0.1f}.")
                 rc = -1  # fatal
             else:
