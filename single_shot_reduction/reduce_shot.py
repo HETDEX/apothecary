@@ -5859,7 +5859,7 @@ def prep_elixer(cfg):
                 print(f"[{cfg.datevshot}] Could not get SLURM allocation account.")
             elixer_base_cmd = f" -f --slurm 0 --nodes 1 --log info --shot_h5 {shot_h5} --diagnose {diagnose_tab} " \
                               f" --png --error 3.0 --neighborhood 10.0 --ntasks_per_node {tasks_per_node} " \
-                              f" --timex 0.8 --post_merge 2  --merge_name {merge_name}"
+                              f" --timex 0.8 --post_merge 2  --merge_name {merge_name} --cnn"
                             #reduce time by about 20% ... the neighborhood is faster since only checking THIS shot
             if slurm_alloc is not None:
                 elixer_base_cmd += f" --alloc {slurm_alloc}"
