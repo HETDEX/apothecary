@@ -396,6 +396,9 @@ class Detections(tables.IsDescription):
     obs_total_exptime = tables.Float32Col(dflt=UNSET_FLOAT)  #added 0.9.2
     obs_num_dithers = tables.Int8Col(dflt=0)  #added 0.9.2
 
+    p_cnn = tables.Float32Col(dflt=-1.0)  #added in 0.10.2
+    p_cnn_model = tables.StringCol(itemsize=32,dflt="")
+
 
 class SpectraLines(tables.IsDescription):
     detectid = tables.Int64Col(pos=0)  # unique HETDEX detection ID 1e9+
@@ -1809,7 +1812,17 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 # go over some columns individual since want to change some types
                 # directy copy columns:
                 for col in keep_cols:
-                    new_row[col] = row[col]
+                    try:
+                        new_row[col] = row[col]
+                    except:
+                        #depending on the version, some columns might not exist
+                        try:
+                            if col == "p_cnn":
+                                new_row[col] = -1.0
+                            elif col == "p_cnn_model":
+                                new_row[col] = ""
+                        except:
+                            pass
                 new_row.append()
 
             fileh.root.Detections.flush()
@@ -1963,8 +1976,8 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
                 new_row['aperture_area_pix'] = row['aperture_area_pix'] #.astype(np.float16) #could be very many pix
                 new_row['sky_area_pix'] = row['sky_area_pix'] #.astype(np.float16) #could be very many pix
-                new_row['eqw_rest_lya'] = row['eqw_rest_lya'].astype(StdFloat)
-                new_row['eqw_rest_lya_err'] = row['eqw_rest_lya_err'].astype(StdFloat)
+                new_row['eqw_rest_lya'] = np.clip(row['eqw_rest_lya'],a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
+                new_row['eqw_rest_lya_err'] = np.clip(row['eqw_rest_lya_err'],a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
                 new_row['plae'] = row['plae'].astype(StdFloat)
                 new_row['plae_max'] = row['plae_max'].astype(StdFloat)
                 new_row['plae_min'] = row['plae_min'].astype(StdFloat)
@@ -2115,8 +2128,8 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
                 new_row['mag'] = row['mag'].astype(HalfFloat)
                 new_row['mag_err'] = row['mag_err'].astype(HalfFloat)
-                new_row['eqw_rest_lya'] = row['eqw_rest_lya'].astype(StdFloat)
-                new_row['eqw_rest_lya_err'] = row['eqw_rest_lya_err'].astype(StdFloat)
+                new_row['eqw_rest_lya'] = np.clip(row['eqw_rest_lya'], a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
+                new_row['eqw_rest_lya_err'] = np.clip(row['eqw_rest_lya_err'], a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
                 new_row['plae'] = row['plae'].astype(StdFloat)
                 new_row['plae_max'] = row['plae_max'].astype(StdFloat)
                 new_row['plae_min'] = row['plae_min'].astype(StdFloat)
