@@ -1870,7 +1870,10 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             #need to check for maximum size of flux or flux_err
             load_table = True
             try:
-                _ = len(elixer_h5.root.CalibratedSpectra)
+                lx = len(elixer_h5.root.CalibratedSpectra)
+                if lx == 0:
+                    load_table = False
+                    print(f"[{datevshot}] ERROR!!! CalibratedSpectra has zero length in ELiXer HDF5 file!!!")
             except:
                 print(f"[{datevshot}] ERROR!!! CalibratedSpectra not found in ELiXer HDF5 file!!!")
                 load_table = False
