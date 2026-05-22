@@ -280,6 +280,7 @@ class Config:
     avg_sky = None #average sky after run_run1s values > 1000.0 are a problem
                    #note: though related too, this is NOT exactly the same as the h5 AmpStats table "avg_orig" column
     code_fn_to_copy = None
+    set_warn = False
 
 
 
@@ -1325,6 +1326,8 @@ def write_summary(cfg):
         os.chdir(cfg.cwd)
         h5 = tables.open_file(f"{cfg.datevshot}.h5",mode="r")
 
+        cfg.set_warn = False
+
         with open("summary.txt","w") as f:
             f.write(f"shot:\t\t{cfg.datevshot}\n")
             f.write(f"field:\t\t{h5.root.Shot.read(field='field')[0]}\n")
@@ -1336,18 +1339,47 @@ def write_summary(cfg):
                 max_ditnorm = np.max(dit_norms) / np.min(dit_norms)
                 f.write(f"dither norm:\t{max_ditnorm:0.4f}\n")
             except:
-                pass
+                cfg.set_warn = True
 
-            waves = h5.root.Calibration.Throughput.throughput.read(field="wavelength")
-            tp = h5.root.Calibration.Throughput.throughput.read(field="throughput")
-            tp_at_w = np.interp(4600.0, waves, tp)
-            f.write(f"response_4540:\t{h5.root.Shot.read(field='response_4540')[0]:0.4f}\n")
-            f.write(f"interp  @4600:\t{tp_at_w:0.4f}\n")
-            f.write(f"fwhm_virus:\t{h5.root.Shot.read(field='fwhm_virus')[0]:0.4f}\n")
+            try:
+                waves = h5.root.Calibration.Throughput.throughput.read(field="wavelength")
+                tp = h5.root.Calibration.Throughput.throughput.read(field="throughput")
+                tp_at_w = np.interp(4600.0, waves, tp)
+            except:
+                tp_at_w = -999.9
+                cfg.set_warn = True
 
-            dx1 = h5.root.Shot.read(field="xditherpos")[0]
-            dy1 = h5.root.Shot.read(field="yditherpos")[0]
-            f.write(f"Dithers: \t({dx1[0]:0.4f},{dy1[0]:0.4f}) ({dx1[1]:0.4f},{dy1[1]:0.4f}) ({dx1[2]:0.4f},{dy1[2]:0.4f})\n")
+            try:
+                f.write(f"response_4540:\t{h5.root.Shot.read(field='response_4540')[0]:0.4f}\n")
+            except:
+                f.write(f"response_4540:\t???\n")
+                cfg.set_warn = True
+
+            try:
+                f.write(f"interp  @4600:\t{tp_at_w:0.4f}\n")
+            except:
+                f.write(f"interp  @4600:\t???\n")
+                cfg.set_warn = True
+
+            try:
+                f.write(f"fwhm_virus:\t{h5.root.Shot.read(field='fwhm_virus')[0]:0.4f}\n")
+            except:
+                f.write(f"fwhm_virus:\t???\n")
+                cfg.set_warn = True
+
+            try:
+                dx1 = h5.root.Shot.read(field="xditherpos")[0]
+                dy1 = h5.root.Shot.read(field="yditherpos")[0]
+                f.write(f"Dithers: \t({dx1[0]:0.4f},{dy1[0]:0.4f}) ({dx1[1]:0.4f},{dy1[1]:0.4f}) ({dx1[2]:0.4f},{dy1[2]:0.4f})\n")
+            except:
+                f.write(f"Dithers: \t???\n")
+                cfg.set_warn = True
+
+            if cfg.avg_sky is not None:
+                f.write(f"Avg sky: \t{cfg.avg_sky}\n")
+            else:
+                f.write(f"Avg sky: \t???\n")
+                cfg.set_warn = True
 
             try:
                 total = 0
@@ -1358,7 +1390,7 @@ def write_summary(cfg):
                 f.write(f"Line Dets:\t{total}\n")
 
             except:
-                pass
+                f.write(f"Line Dets:\t???\n")
 
             try:
                 total = 0
@@ -1369,7 +1401,7 @@ def write_summary(cfg):
                 f.write(f"Cont Dets:\t{total}\n")
 
             except:
-                pass
+                f.write(f"Cont Dets:\t???\n")
 
     except:
         print(f"[{cfg.datevshot}] Exception! trying to write summary file", traceback.format_exc())
@@ -1427,7 +1459,7 @@ def Quit(cfg,rc,msg=None,write_status=True):
                 with open("status.fail","w") as f:
                     f.write(f"[{cfg.datevshot}] ({rc}) {msg}\n")
             else:
-                if cfg.avg_sky is not None and cfg.avg_sky > MAX_SAFE_AVG_SKY:
+                if cfg.set_warn or (cfg.avg_sky is not None and cfg.avg_sky > MAX_SAFE_AVG_SKY):
                     #note: if avg_sky > FAIL_AVG_SKY, then the failure condition would have already tripped
                     #and we would be in the case above (rc < 0)
                     with open("status.warn", "w") as f:

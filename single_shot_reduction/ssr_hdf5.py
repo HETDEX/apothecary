@@ -1151,7 +1151,6 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
                 # TP_All (e.g. /sci<datevshot>/detect/<datevshot>/res/tp.all)
                 try:
-
                     #need to load the file first
 
                     tp_all_path = os.path.join(os.path.dirname(shot_h5_path),f"detect/{datevshot}/res/tp.all")
@@ -1159,6 +1158,17 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
                         refid, c2,c3 = np.loadtxt(tp_all_path,usecols=[0,2,3],unpack=True,dtype=int)
                         tpfloat, c4 = np.loadtxt(tp_all_path, usecols=[1,4], unpack=True, dtype=float)
+
+                        #these *could* be only single values
+                        try:
+                            _ = len(refid)
+                        except:
+                            refid = [refid]
+                            c2 = [c2]
+                            c3 = [c3]
+                            tpfloat = [tpfloat]
+                            c4 = [c4]
+
 
                         fileh.create_table(fileh.root.Calibration.Throughput, "TP_All", TP_All, 'TP All')
                         for i in range(len(refid)):
@@ -1858,66 +1868,73 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             #############################################################################
 
             #need to check for maximum size of flux or flux_err
+            load_table = True
+            try:
+                _ = len(elixer_h5.root.CalibratedSpectra)
+            except:
+                print(f"[{datevshot}] ERROR!!! CalibratedSpectra not found in ELiXer HDF5 file!!!")
+                load_table = False
 
-            if StdFloatCol == FullFloatCol:
-                use32 = True
-            else:
-                use32 = False
-                #mx = np.abs(elixer_h5.root.CalibratedSpectra.read(field="flux")).max()
-                mx = np.max(elixer_h5.root.CalibratedSpectra.read(field="flux"))
-                if mx > threshold_16:
+            if load_table:
+                if StdFloatCol == FullFloatCol:
                     use32 = True
                 else:
-                    mx = np.max(elixer_h5.root.CalibratedSpectra.read(field="flux_err")) #can only be positive
+                    use32 = False
+                    #mx = np.abs(elixer_h5.root.CalibratedSpectra.read(field="flux")).max()
+                    mx = np.max(elixer_h5.root.CalibratedSpectra.read(field="flux"))
                     if mx > threshold_16:
                         use32 = True
+                    else:
+                        mx = np.max(elixer_h5.root.CalibratedSpectra.read(field="flux_err")) #can only be positive
+                        if mx > threshold_16:
+                            use32 = True
 
-            if use32:
-                print(f"[{datevshot}] Using float32 for CalibratedSpectra",flush=True)
-                fileh.create_table(fileh.root, 'CalibratedSpectra', CalibratedSpectra32,
-                               'PSF Weighted Spectra Table')
-            else:
-                print(f"[{datevshot}] Using float16 for CalibratedSpectra",flush=True)
-                fileh.create_table(fileh.root, 'CalibratedSpectra', CalibratedSpectra16,
-                               'PSF Weighted Spectra Table')
-
-            for row in elixer_h5.root.CalibratedSpectra.read():
-                new_row = fileh.root.CalibratedSpectra.row
-
-                new_row['detectid'] = row['detectid']
-                # skip wavelength entirely and set the float32 to float16
                 if use32:
-                    new_row['flux'] = row['flux'].astype(np.float32)
-                    new_row['flux_err'] = row['flux_err'].astype(np.float32)
+                    print(f"[{datevshot}] Using float32 for CalibratedSpectra",flush=True)
+                    fileh.create_table(fileh.root, 'CalibratedSpectra', CalibratedSpectra32,
+                                   'PSF Weighted Spectra Table')
                 else:
-                    # could have stupidly negative values (always errorneous and since already checked for max okay, apply a clip to be safe)
-                    #new_row['flux'] = row['flux'].astype(StdFloat)
-                    new_row['flux'] = np.clip(row['flux'], a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
-                    new_row['flux_err'] = row['flux_err'].astype(StdFloat)
+                    print(f"[{datevshot}] Using float16 for CalibratedSpectra",flush=True)
+                    fileh.create_table(fileh.root, 'CalibratedSpectra', CalibratedSpectra16,
+                                   'PSF Weighted Spectra Table')
 
-                new_row['dust_corr'] = row['dust_corr'].astype(StdFloat)
+                for row in elixer_h5.root.CalibratedSpectra.read():
+                    new_row = fileh.root.CalibratedSpectra.row
 
-                #aperture needs help too (not -10000)
-                if row['aperture_radius'] < 0:
-                    new_row['aperture_radius'] = -1.0
-                else:
-                    new_row['aperture_radius'] = row['aperture_radius'].astype(StdFloat)
-                if row['sky_background'] < 0:
-                    new_row['sky_background'] = -1
-                else:
-                    new_row['sky_background'] = 1 if row['sky_background'] > 0 else 0 #really a boolean
-                new_row['num_fibers'] = row['num_fibers'].astype(np.int16)
+                    new_row['detectid'] = row['detectid']
+                    # skip wavelength entirely and set the float32 to float16
+                    if use32:
+                        new_row['flux'] = row['flux'].astype(np.float32)
+                        new_row['flux_err'] = row['flux_err'].astype(np.float32)
+                    else:
+                        # could have stupidly negative values (always errorneous and since already checked for max okay, apply a clip to be safe)
+                        #new_row['flux'] = row['flux'].astype(StdFloat)
+                        new_row['flux'] = np.clip(row['flux'], a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
+                        new_row['flux_err'] = row['flux_err'].astype(StdFloat)
 
-                new_row.append()
+                    new_row['dust_corr'] = row['dust_corr'].astype(StdFloat)
 
-            fileh.root.CalibratedSpectra.flush()
-            #set the index
-            try:
-                fileh.root.CalibratedSpectra.cols.detectid.create_csindex()
-            except:
-                log.debug(f"[{datevshot}] Index fail on CalibratedSpectra table", exc_info=True)
+                    #aperture needs help too (not -10000)
+                    if row['aperture_radius'] < 0:
+                        new_row['aperture_radius'] = -1.0
+                    else:
+                        new_row['aperture_radius'] = row['aperture_radius'].astype(StdFloat)
+                    if row['sky_background'] < 0:
+                        new_row['sky_background'] = -1
+                    else:
+                        new_row['sky_background'] = 1 if row['sky_background'] > 0 else 0 #really a boolean
+                    new_row['num_fibers'] = row['num_fibers'].astype(np.int16)
 
-            fileh.root.CalibratedSpectra.flush()
+                    new_row.append()
+
+                fileh.root.CalibratedSpectra.flush()
+                #set the index
+                try:
+                    fileh.root.CalibratedSpectra.cols.detectid.create_csindex()
+                except:
+                    log.debug(f"[{datevshot}] Index fail on CalibratedSpectra table", exc_info=True)
+
+                fileh.root.CalibratedSpectra.flush()
 
 
             ###############################################
