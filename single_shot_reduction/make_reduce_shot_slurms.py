@@ -9,16 +9,24 @@ User should edit near the top to set the email address for notifications
 
 import numpy as np
 from astropy.table import Table
+import shutil
 
-NOTIFICATION_EMAIL = "XXX@astro.as.utexas.edu"
+NOTIFICATION_EMAIL = None # "XXX@astro.as.utexas.edu"
 SU_ACCOUNT = "AST25019"
 BASE_FILENAME = "parallel"
 
 QUEUE = "normal"
 MAX_NODES = 5 #this is a TACC request to limit
 MAX_TASKS_PER_NODE = 11 #this is a memory issue
-NOMINAL_TIME_REQUEST = "4:00:00"
-BASE_CMD = "python reduce_shot.py --cal_flux 'sdss' --cal_astro 'gaia' --clean 1"
+NOMINAL_TIME_REQUEST = "3:00:00"
+
+#if you have defined a common shell wrapper, use it, otherwise use the direct python call to the python script
+if shutil.which("reduce_shot"):
+    BASE_CMD = "reduce_shot "
+else:
+    BASE_CMD = "python reduce_shot.py "
+#note: these are the defaults
+#--cal_flux 'sdss' --cal_astro 'gaia'  --clean 1
 
 
 #read the table
@@ -57,11 +65,11 @@ def make_slurm(basename, max_nodes, max_tpn, tasks):
 #SBATCH -o HETSSR.o%j            # Name of stdout output file (%j expands to jobid)
 #SBATCH -t {NOMINAL_TIME_REQUEST}               # Run time (hh:mm:ss)
 #SBATCH -A {SU_ACCOUNT}
-#SBATCH --mail-user {NOTIFICATION_EMAIL}
-#SBATCH --mail-type all
-
-
-module load launcher
+"""
+    if NOTIFICATION_EMAIL is not None:
+        slurmstr += f"#SBATCH --mail-user {NOTIFICATION_EMAIL} \n"
+        slurmstr += "#SBATCH --mail-type all \n"
+    slurmstr += f"""module load launcher
 export LAUNCHER_PLUGIN_DIR=$TACC_LAUNCHER_DIR/plugins
 export LAUNCHER_RMI=SLURM
 export LAUNCHER_WORKDIR=$(pwd)

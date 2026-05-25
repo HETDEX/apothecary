@@ -738,7 +738,7 @@ def run_queue_elixer(cfg):
                 if safe_cd(slurm_path):
 
                     # do not run if already "done"
-                    if os.path.exists("elixer.done"):
+                    if os.path.exists("elixer.done") or os.path.exists(f"elixer_{cfg.datevshot}_cat.h5"):
                         print(f"[{cfg.datevshot}] ELiXer already done.")
 
                     else: #if os.path.exists("elixer.slurm"):
