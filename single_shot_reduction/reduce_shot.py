@@ -1455,6 +1455,10 @@ def Quit(cfg,rc,msg=None,write_status=True):
 
     try:
         if write_status and safe_cd(cfg.cwd):
+
+            #remove any status file already there
+            system_command(cfg,"rm status.????")
+
             if rc < 0:
                 with open("status.fail","w") as f:
                     f.write(f"[{cfg.datevshot}] ({rc}) {msg}\n")
