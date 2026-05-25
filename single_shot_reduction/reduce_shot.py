@@ -736,9 +736,13 @@ def run_queue_elixer(cfg):
             for dettype in ["out","line","cont"]:
                 slurm_path = os.path.join(fn, f"elixer/{dettype}")
                 if safe_cd(slurm_path):
-                    if os.path.exists("elixer.slurm"):
 
-                        if os.path.exists("elixer.run"):
+                    # do not run if already "done"
+                    if os.path.exists("elixer.done"):
+                        print(f"[{cfg.datevshot}] ELiXer already done.")
+
+                    else: #if os.path.exists("elixer.slurm"):
+                        if  os.path.exists("elixer.slurm") and os.path.exists("elixer.run"):
                             #check the paths and fix as needed
                             #e.g. from
                             # --shot_h5 /scratch/03261/polonius/parallel/shela/sci20240929v020/20240929v020.h5
@@ -798,7 +802,9 @@ def run_queue_elixer(cfg):
                         #print(f"Sending cmd to shell: {cmd}")
                         #print(f"TESTING DUMMY: >> {cmd}")
                         system_command(cfg,cmd)
+                    #end else
 
+                    #return to previous directory
                     os.chdir(cwd)
         except:
             print(traceback.format_exc())
