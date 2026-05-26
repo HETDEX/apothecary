@@ -1462,21 +1462,33 @@ def Quit(cfg,rc,msg=None,write_status=True):
     try:
         if write_status and safe_cd(cfg.cwd):
 
-            #remove any status file already there
-            system_command(cfg,"rm status.????")
+            status_str = "status"
+
+            if os.path.exists(f"{status_str}.fail") or \
+               os.path.exists(f"{status_str}.warn") or \
+               os.path.exists(f"{status_str}.pass"):
+                #this is probably a resume
+                if cfg.resume:
+                    status_str = "status.resume"
+                    #we will report the status of just this bit, but leave the original one around
+                    #most likely you have a "warn" that was partly re-run and that re-run bit was fine
+                    #  so you'd get a status.warn and a status.resume.pass
+                else:
+                    #wipe out the old one and replace
+                    system_command(cfg, f"rm {status_str}.*")
 
             if rc < 0:
-                with open("status.fail","w") as f:
+                with open(f"{status_str}.fail","w") as f:
                     f.write(f"[{cfg.datevshot}] ({rc}) {msg}\n")
             else:
                 if cfg.set_warn or (cfg.avg_sky is not None and cfg.avg_sky > MAX_SAFE_AVG_SKY):
                     #note: if avg_sky > FAIL_AVG_SKY, then the failure condition would have already tripped
                     #and we would be in the case above (rc < 0)
-                    with open("status.warn", "w") as f:
+                    with open(f"{status_str}.warn", "w") as f:
                         f.write(f"[{cfg.datevshot}] ({rc}) {msg}\n")
                         f.write(f"[{cfg.datevshot}] warn. Avg Sky is large: {cfg.avg_sky} \n")
                 else:
-                    with open("status.pass","w") as f:
+                    with open(f"{status_str}.pass","w") as f:
                         f.write(f"[{cfg.datevshot}] ({rc}) {msg}\n")
     except:
         pass
