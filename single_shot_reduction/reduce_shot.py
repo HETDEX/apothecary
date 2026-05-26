@@ -3953,8 +3953,8 @@ def run_fluxcalibration(cfg,star_catalog='sdss'):
     tp_upper = max(0.25, 0.25 * np.sqrt(cfg.total_exp_time / 1080.))
     if tp_upper > 0.25:
         print(f"[{cfg.datevshot}] *** Altering max tp from 0.25 to {round(tp_upper,2)} due to long exptime ({cfg.total_exp_time}s)")
-        base_tp_str = "$4>3&&$2>0.01&&$2<0.25"
-        tp_str = f"$4>3&&$2>0.01&&$2<{round(tp_upper,2)}"
+        base_tp_str = "$2<0.25"
+        tp_str = f"$2<{round(tp_upper,2)}"
 
         #we are under detect currently
         system_command(cfg, f"sed -i s#{base_tp_str}#{tp_str}# rgettp")
