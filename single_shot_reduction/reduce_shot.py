@@ -1586,7 +1586,22 @@ def get_exposure_times(cfg):
                         fn0 = fns[sel][0]
                         t1, p1 = Utils.open_file_from_tar(base_tarfn, fn0)
                         fh = fits.open(t1)
-                        exposure_times.append(fh[0].header['EXPTIME'])
+
+                        #there is an apparent issue in populating the EXPTIME for some observations
+                        # perhaps related to the use of the HPF
+                        try:
+                            if abs(fh[0].header['EXPTIME'] - fh[0].header['PEXPTIME']) > 30.0:
+                                use_exp = fh[0].header['PEXPTIME'] - 8.0 #the 8.0 is an approximate correction from Greg Z.
+                                print(f"[{cfg.datevshot}] EXPTIME {fh[0].header['EXPTIME']} vs "
+                                      f"PEXPTIME {fh[0].header['PEXPTIME']} large difference. Using PEXPTIME - 8.0s.")
+                            else:
+                                use_exp = fh[0].header['EXPTIME']
+                        except:
+                            use_exp = fh[0].header['EXPTIME']
+                            print(f"[{cfg.datevshot}] Exception retrieving EXPTIME. Using value: {use_exp}",
+                                  traceback.format_exc())
+
+                        exposure_times.append(use_exp)
                         fh.close()
 
         if len(exposure_times) == 0:
@@ -1716,7 +1731,23 @@ def get_guider_fwhm(cfg):
 
                         t1, p1 = Utils.open_file_from_tar(base_tarfn, fn0)
                         fh = fits.open(t1)
-                        exposure_times.append(fh[0].header['EXPTIME'])
+
+                        #there is an apparent issue in populating the EXPTIME for some observations
+                        # perhaps related to the use of the HPF
+                        try:
+                            if abs(fh[0].header['EXPTIME'] - fh[0].header['PEXPTIME']) > 30.0:
+                                use_exp = fh[0].header['PEXPTIME'] - 8.0  # the 8.0s is an approximate correction from Greg Z.
+                                print(f"[{cfg.datevshot}] EXPTIME {fh[0].header['EXPTIME']} vs "
+                                      f"PEXPTIME {fh[0].header['PEXPTIME']} large difference. Using PEXPTIME - 8.0s.")
+                            else:
+                                use_exp = fh[0].header['EXPTIME']
+                        except:
+                            use_exp = fh[0].header['EXPTIME']
+                            print(f"[{cfg.datevshot}] Exception retrieving EXPTIME. Using value: {use_exp}",
+                                  traceback.format_exc())
+
+                        exposure_times.append(use_exp)
+                        #exposure_times.append(fh[0].header['EXPTIME'])
                         #dither_start_times.append(fh[0].header['UT'])  #note: 'DATE' is when the file was written out
                         #or would DARKTIME be better ??
                         fh.close()
