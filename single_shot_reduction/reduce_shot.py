@@ -3945,6 +3945,21 @@ def run_fluxcalibration(cfg,star_catalog='sdss'):
     system_command(cfg, f"rsetstar {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} {star_catalog}")
 
     print(f"[{cfg.datevshot}] flux calibration using {star_catalog} (rallcal) ... ")
+
+
+    #may need to update the tp upper limit
+    #for HETDEX shots that are long, I think this is still okay, since it just alters the upper limit
+    #and those shots that go longer are usually due to poor seeing, which pushes the other way?
+    tp_upper = max(0.25, 0.25 * np.sqrt(cfg.total_exp_time / 1080.))
+    if tp_upper > 0.25:
+        print(f"[{cfg.datevshot}] *** Altering max tp from 0.25 to {round(tp_upper,2)} due to long exptime ({cfg.total_exp_time}s)")
+        base_tp_str = "$4>3&&$2>0.01&&$2<0.25"
+        tp_str = f"$4>3&&$2>0.01&&$2<{round(tp_upper,2)}"
+
+        #we are under detect currently
+        system_command(cfg, f"sed -i s#{base_tp_str}#{tp_str}# rgettp")
+        system_command(cfg, f"sed -i s#{base_tp_str}#{tp_str}# cal_script/rgettp")
+
     #no longer includes rsetstar
     system_command(cfg,f"rallcal {cfg.datevshot[0:8]} {cfg.datevshot[-3:]}")
 
