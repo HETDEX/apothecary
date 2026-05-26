@@ -3957,8 +3957,8 @@ def run_fluxcalibration(cfg,star_catalog='sdss'):
         tp_str = f"$2<{round(tp_upper,2)}"
 
         #we are under detect currently
-        system_command(cfg, f"sed -i s/{base_tp_str}/{tp_str}/ rgettp")
-        system_command(cfg, f"sed -i s/{base_tp_str}/{tp_str}/ cal_script/rgettp")
+        system_command(cfg, f"sed -i s/\"{base_tp_str}\"/\"{tp_str}\"/ rgettp")
+        system_command(cfg, f"sed -i s/\"{base_tp_str}\"/\"{tp_str}\"/ cal_script/rgettp")
 
     #no longer includes rsetstar
     system_command(cfg,f"rallcal {cfg.datevshot[0:8]} {cfg.datevshot[-3:]}")
