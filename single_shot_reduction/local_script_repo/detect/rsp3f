@@ -32,6 +32,7 @@ rm -rf $7_$6
 mkdir -p $7_$6
 cd $7_$6
 ln -s ${datadir}/detect/*.dithall local.dithall
+ln -s ${datadir}/detect/tp/*sedtp_f.dat local.tp
 ln -s ${datadir}/../reductions reductions
 
 if [ -e ${datadir}detect/$7/norm.dat ]

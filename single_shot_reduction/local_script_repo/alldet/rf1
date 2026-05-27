@@ -31,6 +31,7 @@ cd /tmp/ras$7_$6
 cp ${dir1}/../detect/20*v???/norm.dat norm.dat
 cp ${dir1}/../detect/20*v???/fwhm.out fwhm.use
 ln -s ${dir1}/../detect/20*v???.dithall local.dithall
+ln -s ${dir1}/../detect/tp/*sedtp_f.dat local.tp
 ln -s ${dir1}/../../reductions reductions
 $fitradecsp << eof
 ${ra} ${dec} ${step} ${nstep} ${wv} 3 ${ifit1}

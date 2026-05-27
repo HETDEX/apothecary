@@ -3943,6 +3943,10 @@ def run_fluxcalibration(cfg,star_catalog='sdss'):
         system_command(cfg, f"unlink *.dithall")
     system_command(cfg, f"ln -s {os.path.join(cfg.cwd, 'vdrp/shifts/dithall/*.dithall')} .")
 
+    if os.path.exists("local.tp"):
+        system_command(cfg, f"unlink local.tp")
+    system_command(cfg,f"ln -s tp/{cfg.datevshot}sedtp_f.dat local.tp")
+
     print(f"[{cfg.datevshot}] flux calibration using {star_catalog} (rsetstar) ... ")
     #call rsetstar independently
     system_command(cfg, f"rsetstar {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} {star_catalog}")

@@ -26,6 +26,7 @@ cd ${date}${shot}${exp}
 rm -f out.fits sky.out
 
 ln -s ${resdir}/../../detect/20*v???.dithall local.dithall
+ln -s ${resdir}/../../detect/tp/*sedtp_f.dat local.tp
 ln -s ${resdir}/../../../reductions reductions
 
 #ls /scratch/00115/gebhardt/red1/reductions/${date}/virus/virus0000${shot}/${exp}/virus/m*fits | awk '{print "\""$1"\""}' > list

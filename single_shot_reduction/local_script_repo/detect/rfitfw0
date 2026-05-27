@@ -25,6 +25,7 @@ ifit1=${13}
 mkdir -p /tmp/ras$7_$6
 cd /tmp/ras$7_$6
 ln -s ${datadir}/detect/*.dithall local.dithall
+ln -s ${datadir}/detect/tp/*sedtp_f.dat local.tp
 ln -s ${datadir}/../reductions reductions
 if [ -e ${datadir}detect/$7/norm.dat ]
 then
