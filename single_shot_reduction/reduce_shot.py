@@ -3950,7 +3950,12 @@ def run_fluxcalibration(cfg,star_catalog='sdss'):
     #may need to update the tp upper limit
     #for HETDEX shots that are long, I think this is still okay, since it just alters the upper limit
     #and those shots that go longer are usually due to poor seeing, which pushes the other way?
-    tp_upper = max(0.25, 0.25 * (cfg.total_exp_time / cfg.numexp / 360.))
+
+
+    numexp = max(1,cfg.numexp)
+    mux = max(1.0, (cfg.total_exp_time / numexp / 360.)) #360secs is the nominal default for a HETDEX exposure
+    tp_upper = max(0.25, 0.25 * mux)
+
     if tp_upper > 0.25:
         print(f"[{cfg.datevshot}] *** Altering max tp from 0.25 to {round(tp_upper,2)} due to long exptime ({cfg.total_exp_time}s)")
         base_tp_str = "$2<0.25"
@@ -6191,7 +6196,7 @@ if cfg.total_exp_time is None or cfg.total_exp_time == 0:
     get_exposure_times(cfg)
 
 #update for long exposures
-update_vdrp_config_limits(cfg)
+#update_vdrp_config_limits(cfg)
 
 #########
 # after the initial setup, move stdout and stderr to a log file
