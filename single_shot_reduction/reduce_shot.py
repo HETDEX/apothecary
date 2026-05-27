@@ -3149,6 +3149,8 @@ def update_vdrp_config_limits(cfg):
     update the vmin/vmax stretch on the collapsed imaging and the faint maglimit for calibration stars
     based on the total exposure time
 
+    the concern is that, with long exposures we get too many faint stars and it can get confusing, so we cap the limit
+
     :param cfg:
     :return:
     """
@@ -6197,7 +6199,7 @@ if cfg.total_exp_time is None or cfg.total_exp_time == 0:
     get_exposure_times(cfg)
 
 #update for long exposures
-#update_vdrp_config_limits(cfg)
+update_vdrp_config_limits(cfg)
 
 #########
 # after the initial setup, move stdout and stderr to a log file
