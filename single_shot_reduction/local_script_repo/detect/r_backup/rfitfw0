@@ -1,7 +1,7 @@
 if [[ -f ${SSR_fitradecsp} ]]; then
   fitradecsp=${SSR_fitradecsp}
 else
-  fitradecsp="~gebhardt/bin/fitradecsp"
+  fitradecsp=~gebhardt/bin/fitradecsp
 fi
 
 dir1=$(pwd)
