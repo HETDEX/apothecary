@@ -17,6 +17,7 @@ cp ${resdir}/rf1 .
 cp ${resdir}/../detect/20*v???/norm.dat norm.dat
 cp ${resdir}/../detect/20*v???/fwhm.out fwhm.use
 ln -s ${resdir}/../detect/20*v???.dithall local.dithall
+ln -s ${resdir}/../detect/tp/*sedtp_f.dat local.tp
 ln -s ${resdir}/../reductions reductions
 
 #this is the default set, it can be repalced via sed from the calling
