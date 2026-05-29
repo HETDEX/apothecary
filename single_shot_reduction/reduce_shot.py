@@ -23,7 +23,7 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # add check of *amp.dat avg_sky and plot on collapsed image
 # tp adjustments
 
-__version__ = '1.0.2'
+__version__ = '1.0.3'
 
 import numpy as np
 import sys
