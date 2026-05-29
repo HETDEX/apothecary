@@ -1607,7 +1607,8 @@ def get_exposure_times(cfg):
 
         if len(exposure_times) == 0:
             # could not find any
-            cfg.total_exp_time = None
+            print(f"[{cfg.datevshot}] Total exposure time: fail, could not compute")
+            cfg.total_exp_time = 0.0
         else:
             cfg.total_exp_time = np.nansum(exposure_times)
             print(f"[{cfg.datevshot}] Total exposure time: {cfg.total_exp_time}")
@@ -1756,6 +1757,7 @@ def get_guider_fwhm(cfg):
 
         if len(exposure_fn_times) == 0:
             #could not find any
+            print(f"[{cfg.datevshot}] Total exposure time: fail, could not locate")
             return None
         else:
             cfg.total_exp_time = np.nansum(exposure_times)
@@ -2557,8 +2559,10 @@ def copy_het_raw_file(cfg):
             print(f"[{cfg.datevshot}] Fatal! Cannot find het_raw data.")
             return -1
 
+
         if is_local: #already have it OR it is being copied ... check for the mutex
 
+            cfg.virus_tar_path = virus_path
             #if it is being copied or untarred, the lock will be held by the other process that is doing it
             #so, wait on the lock ... once we have it, the copy or untar should be complete
             copy_lock_file = os.path.join(cfg.local_het_raw_path, f"{cfg.datevshot}.lock")
@@ -2607,6 +2611,7 @@ def copy_het_raw_file(cfg):
                                                 f"{cfg.datevshot[:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar")
                 if os.path.exists(destination_path):  # good copy ... someone else already handled it
                     print(f"[{cfg.datevshot}] Using {destination_path}")
+                    cfg.virus_tar_path = destination_path
                 else: #do the copy or untar
 
                     counter_file = get_het_raw_copy_mutex(cfg, virus_path)
@@ -2634,6 +2639,7 @@ def copy_het_raw_file(cfg):
                         cmd = f"cp {virus_path} {destination_path}"
                         system_command(cfg, cmd)
                         if os.path.exists(destination_path): #good copy
+                            cfg.virus_tar_path = destination_path
                             try:
                                 ix = virus_path.index(cfg.datevshot[:8])
                                 basepath = virus_path[:ix] + f"{cfg.datevshot[:8]}/"
@@ -2675,6 +2681,7 @@ def copy_het_raw_file(cfg):
                             cmd = f"tar -xvf {virus_path} -C {destination_path} {file_to_extract}"
                             system_command(cfg, cmd)
                             if os.path.exists(destination_path): #good copy, continue with the other 2 but don't check them
+                                cfg.virus_tar_path = destination_path
                                 # this MIGHT already exist if another process got it
                                 #  since the gc?.tar (or images.tar) are part of the top level date
                                 #  and not tied directly to datevshot, they might already exist locally even if this
@@ -3159,8 +3166,14 @@ def update_vdrp_config_limits(cfg):
 
         if cfg.total_exp_time is not None and cfg.total_exp_time > 1800.0:
 
+            if cfg.total_exp_time is not None:
+                numexp = max(1, cfg.numexp)
+                multiplier = max(1.0, (cfg.total_exp_time / numexp / 360.))  # 360secs is the nominal default for a HETDEX exposure
+                tp_upper = max(0.25, 0.25 * multiplier)
+            else:
+                multiplier = 1.0
             #figure out what to use: should go roughly as sqr of time, but lets go linear here
-            multiplier = (cfg.total_exp_time / 1080.0) ** 2 #HETDEX 3Dither standard
+            #multiplier = (cfg.total_exp_time / 1080.0) ** 2 #HETDEX 3Dither standard
             magmax = round(22.0 - 2.5 * np.log10(multiplier), 1) #22.0 is mktot_magmax (note 0.0 is always the min)
             #range is 50 so, centered at 5 (+/-25)
             # vmin = round(-20. * multiplier**2) #-20 is cofes_vis_vmin default
@@ -3959,18 +3972,23 @@ def run_fluxcalibration(cfg,star_catalog='sdss'):
     #and those shots that go longer are usually due to poor seeing, which pushes the other way?
 
 
-    numexp = max(1,cfg.numexp)
-    mux = max(1.0, (cfg.total_exp_time / numexp / 360.)) #360secs is the nominal default for a HETDEX exposure
-    tp_upper = max(0.25, 0.25 * mux)
+    if cfg.total_exp_time is not None:
+        numexp = max(1,cfg.numexp)
+        mux = max(1.0, (cfg.total_exp_time / numexp / 360.)) #360secs is the nominal default for a HETDEX exposure
+        tp_upper = max(0.25, 0.25 * mux)
 
-    if tp_upper > 0.25:
-        print(f"[{cfg.datevshot}] *** Altering max tp from 0.25 to {round(tp_upper,2)} due to long exptime ({cfg.total_exp_time}s)")
-        base_tp_str = "$2<0.25"
-        tp_str = f"$2<{round(tp_upper,2)}"
+        if tp_upper > 0.25:
+            print(f"[{cfg.datevshot}] *** Altering max tp from 0.25 to {round(tp_upper,2)} due to long exptime ({cfg.total_exp_time}s)")
+            base_tp_str = "$2<0.25"
+            tp_str = f"$2<{round(tp_upper,2)}"
 
-        #we are under detect currently
-        system_command(cfg, f"sed -i s/\"{base_tp_str}\"/\"{tp_str}\"/ rgettp")
-        system_command(cfg, f"sed -i s/\"{base_tp_str}\"/\"{tp_str}\"/ cal_script/rgettp")
+            #we are under detect currently
+            system_command(cfg, f"sed -i s/\"{base_tp_str}\"/\"{tp_str}\"/ rgettp")
+            system_command(cfg, f"sed -i s/\"{base_tp_str}\"/\"{tp_str}\"/ cal_script/rgettp")
+        else:
+            print(f"[{cfg.datevshot}] Exposure is typical. Will not adjust tp calculation.")
+    else:
+        print(f"[{cfg.datevshot}] *** WARNING!!! exposure time is not known. Cannot adjust tp calculation.")
 
     #no longer includes rsetstar
     system_command(cfg,f"rallcal {cfg.datevshot[0:8]} {cfg.datevshot[-3:]}")
