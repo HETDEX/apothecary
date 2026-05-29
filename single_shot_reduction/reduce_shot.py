@@ -1548,6 +1548,23 @@ def system_command(cfg,cmd):
         os.system(f"{cmd}")
 
 
+
+def linear_exptime_scale(cfg):
+    """
+    based on HETDEX normalization on exposure time, return a linear scaling multiplier
+
+    :param cfg:
+    :return:
+    """
+    mux = 1.0
+    try:
+        if cfg.total_exp_time is not None and cfg.numexp is not None:
+            mux = max(1.0, (cfg.total_exp_time / max(1, cfg.numexp) / 360.))  # 360secs is the nominal default for a HETDEX exposure
+    except:
+        print(f"[{cfg.datevshot}] linear_exptime_scale excetpion. {traceback.format_exc()}")
+
+    return mux
+
 def get_exposure_times(cfg):
     """
 
@@ -3166,12 +3183,15 @@ def update_vdrp_config_limits(cfg):
 
         if cfg.total_exp_time is not None and cfg.total_exp_time > 1800.0:
 
-            if cfg.total_exp_time is not None:
-                numexp = max(1, cfg.numexp)
-                multiplier = max(1.0, (cfg.total_exp_time / numexp / 360.))  # 360secs is the nominal default for a HETDEX exposure
-                tp_upper = max(0.25, 0.25 * multiplier)
-            else:
-                multiplier = 1.0
+            # if cfg.total_exp_time is not None:
+            #     numexp = max(1, cfg.numexp)
+            #     multiplier = max(1.0, (cfg.total_exp_time / numexp / 360.))  # 360secs is the nominal default for a HETDEX exposure
+            #     tp_upper = max(0.25, 0.25 * multiplier)
+            # else:
+            #     multiplier = 1.0
+
+            multiplier = linear_exptime_scale(cfg)
+
             #figure out what to use: should go roughly as sqr of time, but lets go linear here
             #multiplier = (cfg.total_exp_time / 1080.0) ** 2 #HETDEX 3Dither standard
             magmax = round(22.0 - 2.5 * np.log10(multiplier), 1) #22.0 is mktot_magmax (note 0.0 is always the min)
@@ -3973,9 +3993,11 @@ def run_fluxcalibration(cfg,star_catalog='sdss'):
 
 
     if cfg.total_exp_time is not None:
-        numexp = max(1,cfg.numexp)
-        mux = max(1.0, (cfg.total_exp_time / numexp / 360.)) #360secs is the nominal default for a HETDEX exposure
-        tp_upper = max(0.25, 0.25 * mux)
+        # numexp = max(1,cfg.numexp)
+        # mux = max(1.0, (cfg.total_exp_time / numexp / 360.)) #360secs is the nominal default for a HETDEX exposure
+        # tp_upper = max(0.25, 0.25 * mux)
+
+        tp_upper = max(0.25, 0.25 * linear_exptime_scale(cfg))
 
         if tp_upper > 0.25:
             print(f"[{cfg.datevshot}] *** Altering max tp from 0.25 to {round(tp_upper,2)} due to long exptime ({cfg.total_exp_time}s)")
@@ -4490,7 +4512,7 @@ def rgetmax(cfg):
     """
     continuum detections
 
-   the datevsshot/cs/rgetmax script changes directories and runs under /tmp/maxflux<datevshot>
+    the datevsshot/cs/rgetmax script changes directories and runs under /tmp/maxflux<datevshot>
       each exp re-uses the same directory
       then all exps are rolled up
 
@@ -4507,7 +4529,14 @@ def rgetmax(cfg):
         os.chdir(os.path.join(cfg.cwd, "cs"))  # make sure we are in the right directory
         os.makedirs("spec", exist_ok=True)
 
-        print(f"continuum detections (rgetmax) ...")
+        print(f"[{cfg.datevshot}] continuum detections (rgetmax) ...")
+
+        mux = linear_exptime_scale(cfg)
+        if mux > 1.0:
+            print(f"[{cfg.datevshot}] updating for extended exposure time")
+            cutstr = f"cut={20.0 * mux:0.1f}"
+            system_command(cfg, f"sed -i s/cut=20.0/{cutstr}/ rgetmax")
+
 
         if cfg.exp == 0 and cfg.numexp == 3:
             print(f"[{cfg.datevshot}] using standard 3-dither rgetmax")
