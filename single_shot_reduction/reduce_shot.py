@@ -4535,7 +4535,7 @@ def rgetmax(cfg):
         if mux > 1.0:
             print(f"[{cfg.datevshot}] updating for extended exposure time")
             cutstr = f"cut={20.0 * mux:0.1f}"
-            system_command(cfg, f"sed -i s/cut=20.0/{cutstr}/ rgetmax")
+            system_command(cfg, f"sed -i s/cut=20./{cutstr}/ rgetmax")
 
 
         if cfg.exp == 0 and cfg.numexp == 3:
