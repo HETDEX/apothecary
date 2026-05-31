@@ -22,8 +22,9 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # start limited tracking version ... starting from 20260513
 # add check of *amp.dat avg_sky and plot on collapsed image
 # tp adjustments
+# 1.0.4 fix bug with swapping between GAIA, SDSS, PanStarrs on failure ; fix bug with tarfile path
 
-__version__ = '1.0.3'
+__version__ = '1.0.4'
 
 import numpy as np
 import sys
@@ -889,6 +890,16 @@ def hetdex_dither(cfg):
         h5 = tables.open_file(os.path.join(cfg.cwd,f"{cfg.datevshot}.h5"),mode='r')
         x = h5.root.Shot.read(field="xditherpos")[0]
         y = h5.root.Shot.read(field="yditherpos")[0]
+
+        try:
+            logstr = f"[{cfg.datevshot}] dithers: ["
+            for xx,yy in zip(x,y):
+                logstr += f" ({xx},{yy})"
+            logstr += " ]"
+            print(logstr)
+        except:
+            pass
+
         #very roughly ... allowing for some pretty big errors to even try
         if len(x) == 3 and len(y) == 3:
             if x[0] == 0 and y[0] == 0:
@@ -1724,8 +1735,12 @@ def get_guider_fwhm(cfg):
 
         if cfg.virus_tar_path is not None:
             base_tarfn = cfg.virus_tar_path
+            if os.path.isdir(base_tarfn):
+                base_tarfn = os.path.join(cfg.virus_tar_path,f"{cfg.datevshot[0:8]}/virus/{virus_shot}.tar")
         else:
             base_tarfn = os.path.join(path, f"virus/{virus_shot}.tar")
+
+        #print(f"[{cfg.datevshot}] **** DEBUG **** base_tarfn = {base_tarfn}")
 
         if os.path.exists(base_tarfn):
             with tar.open(base_tarfn, "r") as tarfh:
@@ -3766,22 +3781,41 @@ def run_vdrp(cfg):
         #GAIA first
         fail_gaia = do_gaia(cfg)
         if fail_gaia:
+            print(f"[{cfg.datevshot}] VDRP: Astrometry FAIL with GAIA. Attempting SDSS as fallback.")
             fail_sdss = do_sdss(cfg)
+            if fail_sdss:
+                print(f"[{cfg.datevshot}] VDRP: Astrometry fallback FAIL with SDSS.")
+            else:
+                print(f"[{cfg.datevshot}] VDRP: Astrometry fallback PASS with SDSS.")
+                used_sdss = True
         else:
             used_gaia = True
     elif cfg.starcat_ast == 'sdss':
         fail_sdss = do_sdss(cfg)
         if fail_sdss:
+            print(f"[{cfg.datevshot}] VDRP: Astrometry FAIL with SDSS. Attempting GAIA as fallback.")
             fail_gaia = do_sdss(cfg)
+            if fail_gaia:
+                print(f"[{cfg.datevshot}] VDRP: Astrometry fallback FAIL with GAIA.")
+            else:
+                print(f"[{cfg.datevshot}] VDRP: Astrometry fallback PASS with GAIA.")
+                used_gaia = True
         else:
-             used_sdss  = True
+            used_sdss = True
     else: #should not happend
         print(f"[{cfg.datevshot}] VDRP: unexpected starcat_ast value [{cfg.starcat_ast}] ; using GAIA as default ")
         fail_gaia = do_gaia(cfg)
         if fail_gaia:
+            print(f"[{cfg.datevshot}] VDRP: Astrometry FAIL with GAIA (2). Attempting SDSS as fallback.")
             fail_sdss = do_sdss(cfg)
+            if fail_sdss:
+                print(f"[{cfg.datevshot}] VDRP: Astrometry fallback FAIL with SDSS (2).")
+            else:
+                print(f"[{cfg.datevshot}] VDRP: Astrometry fallback PASS with SDSS (2).")
+                used_sdss = True
         else:
             used_gaia = True
+
 
     #!!! notice: we are doing limited checking here ... that will be done later
     # previously would run: check_norms YYYYMM   (included)
@@ -3820,6 +3854,14 @@ def run_vdrp(cfg):
             print(f"[{cfg.datevshot}] VDRP: PANSTARRS fail.", e, "\n", traceback.format_exc())
             fail_panstarrs = True
 
+    #print(f"[{cfg.datevshot}] *** DEBUG *** VDRP Astrometry:  used_gaia = {used_gaia} , used_sdss = {used_sdss}, "
+    #      f"used_panstarrs = {used_panstarrs}")
+
+
+    #print(f"[{cfg.datevshot}] *** DEBUG *** VDRP Astrometry:  fail_gaia = {fail_gaia} , fail_sdss = {fail_sdss}, "
+    #      f"fail_panstarrs = {fail_panstarrs}")
+
+    #print(f"[{cfg.datevshot}] *** DEBUG *** VDRP Astrometry: cfg.starcat_ast = {cfg.starcat_ast}")
 
     #update to which one was actually used (should be 0 or 1 at most)
     if used_gaia:
@@ -3836,6 +3878,8 @@ def run_vdrp(cfg):
             cfg.starcat_ast = "panstarrs"
     else: #going to be fatal
         print(f"[{cfg.datevshot}] VDRP: unable to fix astrometry.")
+
+    #print(f"[{cfg.datevshot}] *** DEBUG *** VDRP Astrometry: POST cfg.starcat_ast = {cfg.starcat_ast}")
 
 
     #todo: which is the main dithall, etc???? (normally it is SDSS for calibration and gaia for astrometry)
