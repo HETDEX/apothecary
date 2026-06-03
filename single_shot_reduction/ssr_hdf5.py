@@ -2475,8 +2475,8 @@ if "-help" in args:
 
         --bg [#]            optional
             Specify the maximum number of simulatenously running hdf5 constructions
-            Note: for a single vm-small node on lonestar6, this should be 3
-                  for a single development or normal node, this can be 20-24
+            Note: for a single vm-small node on lonestar6, this should be 2-3 depending on expected size
+                  for a single development or normal node, this can be 15-20 depending on expected size
                   
         --float32           optional
             Override the compression and force float32 where float16 would otherwise be used due to limited range

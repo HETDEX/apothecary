@@ -112,7 +112,10 @@ for fi in range(num_files):
     stop_ix = min(start_ix + step, len(T[sel]))
     rn = str(fi + 1).zfill(2)
     num_lines = stop_ix - start_ix
-    lines = [f"{BASE_CMD} --email {NOTIFICATION_EMAIL} {s}\n" for s in T['shotid'][sel][start_ix:stop_ix]]
+    if NOTIFICATION_EMAIL is not None:
+        lines = [f"{BASE_CMD} --email {NOTIFICATION_EMAIL} {s}\n" for s in T['shotid'][sel][start_ix:stop_ix]]
+    else:
+        lines = [f"{BASE_CMD} {s}\n" for s in T['shotid'][sel][start_ix:stop_ix]]
 
     basename = f"{BASE_FILENAME}_{rn}"
     fn = f"{basename}.run"
