@@ -22,12 +22,14 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 # 0.1.5 repace --exclude_ccd_images with --minimum as applies to more than just the VIRUS CCD images
 #       include all additional original hdf5 info
 # 0.1.6 add "avg_sky" to Shot table (based on *amp.dat files; matching to collapsed images)
+# 0.1.7 add DiagnoseClassifications table
 
-__version__ = '0.1.6'
+__version__ = '0.1.7'
 
 
 import numpy as np
 import tables
+from astropy.table import Table
 import os
 from pathlib import Path
 import sys
@@ -236,6 +238,29 @@ class Version(tables.IsDescription):
     #version table, very basic info
     version = tables.StringCol(itemsize=16, dflt='',pos=0)
     version_pytables = tables.StringCol(itemsize=16, dflt='',pos=1)
+
+
+
+class DiagnoseClassifications(tables.IsDescription):
+    """
+    Diagnose spec fitter results table
+    """
+
+    detectid = tables.Int64Col(pos=0)
+    ra = tables.Float32Col(dflt=UNSET_FLOAT,pos=1) #technically redundant but could be useful later to help match
+    dec = tables.Float32Col(dflt=UNSET_FLOAT,pos=2)
+    #skip shotid as it is always THIS shot
+    gmag = tables.Float32Col(dflt=UNSET_FLOAT,pos=3)
+    chi2_star = tables.Float32Col(dflt=UNSET_FLOAT,pos=4)
+    chi2_galaxy = tables.Float32Col(dflt=UNSET_FLOAT,pos=5)
+    chi2_qso = tables.Float32Col(dflt=UNSET_FLOAT,pos=6)
+    z_star = tables.Float32Col(dflt=UNSET_FLOAT,pos=7)
+    z_galaxy = tables.Float32Col(dflt=UNSET_FLOAT,pos=8)
+    z_qso = tables.Float32Col(dflt=UNSET_FLOAT,pos=9)
+    z_best = tables.Float32Col(dflt=UNSET_FLOAT,pos=10)
+    classification = tables.StringCol(itemsize=32,pos=11,dflt="UNKNOWN")
+    stellartype = tables.StringCol(itemsize=3,pos=12,dflt="X")
+
 
 
 class Detections(tables.IsDescription):
@@ -1765,6 +1790,57 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         shot_h5.close()
 
 
+        ##############################################
+        # Optional Diagnose Classification table
+        #       see --diagnose
+        ##############################################
+
+        if diagnose_path is not None:
+            try:
+                T = Table.read(diagnose_path,format="ascii")
+
+                if len(T) > 0:
+                    print(f"[{datevshot}] Importing Diagnose Classification data ... ", flush=True)
+                    fileh.create_table(fileh.root, 'DiagnoseClassifications', DiagnoseClassifications,
+                                       'Diagnose Classifications Summary Table')
+
+                    for row in T:
+                        new_row = fileh.root.DiagnoseClassifications.row
+
+                        new_row['detectid'] = row['detectid']
+                        new_row['ra'] = row['RA']
+                        new_row['dec'] = row['Dec']
+                        new_row['gmag'] = row['gmag']
+                        new_row['chi2_star'] = row['chi2_star']
+                        new_row['chi2_galaxy'] = row['chi2_galaxy']
+                        new_row['chi2_qso'] = row['chi2_qso']
+                        new_row['z_star'] = row['z_star']
+                        new_row['z_galaxy'] = row['z_galaxy']
+                        new_row['z_qso'] = row['z_qso']
+                        new_row['z_best'] = row['z_best']
+                        new_row['classification'] = row['classification']
+                        new_row['stellartype'] = row['stellartype']
+
+                        new_row.append()
+
+                    fileh.root.DiagnoseClassifications.flush()
+                    # set the index
+                    try:
+                        fileh.root.DiagnoseClassifications.cols.detectid.create_csindex()
+                    except:
+                        log.debug(f"[{datevshot}] Index fail on DiagnoseClassifications table", exc_info=True)
+
+                    fileh.root.DiagnoseClassifications.flush()
+
+                    del T
+                else:
+                    print(f"[{datevshot}] No Diagnose Classification data found. ", flush=True)
+            except:
+                log.info(f"[{datevshot}] Diagnose import fail", exc_info=True)
+        else:
+            print(f"[{datevshot}] No Diagnose Classification data provided. ", flush=True)
+
+
 
         ##############################################
         # Optional ELiXer tables
@@ -2494,6 +2570,10 @@ if "-help" in args:
                    [default] typically around 6 minutes run time per shot 
             (3) bzip2 compression at level 9; very slow but maximum compression
                     about 300% longer to run but 40-50% better compression than (2)
+                    
+        --diagnose          optional
+            Path to the diagnose_classifications.tab file. If this switch is not provide, the code will look
+            in the same directory as the --shot_h5. 
                   
         --elixer_h5         optional
             Path to the <elixer>.h5 file for this shot (includes the filename). Can be a relative path.
@@ -2524,6 +2604,30 @@ else:
     print("Fatal. Must supply --shot_h5 <path to the shot hdf5 file>")
 
 datevshot = os.path.basename(shot_h5_path).replace(".h5","")
+
+diagnose_path = None
+if "-diagnose" in args: #path to the diagnose table
+    i = args.index("-diagnose")
+    try:
+        diagnose_path = args[i+1]
+    except:
+        print(f"Invalid -diagnose specified: {args[i+1]}")
+        exit(-1)
+
+    del args[i+1]  # args.pop(0) #remove THIS file
+    args.remove("-diagnose")
+else:
+    #see if can guess based on the shot_h5
+    try:
+        diagnose_path = os.path.join(os.path.dirname(shot_h5_path),"diagnose_classifications.tab")
+        if not os.path.exists(diagnose_path):
+            diagnose_path = None
+            print(f"[{datevshot}] Could not locate Diagnose table, will skip.")
+        else:
+            print(f"[{datevshot}] Using Diagnose Classification : {diagnose_path}", flush=True)
+    except:
+        print(f"[{datevshot}] Could not locate Diagnose table, will skip.")
+
 
 elixer_h5_path = None
 if "-elixer_h5" in args: #path to the shot h5 file
