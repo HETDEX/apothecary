@@ -1150,6 +1150,8 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
 
                 #and the image /Calibration/Throughput/tp_png (ImageArray(1684, 1190, 4))
+                #apparently this is not really used any more so, if it is not there, just ignore it and
+                #do not bother with logging a warning.
                 try:
                     if "tp_png" in [node.name for node in shot_h5.root.Calibration.Throughput]:
                         pngimarr = shot_h5.root.Calibration.Throughput.tp_png.read()
@@ -1171,10 +1173,10 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                         pngim[0] = [pngimarr]
                         pngim.flush()
                     else:
-                        print(f"[{datevshot}] Non fatal. Will ignore. tp_png not found in root.Calibration.Throughput")
+                        pass #print(f"[{datevshot}] Non fatal. Will ignore. tp_png not found in root.Calibration.Throughput")
 
                 except:
-                    print(f"[{datevshot}] Non fatal. Will ignore. Fail on Calibration/Throughput/tp_png: {traceback.format_exc()}")
+                    pass #print(f"[{datevshot}] Non fatal. Will ignore. Fail on Calibration/Throughput/tp_png: {traceback.format_exc()}")
 
 
                 # TP_All (e.g. /sci<datevshot>/detect/<datevshot>/res/tp.all)
