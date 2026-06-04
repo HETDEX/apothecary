@@ -23,8 +23,9 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 #       include all additional original hdf5 info
 # 0.1.6 add "avg_sky" to Shot table (based on *amp.dat files; matching to collapsed images)
 # 0.1.7 add DiagnoseClassifications table
+# 0.1.8 add dust_corr_4540 to VIRUSSHOT (Shot) table
 
-__version__ = '0.1.7'
+__version__ = '0.1.8'
 
 
 import numpy as np
@@ -38,6 +39,10 @@ from PIL import Image
 from tqdm import tqdm
 import traceback
 import time
+
+import astropy.units as u
+from astropy.coordinates import SkyCoord
+from hetdex_api.extinction import deredden_spectra
 
 try:
     from filelock import FileLock
@@ -653,6 +658,7 @@ class VIRUSShot(tables.IsDescription): #Shot table
 
     obsind = tables.Int32Col()
     avg_sky= tables.Float32Col() #not the same as AmpStat table avg_orig, but related
+    dust_corr_4540 = tables.Float32Col()
 
 
 #these next two tables decide on 16 or 32 at runtime, so can't use the predefs
@@ -1117,7 +1123,24 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 avg_sky = np.loadtxt(os.path.join(os.path.dirname(shot_fn),"avg_sky.dat"),dtype=float,unpack=True)
                 new_row['avg_sky'] = float(avg_sky)
             except:
-                new_row['avg_sky'] = -9999.0
+                new_row['avg_sky'] = -999.9
+
+            try:
+                ra = row['ra']
+                dec = row['dec']
+                #get it from a file?
+                if ra > -999:
+                    coord = SkyCoord(ra=ra * u.deg, dec=dec * u.deg)
+                    dust_corr_4540 = deredden_spectra([4540.], coord)[0]
+                else:
+                    dust_corr_4540 - 999.9
+
+                new_row['dust_corr_4540'] = dust_corr_4540
+                #print(f"**** temp log. dust_corr_4540 = {dust_corr_4540}")
+            except:
+                new_row['dust_corr_4540'] = -999.9
+                #print(f"**** temp log. Failed to get dust_corr_4540. Exception.",traceback.format_exc())
+
             new_row.append()
 
 
