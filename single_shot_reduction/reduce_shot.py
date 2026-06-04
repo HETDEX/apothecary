@@ -23,8 +23,9 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # add check of *amp.dat avg_sky and plot on collapsed image
 # tp adjustments
 # 1.0.4 fix bug with swapping between GAIA, SDSS, PanStarrs on failure ; fix bug with tarfile path
+# 1.0.5 add dust correction at 4540AA to summary.txt
 
-__version__ = '1.0.4'
+__version__ = '1.0.5'
 
 import numpy as np
 import sys
@@ -49,10 +50,14 @@ except:
 import tables
 from astropy.table import Table, join, Column, MaskedColumn # unique, vstack, hstack
 from astropy.io import fits
+import astropy.units as u
+from astropy.coordinates import SkyCoord
+
 # noinspection PyUnresolvedReferences
 from h5tools import amp_stats as AmpStats
 # noinspection PyUnresolvedReferences
 import hetdex_tools.fof_kdtree as fof
+from hetdex_api.extinction import deredden_spectra
 
 # noinspection PyUnresolvedReferences
 from elixer import global_config as G
@@ -63,7 +68,7 @@ from elixer import utilities as Utils
 
 from PIL import Image, ImageDraw, ImageFont
 
-#just want the path for hetdex_api (see later)
+
 import importlib.util
 
 import traceback
@@ -1346,10 +1351,20 @@ def write_summary(cfg):
 
         cfg.set_warn = False
 
+        try:
+            ra = h5.root.Shot.read(field='ra')[0]
+            dec = h5.root.Shot.read(field='dec')[0]
+        except:
+            ra = -999.9
+            dec = -999.9
+
+
+
+
         with open("summary.txt","w") as f:
             f.write(f"shot:\t\t{cfg.datevshot}\n")
             f.write(f"field:\t\t{h5.root.Shot.read(field='field')[0]}\n")
-            f.write(f"RA,Dec:\t\t{h5.root.Shot.read(field='ra')[0]}, {h5.root.Shot.read(field='dec')[0]}\n")
+            f.write(f"RA,Dec:\t\t{ra}, {dec}\n")
             f.write(f"exptimes:\t{h5.root.Shot.read(field='exptime')[0]}\n")
             dit_norms = h5.root.Shot.read(field="relflux_virus")[0]
             f.write(f"relflux_virus:\t{dit_norms}\n")
@@ -1366,6 +1381,17 @@ def write_summary(cfg):
             except:
                 tp_at_w = -999.9
                 cfg.set_warn = True
+
+            try:
+                if ra > -999:
+                    coord = SkyCoord(ra=ra * u.deg, dec=dec * u.deg)
+                    dust_corr = deredden_spectra([4540.], coord)[0]
+                    f.write(f"dust_corr@4540:\t{dust_corr:0.1f}x\n")
+                else:
+                    f.write(f"dust_corr@4540:\t???\n")
+            except:
+                print(f"[{cfg}] Error computing dust correction for shot.", traceback.format_exc())
+                f.write(f"dust_corr@4540:\t???\n")
 
             try:
                 f.write(f"response_4540:\t{h5.root.Shot.read(field='response_4540')[0]:0.4f}\n")
