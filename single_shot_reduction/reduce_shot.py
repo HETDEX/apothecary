@@ -1386,7 +1386,7 @@ def write_summary(cfg):
                 if ra > -999:
                     coord = SkyCoord(ra=ra * u.deg, dec=dec * u.deg)
                     dust_corr = deredden_spectra([4540.], coord)[0]
-                    f.write(f"dust_corr@4540:\t{dust_corr:0.1f}x\n")
+                    f.write(f"dust_corr@4540:\t{dust_corr:0.2f}x\n")
                 else:
                     f.write(f"dust_corr@4540:\t???\n")
             except:
