@@ -1419,6 +1419,10 @@ def write_summary(cfg):
                 f.write(f"Dithers: \t???\n")
                 cfg.set_warn = True
 
+
+            if cfg.avg_sky is None: #this is true on a resume
+                cfg.avg_sky = get_avg_sky(cfg)
+
             if cfg.avg_sky is not None:
                 f.write(f"Avg sky: \t{cfg.avg_sky}\n")
             else:
