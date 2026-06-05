@@ -3555,6 +3555,12 @@ def run_run1s(cfg):
         cmd = "sed -i s#\${scriptdir}" + f"#{cfg.cwd}/# run1s"
         system_command(cfg,cmd)  # use '#' as sed separator rather than "/"
 
+        # awk '{print $1,$2,$3,$4,$5,$6,$7,2}' > rj
+        #make all the calls background so runs the whole set if IFUs at once
+        # match_str = "2}' > rj"
+        # sub_str ="2,\"\&\"}' > rj"
+        # system_command(cfg, f"sed -i s/\"{match_str}\"/\"{sub_str}\"/ run1s")
+
         #actually run it here
         system_command(cfg,f"run1s {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} exp{str(exp).zfill(2)} {cfg.datevshot[0:6]}")
 
@@ -6239,10 +6245,11 @@ rc = precheck(cfg)
 if rc < 0:
     Quit(cfg,rc,"FATAL! Precheck failed. Reduction cannot run.",write_status=False)
 
+#if not cfg.multifits_only:
 cfg.numexp, cfg.gettar_fn = num_exposures_in_shot(cfg.shotid)
 
 do_initial_setup = True
-if cfg.numexp <= 0 and not cfg.multifits_only:
+if cfg.numexp <= 0: # and not cfg.multifits_only:
     # might not be fatal ... could be a newer observation that is not in the gettars yet, but is still accessible
     #Quit(cfg, -1, f"FATAL! Could not find shot {cfg.datevshot}",write_status=False)
     print(f"[{cfg.datevshot}] Did not find shot in standard gettar location. Not necessarily fatal. Will attempt to proceed ...")
@@ -6261,11 +6268,11 @@ if cfg.numexp <= 0 and not cfg.multifits_only:
 #     NumProcs_mp_rcal = 10
 #     NumProcs_mp_rf1 = 10
 
-if cfg.exp <= 0:
+if cfg.exp <= 0 and not cfg.multifits_only:
     print(f"Working on {cfg.datevshot} with {cfg.numexp} exposure(s) ...")
     if cfg.numexp == 1 or cfg.numexp == 3: #okay
         pass
-    else:
+    elif not cfg.multifits_only:
         #print(f"[{cfg.datevshot}] !!! bad !!! Unusual number of exposures ({cfg.numexp}).")
         print(f"********************************************************************************************")
         print(f"!!! WARNING !!! Unusual number of exposures ({cfg.numexp}) for {cfg.datevshot} !!! Reduction may be problematic.")
@@ -6312,7 +6319,7 @@ if cfg.special == 1:
     Quit(cfg, 0, f"Done with special handling. {cfg.datevshot}",write_status=False)
 
 
-if cfg.numexp < 3 or not cfg.hetdex_original:
+if not cfg.multifits_only and (cfg.numexp < 3 or not cfg.hetdex_original):
     #print(f"Fewer than 3 exposures (assume dithers). Checking guider for seeing FWHM...")
     #print(f"[{cfg.datevshot}] Checking guider for seeing FWHM (this can take a while) ...")
     cfg.guider_fwhm = get_guider_fwhm(cfg) #this also gets the exposure times
@@ -6321,11 +6328,12 @@ if cfg.numexp < 3 or not cfg.hetdex_original:
     else:
         print(f"Unable to obtain guider seeing FWHM. Will measure as best can be from available data.")
 
-if cfg.total_exp_time is None or cfg.total_exp_time == 0:
+if not cfg.multifits_only and (cfg.total_exp_time is None or cfg.total_exp_time == 0):
     get_exposure_times(cfg)
 
 #update for long exposures
-update_vdrp_config_limits(cfg)
+if not cfg.multifits_only:
+    update_vdrp_config_limits(cfg)
 
 #########
 # after the initial setup, move stdout and stderr to a log file

@@ -8,7 +8,9 @@ mkdir -p d${date}s${shot}${exp}
 #cd into the new dXXX dir
 cd d${date}s${shot}${exp}
 ddir=$(pwd)
-grep "$1 $2 $3" ../runsChangeMe | awk '{print $1,$2,$3,$4,$5,$6,$7,2}' > rj
+#grep "$1 $2 $3" ../runsChangeMe | awk '{print $1,$2,$3,$4,$5,$6,$7,2}' > rj
+#run them all at once in the background. use unique <ifuslot><exp01>.run files as semaphores (sleep on them below)
+grep "$1 $2 $3" ../runsChangeMe | awk '{print "touch",$5.$4.run,"&&", $1,$2,$3,$4,$5,$6,$7,2,"&&", "rm",$5.$4.run, "&"}' > rj
 #echo "rtaras $1 $2 $3 $4 1" >> rj
 cp ../rbacks rback
 #cp ../rtaras .
@@ -52,6 +54,12 @@ cp ${scriptdir}sun_use.dat .
 
 
 rj
+sleep 5
+#sleeping until ALL the *.run files have been removed
+while ls *.run 2>/dev/null | grep -q .; do
+    sleep 5
+done
+
 
 cd ${date}v${shot}${exp}
 python3 /work/00115/gebhardt/maverick/panacea/Panacea/cofes_vis.py Co --output d${date}s${shot}${exp}1de.png --vmin -10 --vmax 30
