@@ -25,6 +25,9 @@ if shutil.which("reduce_shot"):
     BASE_CMD = "reduce_shot "
 else:
     BASE_CMD = "python reduce_shot.py "
+
+EXTRA_SWITCHES = "" #"--multifits_only --clean 0"
+
 #note: these are the defaults
 #--cal_flux 'sdss' --cal_astro 'gaia'  --clean 1
 
@@ -39,21 +42,54 @@ sel = np.array(T['exptime'] > 300) * np.array(T['exptime'] < 9999)
 
 sel = sel * np.array(T['name'] == 'parallel')
 sel = sel * np.array([n[0:4] != 'VDFI' for n in T['name']])
-sel = sel * np.array(T['date'] >= 20260101) * np.array(T['date'] < 20260201)
+sel = sel * np.array(T['date'] >= 20260401) * np.array(T['date'] < 20260501)
 #sel = sel * np.array(T['num_exp'] == 1)
 #T[sel]
 
+def find_min_product(max_a: int, max_b: int, c: int):
+    """
+    Find integers a <= max_a and b <= max_b such that a * b is the smallest
+    value >= c.
+
+    Returns (a, b), or raises ValueError if no valid pair exists.
+    """
+    if max_a * max_b < c:
+        raise ValueError(
+            f"No solution: max product {max_a * max_b} is less than c={c}."
+        )
+
+    best_a, best_b, best_product = None, None, float("inf")
+
+    for a in range(1, max_a + 1):
+        # Smallest b such that a * b >= c
+        b = -(-c // a)          # ceiling division: equivalent to math.ceil(c / a)
+        if b < 1:
+            b = 1
+        if b > max_b:
+            continue            # this value of a can't satisfy the constraint
+        product = a * b
+        if product < best_product:
+            best_product, best_a, best_b = product, a, b
+
+    if best_a is None:
+        raise ValueError(f"No solution found for max_a={max_a}, max_b={max_b}, c={c}.")
+
+    return best_a, best_b
 
 def make_slurm(basename, max_nodes, max_tpn, tasks):
 
     global NOTIFICATION_EMAIL, QUEUE, NOMINAL_TIME_REQUEST, SU_ACCOUNT
 
-    tpn = tasks if tasks < max_tpn else max_tpn
+    if tasks >= (max_nodes * max_tpn):
+        tpn = max_tpn
+        nodes = max_nodes
+    else:
+        nodes, tpn = find_min_product(max_nodes,max_tpn,tasks)
 
-    nodes = tasks // max_tpn + (1 if tasks % max_tpn !=0 else 0)
-    print(nodes, tasks, max_tpn)
+    #nodes = tasks // max_tpn + (1 if tasks % max_tpn !=0 else 0)
+    print(f"nodes, ntasks_per_node, total tasks: {nodes}, {tpn}, {tasks}")
 
-    nodes = min(nodes, max_nodes)
+    #nodes = min(nodes, max_nodes)
     jobfile = f"{basename}.run"
     slurmfile = f"{basename}.slurm"
 
@@ -115,7 +151,7 @@ for fi in range(num_files):
     if NOTIFICATION_EMAIL is not None:
         lines = [f"{BASE_CMD} --email {NOTIFICATION_EMAIL} {s}\n" for s in T['shotid'][sel][start_ix:stop_ix]]
     else:
-        lines = [f"{BASE_CMD} {s}\n" for s in T['shotid'][sel][start_ix:stop_ix]]
+        lines = [f"{BASE_CMD} {EXTRA_SWITCHES} {s}\n" for s in T['shotid'][sel][start_ix:stop_ix]]
 
     basename = f"{BASE_FILENAME}_{rn}"
     fn = f"{basename}.run"
