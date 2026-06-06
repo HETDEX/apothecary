@@ -34,23 +34,25 @@ rback1 $1 $2 $3 $4 $5 $6 RU $mthd
 cd ..
 rm -rf d${date}s${shot}${exp}i${ifu}
 
-if [ -e ${date}"v"${shot}${exp} ] ;
-then
-cd ${date}"v"${shot}${exp}
 
-tar rf d${date}s${shot}${exp}_mu.tar multi_${spec}*
-rm multi_${spec}*
-
-cp ../d${date}s${shot}${exp}i${ifu}a??1de.fits .
-ls d${date}s${shot}${exp}i${ifu}a??1de.fits > list.d${date}s${shot}${exp}i${ifu}
-~gebhardt/bin/vrecon << eof
-list.d${date}s${shot}${exp}i${ifu}
-eof
-
-rm list.d${date}s${shot}${exp}i${ifu}
-rm d${date}s${shot}${exp}i${ifu}a??1de.fits
-cd ..
-rm d${date}s${shot}${exp}i${ifu}a*.fits
-fi
-
+# everything below here is now in rbacks_2
+#if [ -e ${date}"v"${shot}${exp} ] ;
+#then
+#cd ${date}"v"${shot}${exp}
+#
+#tar rf d${date}s${shot}${exp}_mu.tar multi_${spec}*
+#rm multi_${spec}*
+#
+#cp ../d${date}s${shot}${exp}i${ifu}a??1de.fits .
+#ls d${date}s${shot}${exp}i${ifu}a??1de.fits > list.d${date}s${shot}${exp}i${ifu}
+#~gebhardt/bin/vrecon << eof
+#list.d${date}s${shot}${exp}i${ifu}
+#eof
+#
+#rm list.d${date}s${shot}${exp}i${ifu}
+#rm d${date}s${shot}${exp}i${ifu}a??1de.fits
+#cd ..
+#rm d${date}s${shot}${exp}i${ifu}a*.fits
+#fi
+#
 #echo "tmp/${date}"v"${shot}${exp}"

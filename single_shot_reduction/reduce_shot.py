@@ -994,7 +994,7 @@ def post_clean(cfg):
         if cfg.clean >= 1:
             #top scripts
             flist = ["make_good_shots","make_hdrX.use","rback1","rback1_s","rback_field",
-                    "rback_fix","rbacks","rbfits","rbfits0","rbfits_fix","rbfits_s","rerun","rerun2","rfield",
+                    "rback_fix","rbacks","rbacks_2","rbfits","rbfits0","rbfits_fix","rbfits_s","rerun","rerun2","rfield",
                     "rfield.single","rfixspec","rimarb", "rsetdate","rsetdate0", "rtaras", "rtaremc",
                     "run0s", "run1s", "run2s", "runtar", "runtar0.slurm", "runtarm.defunct", "sun_use.dat",
                      "ifustat_20*.tab"]
@@ -2988,6 +2988,7 @@ def initial_setup(cfg):
         system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rback_field")  # use '#' as sed separator rather than "/"
         system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rback_fix")  # use '#' as sed separator rather than "/"
         system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbacks")  # use '#' as sed separator rather than "/"
+        system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbacks_2")  # use '#' as sed separator rather than "/"
         system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits_s")  # use '#' as sed separator rather than "/"
         system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rimarb")  # use '#' as sed separator rather than "/"
 

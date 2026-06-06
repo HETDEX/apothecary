@@ -10,11 +10,15 @@ cd d${date}s${shot}${exp}
 ddir=$(pwd)
 #grep "$1 $2 $3" ../runsChangeMe | awk '{print $1,$2,$3,$4,$5,$6,$7,2}' > rj
 #run them all at once in the background. use unique <ifuslot><exp01>.run files as semaphores (sleep on them below)
-grep "$1 $2 $3" ../runsChangeMe | awk '{print "touch",$5.$4.run,"&&", $1,$2,$3,$4,$5,$6,$7,2,"&&", "rm",$5.$4.run, "&"}' > rj
+grep "$1 $2 $3" ../runsChangeMe | awk '{print "touch","i"$5.$4".run",";", $1,$2,$3,$4,$5,$6,$7,2,"&&","rm","i"$5.$4".run", "&"}' > rj
+grep "$1 $2 $3" ../runsChangeMe | awk '{print $1"2",$2,$3,$4,$5,$6,$7,2}' > rj2
+
 #echo "rtaras $1 $2 $3 $4 1" >> rj
 cp ../rbacks rback
+cp ../rbacks_2 rback2
 #cp ../rtaras .
 chmod +x rj
+chmod +x rj2
 # rj
 
 
@@ -41,7 +45,9 @@ fi
 
 
 cp ${ddir}/rj .
+cp ${ddir}/rj2 .
 cp ${ddir}/rback .
+cp ${ddir}/rback2 .
 
 #note this next line scriptdir is dynamically replaced when run from
 #the single shot reduction code, the hardcoded scriptdir=XXX line is ignored and is just a manual safety
@@ -54,11 +60,14 @@ cp ${scriptdir}sun_use.dat .
 
 
 rj
-sleep 5
 #sleeping until ALL the *.run files have been removed
-while ls *.run 2>/dev/null | grep -q .; do
-    sleep 5
+while ls *.run &> /dev/null; do
+  sleep 5
 done
+
+echo rj	done. Moving to	next step.
+#this is the serial taring part
+rj2
 
 
 cd ${date}v${shot}${exp}
