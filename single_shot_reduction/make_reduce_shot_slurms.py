@@ -54,9 +54,7 @@ def find_min_product(max_a: int, max_b: int, c: int):
     Returns (a, b), or raises ValueError if no valid pair exists.
     """
     if max_a * max_b < c:
-        raise ValueError(
-            f"No solution: max product {max_a * max_b} is less than c={c}."
-        )
+        return max_a, max_b
 
     best_a, best_b, best_product = None, None, float("inf")
 
@@ -72,7 +70,7 @@ def find_min_product(max_a: int, max_b: int, c: int):
             best_product, best_a, best_b = product, a, b
 
     if best_a is None:
-        raise ValueError(f"No solution found for max_a={max_a}, max_b={max_b}, c={c}.")
+        return max_a, max_b
 
     return best_a, best_b
 
