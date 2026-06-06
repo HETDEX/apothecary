@@ -67,7 +67,7 @@ done
 #one more just to make sure the last write out completes
 sleep 5
 
-echo rj	done. Moving to	next (tarring) step with rj2.
+echo "Multiproc rj done. Moving to next step with serial rj2."
 #this is the serial taring part
 rj2
 
