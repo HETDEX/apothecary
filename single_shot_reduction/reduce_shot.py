@@ -288,6 +288,7 @@ class Config:
                    #note: though related too, this is NOT exactly the same as the h5 AmpStats table "avg_orig" column
     code_fn_to_copy = None
     set_warn = False
+    dither_configuration = None #-1 is bad, 0 = non-standard (maybe not dithered), 1 = standard hetdex
 
 
 
@@ -4281,6 +4282,13 @@ def mp_rcal_worker(out_list,cfg,set_idx,indicies,multis, ras, decs):
     print(f"[{cfg.datevshot}] idx[{set_idx}] mp_rcal_worker serial for: {multis}",flush=True)
     for multi, ra, dec, ix in zip(multis, ras, decs,indicies):
         print(f"[{cfg.datevshot}] (run_rcal) {set_idx}-{ix}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ",flush=True)  # ,end="")
+
+        # grid_n = 3  # n x n so 3 = a 3x3 grid
+        # grid_step = 0.5  # grid step size
+        #
+        # if cfg.numexp < 3 or cfg.dither_configuration == 0:
+        #     grid_n = 7
+        #NOTE: the 0.5 and 3 here are not actually used, so do not update
         cmd = f"rcal_all {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 106"
         system_command(cfg, cmd)
 
@@ -4436,7 +4444,15 @@ def mp_rf1_worker(out_list,cfg,set_idx,indicies,multis, ras, decs):
     print(f"[{cfg.datevshot}] idx[{set_idx}] mp_rf1_worker serial for: {multis}",flush=True)
     for multi, ra, dec, ix in zip(multis, ras, decs,indicies):
         print(f"[{cfg.datevshot}] (mp_rf1) : {set_idx}-{ix}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ",flush=True)  # ,end="")
-        cmd = f"rf1 {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 104\n"
+
+        grid_n = 3 #n x n so 3 = a 3x3 grid
+        grid_step = 0.5 #grid step size
+
+
+        if cfg.numexp < 3 or cfg.dither_configuration == 0:
+            grid_n = 7
+
+        cmd = f"rf1 {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 {grid_step} {grid_n} 104\n"
         #rc = blocking_command(cfg,cmd)
         system_command(cfg, cmd)
 
@@ -4531,6 +4547,12 @@ def rdet_rf1(cfg):
         #print(f"[{cfg.datevshot}] line detections ***MULTITHREADED*** (rdet_rf1) ({len(ras)})")#, num_procs = {NumProcs_mp_rf1}...")
         mp_rf1(cfg,multis, ras, decs)#,num_procs=6)
 
+        grid_n = 3  # n x n so 3 = a 3x3 grid
+        grid_step = 0.5  # grid step size
+
+        if cfg.numexp < 3 or cfg.dither_configuration == 0:
+            grid_n = 7
+
         #now - check them all (this can be serial, it is fast)
         ct = 0
         for multi, ra, dec in zip(multis, ras, decs):
@@ -4546,7 +4568,7 @@ def rdet_rf1(cfg):
 
             if np.count_nonzero(output_found) != 3:
                 #something failed, we will want to re-run these once
-                cmd = f"rf1 {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 0.5 3 104\n"
+                cmd = f"rf1 {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 {grid_step} {grid_n} 104\n"
                 failed_list.append(cmd)
                 print(f"{base_str} FAIL. May re-run at the end.")
             else:
@@ -6628,12 +6650,15 @@ elif cfg.numexp == 3:
     rc = hetdex_dither(cfg)
 
     if rc == 1: #all good
+        cfg.dither_configuration = 1 #standard hetdex
         pass
     elif rc == 0: #not HETDEX dither (that is okay but we cannot move on to source detection)
+        cfg.dither_configuration = 0 # non-standard, assume multiple exposures, but not dithered
         post_clean(cfg)
         Quit(cfg, 0,f"[{cfg.datevshot}] ({cfg.numexp}) exposures not in HETDEX dither configuration and is not "
              f"compatible with source detection. Will end here.")
     else: #fail case
+        cfg.dither_configuration = -1
         Quit(cfg, -1,f"[{cfg.datevshot}] Fatal error checking dither configuration. Will terminate here.")
 else:
     post_clean(cfg)
