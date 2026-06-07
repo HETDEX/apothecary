@@ -4449,8 +4449,9 @@ def mp_rf1_worker(out_list,cfg,set_idx,indicies,multis, ras, decs):
         grid_step = 0.5 #grid step size
 
 
-        if cfg.numexp < 3 or cfg.dither_configuration == 0:
-            grid_n = 7
+        #if cfg.numexp < 3 or cfg.dither_configuration == 0:
+        #    grid_n = 13
+        #    grid_step = 0.25
 
         cmd = f"rf1 {ra:0.7f} {dec:0.7f} 35 4505 50 {multi[6:]} {cfg.datevshot} 1.70 3.0 3.5 {grid_step} {grid_n} 104\n"
         #rc = blocking_command(cfg,cmd)
@@ -4550,8 +4551,9 @@ def rdet_rf1(cfg):
         grid_n = 3  # n x n so 3 = a 3x3 grid
         grid_step = 0.5  # grid step size
 
-        if cfg.numexp < 3 or cfg.dither_configuration == 0:
-            grid_n = 7
+        # if cfg.numexp < 3 or cfg.dither_configuration == 0:
+        #     grid_n = 13
+        #     grid_step = 0.25
 
         #now - check them all (this can be serial, it is fast)
         ct = 0
