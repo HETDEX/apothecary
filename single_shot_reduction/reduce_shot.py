@@ -24,8 +24,9 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # tp adjustments
 # 1.0.4 fix bug with swapping between GAIA, SDSS, PanStarrs on failure ; fix bug with tarfile path
 # 1.0.5 add dust correction at 4540AA to summary.txt
+# 1.0.6 add --linedet_filter options
 
-__version__ = '1.0.5'
+__version__ = '1.0.6'
 
 import numpy as np
 import sys
@@ -289,6 +290,7 @@ class Config:
     code_fn_to_copy = None
     set_warn = False
     dither_configuration = None #-1 is bad, 0 = non-standard (maybe not dithered), 1 = standard hetdex
+    linedet_filter = 0 #default, normal filtering
 
 
 
@@ -380,18 +382,24 @@ if "-help" in args:
                       
     --clear_mutex : Special operation - clears the concurrency mutex, resetting allowed concurrent active processes.
                     This takes priority over all other switches and will terminate with this action.
-                    
+                                                          
     --exp <integer> : will operate on only the specified exposure (e.g. in a multi-exposure observation, can select
                       exactly one to reduce). If not present or set to (0), will use all exposures for the observation. 
                       
     --email <str> : if provided will attach to the elixer slurm job so this email address will get notifications
         
     --help : display this help text and exit
+        
+    --hetdex : if present, overrides the restriction on running existing HETDEX shots
     
     --ifuslot <str(3)> : Special operation - work with ONLY this IFUSlot
                          only used in conjuection with --multifits_only
     
-    --hetdex : if present, overrides the restriction on running existing HETDEX shots
+    --linedet_filter : preset filter/selection for line detections to send to ELIXer. Default is (1)
+                    0 = default: snr > 4.8, chi2 <= 2.5, 1.5 <= linewidth <= 16, chi2fib <= 4.5, continuum >= -3
+                    1 = OFF + normal HETDEX_API.  Only snr >= 4.5 filter.
+                    2 = OFF + minimal HETDEX_API. Only snr >= 3.5 filter.
+                    3.x+ = OFF + HETDEX_API snr set to this value (i.e. for values 3.0 and up, single decimal precision)
     
     --local_het_raw_path : if present, specifies the "local" het_raw path to use for locally copied data. This is a path
                      to which /het_raw/ will be appended.
@@ -513,10 +521,10 @@ if "-prep_compress" in args:
     try:
         prep_compress = int(args[i+1])
         if prep_compress < 0:
-            print(f"Invalid -prep_compress specified. Must be non-negative")
+            print(f"Invalid --prep_compress specified. Must be non-negative")
             exit(-1)
     except:
-        print(f"Invalid -prep_compress specified")
+        print(f"Invalid --prep_compress specified")
         exit(-1)
 
     del args[i + 1]
@@ -532,7 +540,7 @@ if "-clean" in args:
             cfg.clean *= -1
             cfg.clean_only = True
     except:
-        print(f"Invalid -clean specified")
+        print(f"Invalid --clean specified")
         exit(-1)
 
     del args[i+1]  # args.pop(0) #remove THIS file
@@ -540,6 +548,25 @@ if "-clean" in args:
 else:
     cfg.clean = DefaultClean #usually this is level 1
 
+
+if "-linedet_filter" in args:
+    i = args.index("-linedet_filter")
+    try:
+        cfg.linedet_filter = float(args[i+1])
+        if cfg.linedet_filter not in [0,1,2]:
+            if cfg.linedet_filter >= 3.0:
+                pass #specific value
+            else:
+                print(f"Invalid --linedet_filter specified. Must be in [0,1,2] or >= 3.0. See --help")
+                exit(-1)
+    except:
+        print(f"Invalid --linedet_filter specified")
+        exit(-1)
+
+    del args[i+1]  # args.pop(0) #remove THIS file
+    args.remove("-linedet_filter")
+else:
+    cfg.linedet_filter = 0 #default
 
 # if "-simul" in args:
 #     i = args.index("-simul")
@@ -3227,7 +3254,6 @@ def update_vdrp_config_limits(cfg):
     """
 
     try:
-
         if cfg.total_exp_time is not None and cfg.total_exp_time > 1800.0:
 
             # if cfg.total_exp_time is not None:
@@ -5611,6 +5637,11 @@ def build_detection_hdf5(cfg):
             cmd += f" --observation \"{cfg.datevshot[-3:]}\""
             cmd += f" -of \"{cfg.datevshot}_line.h5\""
             cmd += f" --detect_path \"{cfg.cwd}/alldet/detect_out\""
+            if cfg.linedet_filter == 2:
+                cmd += f" --sn_min 3.5"
+            elif cfg.linedet_filter >= 3.0:
+                cmd += f" --sn_min {cfg.linedet_filter:0.1f}"
+            #else, using HETDEX_API default if or 1
 
             system_command(cfg, cmd)
 
@@ -6356,9 +6387,7 @@ if not cfg.multifits_only and (cfg.numexp < 3 or not cfg.hetdex_original):
 if not cfg.multifits_only and (cfg.total_exp_time is None or cfg.total_exp_time == 0):
     get_exposure_times(cfg)
 
-#update for long exposures
-if not cfg.multifits_only:
-    update_vdrp_config_limits(cfg)
+
 
 #########
 # after the initial setup, move stdout and stderr to a log file
@@ -6389,6 +6418,11 @@ print(f"[{cfg.datevshot}] Logging redirected to: {cfg.cwd}/{cfg.file_stdout.name
 # get the progress state. Useful if resuming (implied)
 dtprog = progress_init(cfg)
 
+
+#update for long exposures
+if not cfg.multifits_only and not dtprog['s02_vdrp']:
+    #if vdrp has already run, there is no point in updating
+    update_vdrp_config_limits(cfg)
 
 #begin
 with open("status.run", "w") as f:
@@ -6724,12 +6758,17 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
             line_h5.close()
 
             #subselect "nominal" good
-            esel = np.array(line_tab['continuum'] >= -3)
-            esel = esel & np.array(line_tab['sn'] >= 4.8)
-            esel = esel & np.array(line_tab['chi2'] <= 2.5)
-            # this is a bit more liberal than standard HETDEX_API (1.6 and 14, I think)
-            esel = esel & np.array(line_tab['linewidth'] >= 1.5) & np.array(line_tab['linewidth'] <= 16)
-            esel = esel & np.array(line_tab['chi2fib'] <= 4.5)  # fairly restrictive, this is from .mc file column #19
+            if cfg.linedet_filter == 0:
+                print(f"[{cfg.datevshot}]  Standard extra restriction on line detections.")
+                esel = np.array(line_tab['continuum'] >= -3)
+                esel = esel & np.array(line_tab['sn'] >= 4.8)
+                esel = esel & np.array(line_tab['chi2'] <= 2.5)
+                # this is a bit more liberal than standard HETDEX_API (1.6 and 14, I think)
+                esel = esel & np.array(line_tab['linewidth'] >= 1.5) & np.array(line_tab['linewidth'] <= 16)
+                esel = esel & np.array(line_tab['chi2fib'] <= 4.5)  # fairly restrictive, this is from .mc file column #19
+            else: #if cfg.linedet_filter == 1 or cfg.linedet_filter == 2:
+                print(f"[{cfg.datevshot}]  No extra restriction on line detections.")
+                esel = np.full(len(line_tab),True)
 
             line_tab = line_tab[esel]
 
