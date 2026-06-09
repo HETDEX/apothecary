@@ -5716,6 +5716,42 @@ def diagnose(cfg):
         name = f"{cfg.datevshot}_line_sourcecat.tab"
         line_tab = Table.read(name,format="ascii")
 
+
+
+        #todo: looks like MW dust correction is needed here !!!
+        #it may be sufficient just use the corretion for the shot? or should we use each one individually?
+        ra = None
+        dec = None
+        try:
+            if cfg.shot_ra is not None and cfg.shot_ra > -999:
+                ra = cfg.shot_ra
+                dec = cfg.shot_dec
+            else:
+                h5 = None
+                try:
+                    h5 = tables.open_file(f"{cfg.datevshot}.h5", mode="r")
+                    ra = h5.root.Shot.read(field='ra')[0]
+                    dec = h5.root.Shot.read(field='dec')[0]
+                except:
+                    pass
+
+                if h5:
+                    h5.close()
+
+            if ra is not None and dec is not None:
+                dust_corr = deredden_spectra(G.CALFIB_WAVEGRID,
+                                         SkyCoord(ra=ra * u.deg, dec=dec * u.deg))
+                print(f"[{cfg.datevshot}] MW dust correction for Diagnose:  {dust_corr[0]:0.2f} to {dust_corr[-1]:0.2f}")
+            else:
+                print(f"[{cfg.datevshot}] Could not buil MW dust correction for Diagnose."
+                      f". RA, Dec = ({ra},{dec})")
+        except:
+            print(f"[{cfg.datevshot}] Exception building MW dust correction for Diagnose."
+                  f". RA, Dec = ({ra},{dec}){traceback.format_exc()}")
+            dust_corr = np.ones(len(G.CALFIB_WAVEGRID))
+
+
+
         if len(line_tab) == 0: #there are no entries
             del line_tab
             print(f"[{cfg.datevshot}] WARNING! No line sources recored. Moving on to continuum.")
@@ -5785,7 +5821,7 @@ def diagnose(cfg):
                 row = rows[0]
                 #line_tab['spec'][i] = rows['spec1d']
                 #line_tab['spec_err'][i] = rows['spec1d_err']
-                spec_2D.append(row['spec1d'])
+                spec_2D.append(row['spec1d'] * dust_corr)
                 error_2D.append(row['spec1d_err'])
                 apcor.append(row['apcor'])
 
@@ -6764,8 +6800,11 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
                 esel = esel & np.array(line_tab['linewidth'] >= 1.5) & np.array(line_tab['linewidth'] <= 16)
                 esel = esel & np.array(line_tab['chi2fib'] <= 4.5)  # fairly restrictive, this is from .mc file column #19
             else: #if cfg.linedet_filter == 1 or cfg.linedet_filter == 2:
-                print(f"[{cfg.datevshot}]  No extra restriction on line detections.")
+                print(f"[{cfg.datevshot}]  Limited extra restriction on line detections.")
                 esel = np.full(len(line_tab),True)
+                esel = np.array(line_tab['linewidth'] >= 1.5) #just the lower limit
+                esel = esel & np.array(line_tab['chi2fib'] <= 4.5)
+
 
             line_tab = line_tab[esel]
 
