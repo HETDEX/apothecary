@@ -398,8 +398,7 @@ if "-help" in args:
     --linedet_filter : preset filter/selection for line detections to send to ELIXer. Default is (1)
                     0 = default: snr > 4.8, chi2 <= 2.5, 1.5 <= linewidth <= 16, chi2fib <= 4.5, continuum >= -3
                     1 = OFF + normal HETDEX_API.  Only snr >= 4.5 filter.
-                    2 = OFF + minimal HETDEX_API. Only snr >= 3.5 filter.
-                    3.x+ = OFF + HETDEX_API snr set to this value (i.e. for values 3.0 and up, single decimal precision)
+                    1.x+ = OFF + HETDEX_API snr set to this value (i.e. for values 1.1 and up, single decimal precision)
     
     --local_het_raw_path : if present, specifies the "local" het_raw path to use for locally copied data. This is a path
                      to which /het_raw/ will be appended.
@@ -553,11 +552,11 @@ if "-linedet_filter" in args:
     i = args.index("-linedet_filter")
     try:
         cfg.linedet_filter = float(args[i+1])
-        if cfg.linedet_filter not in [0,1,2]:
-            if cfg.linedet_filter >= 3.0:
+        if cfg.linedet_filter not in [0,1]:
+            if cfg.linedet_filter >= 1.1:
                 pass #specific value
             else:
-                print(f"Invalid --linedet_filter specified. Must be in [0,1,2] or >= 3.0. See --help")
+                print(f"Invalid --linedet_filter specified. Must be in [0,1] or >= 1.1. See --help")
                 exit(-1)
     except:
         print(f"Invalid --linedet_filter specified")
@@ -5637,9 +5636,7 @@ def build_detection_hdf5(cfg):
             cmd += f" --observation \"{cfg.datevshot[-3:]}\""
             cmd += f" -of \"{cfg.datevshot}_line.h5\""
             cmd += f" --detect_path \"{cfg.cwd}/alldet/detect_out\""
-            if cfg.linedet_filter == 2:
-                cmd += f" --sn_min 3.5"
-            elif cfg.linedet_filter >= 3.0:
+            if cfg.linedet_filter > 1.0:
                 cmd += f" --sn_min {cfg.linedet_filter:0.1f}"
             #else, using HETDEX_API default if or 1
 
