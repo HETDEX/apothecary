@@ -5636,7 +5636,7 @@ def build_detection_hdf5(cfg):
             cmd += f" --observation \"{cfg.datevshot[-3:]}\""
             cmd += f" -of \"{cfg.datevshot}_line.h5\""
             cmd += f" --detect_path \"{cfg.cwd}/alldet/detect_out\""
-            if cfg.linedet_filter > 1.0:
+            if cfg.linedet_filter >= 1.1:
                 cmd += f" --sn_min {cfg.linedet_filter:0.1f}"
             #else, using HETDEX_API default if or 1
 
