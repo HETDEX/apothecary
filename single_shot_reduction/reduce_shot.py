@@ -768,12 +768,13 @@ def run_queue_elixer(cfg):
     for fn in fns:
         try:
             for dettype in ["out","line","cont"]:
+                datevshot = os.path.basename(fn)[3:] #e.g. sci20260421v011, strip off the sci
                 slurm_path = os.path.join(fn, f"elixer/{dettype}")
                 if safe_cd(slurm_path):
 
                     # do not run if already "done"
-                    if os.path.exists("elixer.done") or os.path.exists(f"elixer_{cfg.datevshot}_cat.h5"):
-                        print(f"[{cfg.datevshot}] ELiXer already done.")
+                    if os.path.exists("elixer.done") or os.path.exists(f"elixer_{datevshot}_cat.h5"):
+                        print(f"[{datevshot}] ELiXer already done.")
 
                     else: #if os.path.exists("elixer.slurm"):
                         if  os.path.exists("elixer.slurm") and os.path.exists("elixer.run"):
@@ -4473,6 +4474,9 @@ def mp_rf1_worker(out_list,cfg,set_idx,indicies,multis, ras, decs):
         grid_n = 3 #n x n so 3 = a 3x3 grid
         grid_step = 0.5 #grid step size
 
+        print(f"[{cfg.datevshot}] *** test *** set grid_step and grid_nto 0.0 1")
+        grid_n = 1 #n x n so 3 = a 3x3 grid
+        grid_step = 0.0 #grid step size
 
         #if cfg.numexp < 3 or cfg.dither_configuration == 0:
         #    grid_n = 13
@@ -4575,6 +4579,10 @@ def rdet_rf1(cfg):
 
         grid_n = 3  # n x n so 3 = a 3x3 grid
         grid_step = 0.5  # grid step size
+
+        print(f"[{cfg.datevshot}] *** test *** set grid_step and grid_nto 0.0 1")
+        grid_n = 1 #n x n so 3 = a 3x3 grid
+        grid_step = 0.0 #grid step size
 
         # if cfg.numexp < 3 or cfg.dither_configuration == 0:
         #     grid_n = 13
@@ -5716,9 +5724,7 @@ def diagnose(cfg):
         name = f"{cfg.datevshot}_line_sourcecat.tab"
         line_tab = Table.read(name,format="ascii")
 
-
-
-        #todo: looks like MW dust correction is needed here !!!
+        #looks like MW dust correction is needed here !!!
         #it may be sufficient just use the corretion for the shot? or should we use each one individually?
         ra = None
         dec = None
@@ -6150,6 +6156,7 @@ def prep_elixer(cfg):
             line_dets = list(tab['detectid'][sel])
             line_ct = len(line_dets)
             np.savetxt(os.path.join(elixdir, "line.dets"), line_dets, fmt="%d")
+            print(f"[{cfg.datevshot}] Wrote {len(line_dets)} emission line detections for ELiXer to examine.")
             del tab
 
         make_conts = True
@@ -6164,6 +6171,7 @@ def prep_elixer(cfg):
             cont_dets = list(tab['detectid'][sel])
             cont_ct = len(cont_dets)
             np.savetxt(os.path.join(elixdir, "cont.dets"), cont_dets, fmt="%d")
+            print(f"[{cfg.datevshot}] Wrote {len(cont_dets)} continuum detections for ELiXer to examine.")
             del tab
 
 
@@ -6644,7 +6652,10 @@ if s04_make_shot and not dtprog["s04_make_shot"]:
     if s04b_rfft and not dtprog["s04b_rfft"]:
         print(f"[{cfg.datevshot}] Running rfft (this may take a while) ...")
         if run_rfft(cfg) != 0:
-            Quit(cfg, -1, "FATAL. rfft fail. One or more expected outputs failed.")
+            if cfg.avg_sky >= FAIL_AVG_SKY:
+                Quit(cfg,-1,f"[{cfg.datevshot}] Average Sky is catastrophically large and/or unable to be fit: {cfg.avg_sky:0.1f}.")
+            else:
+                Quit(cfg, -1, "FATAL. rfft fail. One or more expected outputs failed.")
         else:
             progress_update(cfg,dtprog, "s04b_rfft")
     else:
@@ -6811,7 +6822,7 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
             if line_tab is not None:
                 tname = f"{cfg.datevshot}_line_sourcecat.tab"
                 line_tab.write(tname, format="ascii", overwrite=True)
-                print(f"Initial lines source table: {os.getcwd()}/{tname}")
+                print(f"Initial lines source table, {len(line_tab)} rows: {os.getcwd()}/{tname}")
 
                 fof_3d_lines_tab = make_3d_friend_table_for_shot(line_tab, dsky_3D=6.0, dwave=4.0)
                 if fof_3d_lines_tab is not None:
@@ -6864,7 +6875,7 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
                         # line_tab.write(tname, format="fits", overwrite=True)
                         tname = f"{cfg.datevshot}_line_sourcecat.tab"
                         line_tab.write(tname, format="ascii", overwrite=True)
-                        print(f"Updated lines source table: {os.getcwd()}/{tname}")
+                        print(f"Updated lines source table, {len(line_tab)} rows: {os.getcwd()}/{tname}")
 
                         #esel = np.array(line_tab['sel_det'] == True)
                         #np.savetxt('elixer_line.dets',line_tab['detectid'][esel],fmt="%d")
@@ -6891,7 +6902,7 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
             if cont_tab is not None:
                 tname = f"{cfg.datevshot}_cont_sourcecat.tab"
                 cont_tab.write(tname, format="ascii", overwrite=True)
-                print(f"[{cfg.datevshot}] Initial continuum source table: {os.getcwd()}/{tname}")
+                print(f"[{cfg.datevshot}] Initial continuum source table, {len(cont_tab)} rows: {os.getcwd()}/{tname}")
 
                 fof_3d_cont_tab = make_3d_friend_table_for_shot(cont_tab, dsky_3D=6.0, dwave=4.0)
                 if fof_3d_cont_tab is not None:
@@ -6943,7 +6954,7 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
                         # cont_tab.write(tname, format="fits", overwrite=True)
                         tname = f"{cfg.datevshot}_cont_sourcecat.tab"
                         cont_tab.write(tname, format="ascii", overwrite=True)
-                        print(f"[{cfg.datevshot}] Updated continuum source table: {os.getcwd()}/{tname}")
+                        print(f"[{cfg.datevshot}] Updated continuum source table, {len(cont_tab)} rows: {os.getcwd()}/{tname}")
                         #lastly sub select based on some minimum contflux ??
 
                         #now done elsewhere
