@@ -25,6 +25,7 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # 1.0.4 fix bug with swapping between GAIA, SDSS, PanStarrs on failure ; fix bug with tarfile path
 # 1.0.5 add dust correction at 4540AA to summary.txt
 # 1.0.6 add --linedet_filter options
+# 1.0.7 add normed, observed EW filter for bright objects
 
 __version__ = '1.0.6'
 
@@ -6801,6 +6802,17 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
             line_tab = Table(line_h5.root.Detections.read())
             line_h5.close()
 
+            try: #bright continuum, weak (false) line cut (linewidth is sigma so need fwhm
+                original_settings = np.geterr()
+                np.seterr(divide='ignore', invalid='ignore')
+                norm_obs_ew = line_tab['flux'] / line_tab['continuum'] / (2.355*line_tab['linewidth'])
+                norm_obs_ew[np.isnan(norm_obs_ew)] = 1.0
+                norm_obs_ew[np.isinf(norm_obs_ew)] = 1.0
+                np.seterr(**original_settings)
+            except:
+                print(f"[{cfg.datevshot}] Exception computing normed Obs EW. {traceback.format_exc()}")
+                norm_obs_ew = None
+
             #subselect "nominal" good
             if cfg.linedet_filter == 0:
                 print(f"[{cfg.datevshot}]  Standard extra restriction on line detections.")
@@ -6810,12 +6822,20 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
                 # this is a bit more liberal than standard HETDEX_API (1.6 and 14, I think)
                 esel = esel & np.array(line_tab['linewidth'] >= 1.5) & np.array(line_tab['linewidth'] <= 16)
                 esel = esel & np.array(line_tab['chi2fib'] <= 4.5)  # fairly restrictive, this is from .mc file column #19
+               # esel = esel &
             else: #if cfg.linedet_filter == 1 or cfg.linedet_filter == 2:
                 print(f"[{cfg.datevshot}]  Limited extra restriction on line detections.")
                 esel = np.full(len(line_tab),True)
                 esel = np.array(line_tab['linewidth'] >= 1.5) #just the lower limit
                 esel = esel & np.array(line_tab['chi2fib'] <= 4.5)
 
+            if norm_obs_ew is not None:
+                try:
+                    reject_obs_ew = np.array(norm_obs_ew < 0.5) * np.array(line_tab['continuum'] > 0.35)
+                    esel = esel * ~reject_obs_ew
+                    print(f"[{cfg.datevshot}] Removing {np.count_nonzero(reject_obs_ew)} / {len(esel)} line detections for out of range normed Obs EW.")
+                except:
+                    print(f"[{cfg.datevshot}] Exception applying normed Obs EW. {traceback.format_exc()}")
 
             line_tab = line_tab[esel]
 
