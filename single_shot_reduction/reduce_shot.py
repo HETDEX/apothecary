@@ -869,7 +869,11 @@ def run_prep_compress(cfg,max_simultaneous=3):
         try:
             datevshot = os.path.basename(cpath).replace("sci","")
 
-            cmd = f"python ssr_hdf5.py --compression 2"
+            if shutil.which("ssr_hdf5"):
+                cmd = f"ssr_hdf5 --compression 2"
+            else:
+                cmd = f"python ssr_hdf5.py --compression 2"
+
             if bg >= 0:
                 cmd += f" --bg {bg}"
 
