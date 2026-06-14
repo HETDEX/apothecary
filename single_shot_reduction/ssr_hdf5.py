@@ -2068,8 +2068,11 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 new_row['image_depth_mag'] = row['image_depth_mag'].astype(HalfFloat)
                 new_row['pixel_scale'] = row['pixel_scale'].astype(StdFloat)
                 new_row['radius'] = row['radius'].astype(StdFloat)
-                new_row['mag'] = row['mag'].astype(HalfFloat)
-                new_row['mag_err'] = row['mag_err'].astype(HalfFloat)
+                #new_row['mag'] = row['mag'].astype(HalfFloat)
+                new_row['mag'] = np.clip(row['mag'], a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
+                #new_row['mag_err'] = row['mag_err'].astype(HalfFloat)
+                #sometimes the mag error goes nuts, need to clip it
+                new_row['mag_err'] = np.clip(row['mag_err'], a_min=-0, a_max=clip_float16).astype(StdFloat)
                 try:
                     new_row['mag_dered'] = row['mag_dered'].astype(HalfFloat)
                 except:
@@ -2116,8 +2119,10 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 new_row['pixel_scale'] = row['pixel_scale'].astype(StdFloat)
                 new_row['selected'] = row['selected']
                 new_row['radius'] = row['radius'].astype(StdFloat)
-                new_row['mag'] = row['mag'].astype(HalfFloat)
-                new_row['mag_err'] = row['mag_err'].astype(HalfFloat)
+                #new_row['mag'] = row['mag'].astype(HalfFloat)
+                new_row['mag'] = np.clip(row['mag'], a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
+                #new_row['mag_err'] = row['mag_err'].astype(HalfFloat)
+                new_row['mag_err'] = np.clip(row['mag_err'], a_min=-0, a_max=clip_float16).astype(StdFloat)
                 try:
                     new_row['mag_dered'] = row['mag_dered'].astype(HalfFloat)
                 except:
@@ -2162,8 +2167,10 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 new_row['major'] = row['major'].astype(StdFloat)
                 new_row['minor'] = row['minor'].astype(StdFloat)
                 new_row['theta'] = row['theta'].astype(StdFloat)
-                new_row['mag'] = row['mag'].astype(HalfFloat)
-                new_row['mag_err'] = row['mag_err'].astype(HalfFloat)
+                #new_row['mag'] = row['mag'].astype(HalfFloat)
+                new_row['mag'] = np.clip(row['mag'], a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
+                #new_row['mag_err'] = row['mag_err'].astype(HalfFloat)
+                new_row['mag_err'] = np.clip(row['mag_err'], a_min=-0, a_max=clip_float16).astype(StdFloat)
                 try:
                     new_row['mag_dered'] = row['mag_dered'].astype(HalfFloat)
                 except:
@@ -2227,8 +2234,10 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 new_row['flux'] = row['flux']
                 new_row['flux_err'] = row['flux_err']
 
-                new_row['mag'] = row['mag'].astype(HalfFloat)
-                new_row['mag_err'] = row['mag_err'].astype(HalfFloat)
+                #new_row['mag'] = row['mag'].astype(HalfFloat)
+                new_row['mag'] = np.clip(row['mag'], a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
+                #new_row['mag_err'] = row['mag_err'].astype(HalfFloat)
+                new_row['mag_err'] = np.clip(row['mag_err'], a_min=-0, a_max=clip_float16).astype(StdFloat)
                 new_row['eqw_rest_lya'] = np.clip(row['eqw_rest_lya'], a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
                 new_row['eqw_rest_lya_err'] = np.clip(row['eqw_rest_lya_err'], a_min=-1 * clip_float16, a_max=clip_float16).astype(StdFloat)
                 new_row['plae'] = row['plae'].astype(StdFloat)
@@ -2410,7 +2419,13 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
                     did = did[:-4] #strip off the _nei
                 did = np.int64(did)
 
-                idx = dtb.get_where_list("detectid==did")[0]
+                try:
+                    idx = dtb.get_where_list("detectid==did")[0]
+                except:
+                    print(f"[{datevshot}] Error in imoprt_images_erray(). Could not locate index for detectid = {did}."
+                          f"Cannot update Detecttions table entry. None found.")
+                    continue
+
                 row = dtb.read_where("detectid==did")  # [0]
                 if nei:
                     row[0]['h5_neighbor_id'] = d1
