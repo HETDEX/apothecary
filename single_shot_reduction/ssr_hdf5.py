@@ -24,8 +24,9 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 # 0.1.6 add "avg_sky" to Shot table (based on *amp.dat files; matching to collapsed images)
 # 0.1.7 add DiagnoseClassifications table
 # 0.1.8 add dust_corr_4540 to VIRUSSHOT (Shot) table
+# 0.1.9 add NeighborID table
 
-__version__ = '0.1.8'
+__version__ = '0.1.9'
 
 
 import numpy as np
@@ -1026,6 +1027,13 @@ class TP_All(tables.IsDescription):
     c2 = tables.Int32Col(pos=2)
     c3 = tables.Int32Col(pos=3)
     c4 = tables.Float32Col(pos=4)
+
+
+class NeighborID(tables.IsDescription):
+    # placed under "elixer_neighbors" group, just a list of detectIDs and the detectIDs of its neighbors
+    # can be 0 rows (if no neighbors) or many rows if the detectid has many neighbors
+    detectid = tables.Int64Col(pos=0)
+    neighborid = tables.Int64Col(pos=1)
 
 def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
     """
@@ -2315,7 +2323,7 @@ def get_max_image(image_path,datevshot="???"):
 
 
 
-def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_data"):
+def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_data",add_neighbor_table=False):
     """
 
     :param shot_h5fn: new ssr shot h5 path and filename
@@ -2357,6 +2365,12 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
             except:
                 img_group = h5.root.elixer_reports
 
+            if add_neighbor_table:
+                print(f"[{datevshot}] Adding NeighborID table")
+                ntb = h5.create_table(img_group, "NeighborID", NeighborID, 'NeighborIDs')
+            else:
+                ntb = None
+
             img = Image.open(image_fns[0])
             img_dtype = np.array(img).dtype
 
@@ -2396,9 +2410,32 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
             print(f"[{datevshot}] Importing {total_images} images ... ",flush=True)
             for img_path in tqdm(image_fns,disable=not SHOW_TQDM):
                 img = Image.open(img_path)
+                neighbor_list = []
                 # Optional: Resize images to a consistent size if necessary
                 # img = img.resize((new_width, new_height))
                 img_as_array = np.array(img)
+
+                if 'Neighbors' in img.info.keys():
+                    neighbor_list = img.info['Neighbors']
+                    if len(neighbor_list) > 0 and ntb is not None:
+                        neighbor_list = neighbor_list.split(",")
+                        #print(f"*** Neighbors: {len(neighbor_list)} found: {neighbor_list}")
+                        try:
+                            detid = np.int64(os.path.basename(img_path).split('_nei.png')[0])
+                            for nei_id in neighbor_list:
+                                new_row = ntb.row
+                                new_row['detectid'] = detid
+                                new_row['neighborid'] = np.int64(nei_id)
+                                new_row.append()
+                        except:
+                            print(f"[{datevshot}] Exception! Cannot import neighbors for {img_path}; {traceback.format_exc()}")
+
+                        ntb.flush()
+                    #else:
+                        #print("*** Neighbors: None found")
+                        #todo: something with the list
+                        #print("*** Neighbors:",np.shape(neighbor_list),len(neighbor_list), neighbor_list)
+
                 d1 = img_as_array.shape[0]
                 i = list(unique_d1).index(d1)
                 # if img_as_array.shape[0] < max_shape[0]:
@@ -2437,6 +2474,8 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
                 dtb.modify_rows(start=idx, stop=idx + 1, step=1, rows=row)
 
             dtb.flush()
+            if ntb is not None:
+                ntb.flush()
 
             print(f"[{datevshot}] Stored {total_images} images in {shot_h5fn}.")
 
@@ -2458,8 +2497,9 @@ def get_image_dict(image_path,datevshot="???"):
     img_dict = {}
 
     try:
-        print(f"[{datevshot}] Checking image sizes ...",flush=True)
+        print(f"[{datevshot}] Checking image sizes for {image_path}...",flush=True)
         image_fns = sorted(glob.glob(image_path))
+        print(f"[{datevshot}] Checking image sizes for {len(image_fns)} matching image names ...", flush=True)
         for img_path in tqdm(image_fns,disable=not SHOW_TQDM):
             x1,x2,x3  = np.array(Image.open(img_path)).shape
 
@@ -2778,8 +2818,8 @@ new_h5_fn = build_ssr_shot_h5(shot_h5_path, elixer_fn=elixer_h5_path)
 if images_path is not None and not FATAL_EXIT and new_h5_fn is not None:
     #print("Skipping images import")
     #using the earray and growing
-    import_images_earray(new_h5_fn,os.path.join(images_path,"*[0-9].png"),"elixer_reports")
-    import_images_earray(new_h5_fn,os.path.join(images_path,"*_nei.png"),"elixer_neighbors")
+    import_images_earray(new_h5_fn,os.path.join(images_path,"*[0-9].png"),"elixer_reports",add_neighbor_table=False)
+    import_images_earray(new_h5_fn,os.path.join(images_path,"*_nei.png"),"elixer_neighbors",add_neighbor_table=True)
 
     #pre-allocating with carray
     #import_images_carray(new_h5_fn,os.path.join(images_path,"*[0-9].png"),"elixer_reports")
