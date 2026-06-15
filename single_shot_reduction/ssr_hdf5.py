@@ -2417,24 +2417,30 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
 
                 if 'Neighbors' in img.info.keys():
                     neighbor_list = img.info['Neighbors']
+
+
                     if len(neighbor_list) > 0 and ntb is not None:
-                        neighbor_list = neighbor_list.split(",")
-                        #print(f"*** Neighbors: {len(neighbor_list)} found: {neighbor_list}")
                         try:
+                            neighbor_list = [np.int64(n) for n in neighbor_list.split(",")]
                             detid = np.int64(os.path.basename(img_path).split('_nei.png')[0])
+
+                            if detid in neighbor_list:
+                                try:
+                                    neighbor_list.remove(detid)
+                                except:
+                                    pass
+
+
                             for nei_id in neighbor_list:
                                 new_row = ntb.row
                                 new_row['detectid'] = detid
-                                new_row['neighborid'] = np.int64(nei_id)
+                                new_row['neighborid'] = nei_id
                                 new_row.append()
                         except:
                             print(f"[{datevshot}] Exception! Cannot import neighbors for {img_path}; {traceback.format_exc()}")
 
                         ntb.flush()
-                    #else:
-                        #print("*** Neighbors: None found")
-                        #todo: something with the list
-                        #print("*** Neighbors:",np.shape(neighbor_list),len(neighbor_list), neighbor_list)
+
 
                 d1 = img_as_array.shape[0]
                 i = list(unique_d1).index(d1)
