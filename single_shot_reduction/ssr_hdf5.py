@@ -25,8 +25,9 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 # 0.1.7 add DiagnoseClassifications table
 # 0.1.8 add dust_corr_4540 to VIRUSSHOT (Shot) table
 # 0.1.9 add NeighborID table
+# 0.1.10 add healpix IDs to shot table and Detections (already in Fibers)
 
-__version__ = '0.1.9'
+__version__ = '0.1.10'
 
 
 import numpy as np
@@ -44,6 +45,8 @@ import time
 import astropy.units as u
 from astropy.coordinates import SkyCoord
 from hetdex_api.extinction import deredden_spectra
+import healpy as hp
+#from elixer import utilities as utils
 
 try:
     from filelock import FileLock
@@ -307,27 +310,27 @@ class Detections(tables.IsDescription):
 
     ra = tables.Float32Col(dflt=UNSET_FLOAT,pos=7)
     dec = tables.Float32Col(dflt=UNSET_FLOAT,pos=8)
-    wavelength_obs = tables.Float32Col(dflt=UNSET_FLOAT,pos=9)
-    wavelength_obs_err = tables.Float32Col(dflt=UNSET_FLOAT,pos=10)
+    healpix = tables.Int64Col(dflt=-999,pos=9) #added 0.1.10
+
+    wavelength_obs = tables.Float32Col(dflt=UNSET_FLOAT,pos=10)
+    wavelength_obs_err = tables.Float32Col(dflt=UNSET_FLOAT,pos=11)
     apcor_4500 = tables.Float32Col(dflt=UNSET_FLOAT)
 
-    z_best = tables.Float32Col(dflt=-1.0,pos=11)
-    z_best_pz = tables.Float32Col(dflt=0.0,pos=12)
+    z_best = tables.Float32Col(dflt=-1.0,pos=12)
+    z_best_pz = tables.Float32Col(dflt=0.0,pos=13)
 
 
-    z_best_plya_thresh = tables.Float32Col(dflt=-1.0, pos=13)
-    z_best_2 = tables.Float32Col(dflt=-1.0, pos=14)
-    z_best_pz_2 = tables.Float32Col(dflt=0.0, pos=15)
-    z_best_plya_thresh_2 = tables.Float32Col(dflt=-1.0, pos=16)
-    z_best_3 = tables.Float32Col(dflt=-1.0, pos=17)
-    z_best_pz_3 = tables.Float32Col(dflt=0.0, pos=18)
-    z_best_plya_thresh_3 = tables.Float32Col(dflt=-1.0, pos=19)
+    z_best_plya_thresh = tables.Float32Col(dflt=-1.0, pos=14)
+    z_best_2 = tables.Float32Col(dflt=-1.0, pos=15)
+    z_best_pz_2 = tables.Float32Col(dflt=0.0, pos=16)
+    z_best_plya_thresh_2 = tables.Float32Col(dflt=-1.0, pos=17)
+    z_best_3 = tables.Float32Col(dflt=-1.0, pos=18)
+    z_best_pz_3 = tables.Float32Col(dflt=0.0, pos=19)
+    z_best_plya_thresh_3 = tables.Float32Col(dflt=-1.0, pos=20)
 
-
-    flags = tables.Int32Col(dflt=0,pos=20)
-    review = tables.Int8Col(dflt=0,pos=21)
-    cluster_parent = tables.Int64Col(dflt=0,pos=22)
-
+    flags = tables.Int32Col(dflt=0,pos=21)
+    review = tables.Int8Col(dflt=0,pos=22)
+    cluster_parent = tables.Int64Col(dflt=0,pos=23)
 
     flux_line = tables.Float32Col(dflt=UNSET_FLOAT) #actual flux not flux density
     flux_line_err = tables.Float32Col(dflt=UNSET_FLOAT)
@@ -621,14 +624,17 @@ class VIRUSShot(tables.IsDescription): #Shot table
     cloned from HETDEX_API create_shot_hdf5.py
     """
     shotid = tables.Int64Col(pos=0)
+    field = tables.StringCol((12), pos=1)
+    objid = tables.StringCol((18), pos=2)
+
     date = tables.Int32Col(pos=3)
     obsid = tables.Int32Col(pos=4)
-    objid = tables.StringCol((18), pos=2)
-    field = tables.StringCol((12), pos=1)
+
     ra = tables.Float64Col(pos=5)
     dec = tables.Float64Col(pos=6)
-    pa = tables.Float64Col(pos=7)
-    n_ifu = tables.Int32Col(pos=8)
+    healpix = tables.Int64Col(dflt=-999,pos=7)  # added 0.1.10
+    pa = tables.Float64Col(pos=8)
+    n_ifu = tables.Int32Col(pos=9)
     datevobs = tables.StringCol((12))
     trajcra = tables.Float32Col()
     trajcdec = tables.Float32Col()
@@ -643,12 +649,12 @@ class VIRUSShot(tables.IsDescription): #Shot table
     exptime = tables.Float32Col((3))
     darktime = tables.Float32Col((3))
     mjd = tables.Float32Col((3))
-    fwhm_virus = tables.Float32Col(pos=9)
-    fwhm_virus_err = tables.Float32Col(pos=10)
+    fwhm_virus = tables.Float32Col(pos=10)
+    fwhm_virus_err = tables.Float32Col(pos=11)
+    response_4540 = tables.Float32Col(pos=12)  # normalized for 360s
     nstars_fit_fwhm = tables.Int32Col()
     # relflux_guider = tb.Float32Col((3),pos=13)
-    relflux_virus = tables.Float32Col((3), pos=14)
-    response_4540 = tables.Float32Col(pos=11)  # normalized for 360s
+    relflux_virus = tables.Float32Col((3), pos=13)
     xditherpos = tables.Float32Col((3))
     yditherpos = tables.Float32Col((3))
     xoffset = tables.Float32Col((3))
@@ -683,7 +689,7 @@ class VIRUSFiber16(tables.IsDescription): #uses Float16 where possibly
 
     fibnum = tables.Int8Col(pos=4) # only runs 1 to 112
     fibidx = tables.Int8Col(pos=5)  # this the index on the amp (e.g. 0 to 111) #really redundant with fibnum-1
-    healpix = tables.Int64Col(pos=6) # from VIRUSFiberIndex
+    healpix = tables.Int64Col(dflt=-999,pos=6) # from VIRUSFiberIndex
 
 
     ifux = tables.Float32Col()
@@ -751,7 +757,7 @@ class VIRUSFiber32(tables.IsDescription): #same as VIRUSFiber but uses Float32 i
 
         fibnum = tables.Int8Col(pos=4)  # only runs 1 to 112
         fibidx = tables.Int8Col(pos=5)  # this the index on the amp (e.g. 0 to 111) #really redundant with fibnum-1
-        healpix = tables.Int64Col(pos=6)  # from VIRUSFiberIndex
+        healpix = tables.Int64Col(dflt=-999,pos=6)  # from VIRUSFiberIndex
 
         ifux = tables.Float32Col()
         ifuy = tables.Float32Col()
@@ -905,7 +911,7 @@ class VIRUSFiberIndexWithFlags(tables.IsDescription):
     ra = tables.Float32Col(pos=1) #redundant with Fibers table
     dec = tables.Float32Col(pos=2) #redundant with Fibers table
     fiber_id = tables.StringCol((38),pos=3)
-    healpix = tables.Int64Col(pos=4)
+    healpix = tables.Int64Col(dflt=-999,pos=4)
 
     #do we need these? maybe for speedy selection
     amp = tables.StringCol(2,pos=5) #redundant with Fibers table
@@ -1035,6 +1041,27 @@ class NeighborID(tables.IsDescription):
     detectid = tables.Int64Col(pos=0)
     neighborid = tables.Int64Col(pos=1)
 
+def get_healpix_id(ra,dec,Nside=32768):
+    """
+    return single integer, healpix ID, that covers this ra, dec
+
+    separations vary, but maximum is 6.7"
+    (hp.max_pixrad(32768, degrees=True) * 3600) == 6.7288)
+
+    :param ra: degrees (float)
+    :param dec: degrees (float)
+    :param Nside: default 2**15 to match HETDEX_API
+    :return: single integer, healpix ID
+    """
+
+    try:
+        hp_id = None
+        hp_id = hp.ang2pix(Nside, ra, dec, lonlat=True)
+    except:
+        log.info("Exception! get_healpix_id", exc_info=True)
+
+    return hp_id
+
 def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
     """
     combine and trim the original <shot.h5> and <elixer.h5> files
@@ -1136,18 +1163,32 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             try:
                 ra = row['ra']
                 dec = row['dec']
+
                 #get it from a file?
                 if ra > -999:
-                    coord = SkyCoord(ra=ra * u.deg, dec=dec * u.deg)
-                    dust_corr_4540 = deredden_spectra([4540.], coord)[0]
+
+                    try:
+                        coord = SkyCoord(ra=ra * u.deg, dec=dec * u.deg)
+                        dust_corr_4540 = deredden_spectra([4540.], coord)[0]
+                    except:
+                        dust_corr_4540 - 999.9
+
+                    try:
+                        healpixid = get_healpix_id(ra,dec)
+                    except:
+                        healpixid = -999
                 else:
                     dust_corr_4540 - 999.9
+                    healpixid = -999
 
                 new_row['dust_corr_4540'] = dust_corr_4540
+                new_row['healpix'] = healpixid
                 #print(f"**** temp log. dust_corr_4540 = {dust_corr_4540}")
             except:
                 new_row['dust_corr_4540'] = -999.9
+                new_row['healpix'] = -999
                 #print(f"**** temp log. Failed to get dust_corr_4540. Exception.",traceback.format_exc())
+
 
             new_row.append()
 
@@ -1930,8 +1971,18 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                                 new_row[col] = -1.0
                             elif col == "p_cnn_model":
                                 new_row[col] = ""
+                            elif col == "healpix":
+                                new_row[col] = -999
                         except:
                             pass
+
+                #try to add healpix
+                try:
+                    if new_row["healpix"] == -999 or new_row["healpix"] is None:
+                        new_row["healpix"] = get_healpix_id(new_row["ra"],new_row["dec"])
+                except:
+                    new_row["healpix"] = -999
+
                 new_row.append()
 
             fileh.root.Detections.flush()
@@ -1943,8 +1994,14 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             except:
                 log.debug(f"[{datevshot}] Index fail on Detections table", exc_info=True)
 
-            fileh.root.Detections.flush()
+            try:
+                #NOTE: this index is NOT unique (there can be -999 AND some close detections or duplicate
+                # objects, but different emission lines would have the same healpix ID)
+                fileh.root.Detections.cols.healpix.create_csindex()
+            except:
+                log.debug(f"[{datevshot}] Index fail on Detections table (healpix)", exc_info=True)
 
+            fileh.root.Detections.flush()
 
 
             ###########################################################################
@@ -2355,7 +2412,9 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
 
 
         with tables.open_file(shot_h5fn,mode="r+") as h5:  #so will auto close regardless of exit
+            #print(f"*** DEBUG *** opening {shot_h5fn}")
             dtb = h5.root.Detections
+            #print(f"*** DEBUG *** Detections Table:\n{dtb.colnames}")
 
             #image_fns = sorted(glob.glob(image_path)) #instead use order from img_dict above
 
@@ -2409,75 +2468,92 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
             total_images = len(image_fns)
             print(f"[{datevshot}] Importing {total_images} images ... ",flush=True)
             for img_path in tqdm(image_fns,disable=not SHOW_TQDM):
-                img = Image.open(img_path)
-                neighbor_list = []
-                # Optional: Resize images to a consistent size if necessary
-                # img = img.resize((new_width, new_height))
-                img_as_array = np.array(img)
-
-                if 'Neighbors' in img.info.keys():
-                    neighbor_list = img.info['Neighbors']
-
-
-                    if len(neighbor_list) > 0 and ntb is not None:
-                        try:
-                            neighbor_list = [np.int64(n) for n in neighbor_list.split(",")]
-                            detid = np.int64(os.path.basename(img_path).split('_nei.png')[0])
-
-                            if detid in neighbor_list:
-                                try:
-                                    neighbor_list.remove(detid)
-                                except:
-                                    pass
-
-
-                            for nei_id in neighbor_list:
-                                new_row = ntb.row
-                                new_row['detectid'] = detid
-                                new_row['neighborid'] = nei_id
-                                new_row.append()
-                        except:
-                            print(f"[{datevshot}] Exception! Cannot import neighbors for {img_path}; {traceback.format_exc()}")
-
-                        ntb.flush()
-
-
-                d1 = img_as_array.shape[0]
-                i = list(unique_d1).index(d1)
-                # if img_as_array.shape[0] < max_shape[0]:
-                #     print(f"Resizing {os.path.basename(img_path)} from {img_as_array.shape} to {max_shape}")
-                #     img_as_array.resize(max_shape)
-
-
-                #debug:
-                #print(i,d1,img_as_array.shape,all_ea[i].name,all_ea[i]._v_chunkshape,img_path)
-
-                all_ea[i].append([img_as_array])
-
-                #now update Detections
-                did = Path(img_path).stem
-                nei = False
-                if did[-4:]=="_nei":
-                    nei = True
-                    did = did[:-4] #strip off the _nei
-                did = np.int64(did)
-
                 try:
-                    idx = dtb.get_where_list("detectid==did")[0]
-                except:
-                    print(f"[{datevshot}] Error in imoprt_images_erray(). Could not locate index for detectid = {did}."
-                          f"Cannot update Detecttions table entry. None found.")
-                    continue
+                    img = Image.open(img_path)
+                    neighbor_list = []
+                    # Optional: Resize images to a consistent size if necessary
+                    # img = img.resize((new_width, new_height))
+                    img_as_array = np.array(img)
 
-                row = dtb.read_where("detectid==did")  # [0]
-                if nei:
-                    row[0]['h5_neighbor_id'] = d1
-                    row[0]['h5_neighbor_idx'] = all_ea_idx[i]
-                else:
-                    row[0]['h5_report_id'] = d1
-                    row[0]['h5_report_idx'] = all_ea_idx[i]
-                all_ea_idx[i] += 1
-                dtb.modify_rows(start=idx, stop=idx + 1, step=1, rows=row)
+                    if 'Neighbors' in img.info.keys():
+                        neighbor_list = img.info['Neighbors']
+
+
+                        if len(neighbor_list) > 0 and ntb is not None:
+                            try:
+                                neighbor_list = [np.int64(n) for n in neighbor_list.split(",")]
+                                detid = np.int64(os.path.basename(img_path).split('_nei.png')[0])
+
+                                if detid in neighbor_list:
+                                    try:
+                                        neighbor_list.remove(detid)
+                                    except:
+                                        pass
+
+
+                                for nei_id in neighbor_list:
+                                    new_row = ntb.row
+                                    new_row['detectid'] = detid
+                                    new_row['neighborid'] = nei_id
+                                    new_row.append()
+                            except:
+                                print(f"[{datevshot}] Exception! Cannot import neighbors for {img_path}; {traceback.format_exc()}")
+
+                            ntb.flush()
+
+
+                    d1 = img_as_array.shape[0]
+                    i = list(unique_d1).index(d1)
+                    # if img_as_array.shape[0] < max_shape[0]:
+                    #     print(f"Resizing {os.path.basename(img_path)} from {img_as_array.shape} to {max_shape}")
+                    #     img_as_array.resize(max_shape)
+
+
+                    #debug:
+                    #print(i,d1,img_as_array.shape,all_ea[i].name,all_ea[i]._v_chunkshape,img_path)
+
+                    all_ea[i].append([img_as_array])
+
+                    #now update Detections
+                    did = Path(img_path).stem
+                    nei = False
+                    if did[-4:]=="_nei":
+                        nei = True
+                        did = did[:-4] #strip off the _nei
+                    did = np.int64(did)
+
+                    try:
+                        idx = dtb.get_where_list("detectid==did")
+                    except:
+                        print(f"[{datevshot}] Error in imoprt_images_erray(). Could not locate index for detectid = {did}."
+                              f"Cannot update Detecttions table entry. None found.")
+                        continue
+
+                    #*SHOULD* be exactly one, but may be some weirdness ?
+                    if len(idx) != 0:
+                        print(f"[{datevshot}] Dupicate detectids: {len(idx)} for id = {did}; must skip.")
+                        continue
+                    else:
+                        idx = idx[0]
+
+                    row = dtb.read_where("detectid==did")  # [0]
+                    if nei:
+                        row[0]['h5_neighbor_id'] = d1
+                        row[0]['h5_neighbor_idx'] = all_ea_idx[i]
+                    else:
+                        row[0]['h5_report_id'] = d1
+                        row[0]['h5_report_idx'] = all_ea_idx[i]
+                    all_ea_idx[i] += 1
+
+                    #print(f"*** DEBUG *** idx: {idx}, num rows = {len(row)}, detectid = {row['detectid']}")
+                    #print(f"*** DEBUG ***\n{row}")
+
+                    try:
+                        dtb.modify_rows(start=idx, stop=idx + 1, step=1, rows=row)
+                    except:
+                        print(f"[{datevshot}] Unable to update {did}, {traceback.format_exc()}")
+                except:
+                    print(f"[{datevshot}] Unable to update {img_path}, {traceback.format_exc()}")
 
             dtb.flush()
             if ntb is not None:
