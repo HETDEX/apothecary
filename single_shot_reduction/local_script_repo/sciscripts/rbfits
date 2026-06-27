@@ -13,7 +13,14 @@ awk '{print "rbfits0 ../virus*.tar",in0,in0}' in0=${in} j2 > rj2
 chmod +x rj2
 rj2
 
-~gebhardt/bin/vred; rc=$?
+if [[ -f ${SSR_vred} ]]; then
+  vred=${SSR_vred}
+else
+  vred=~gebhardt/bin/vred
+fi
+
+#~gebhardt/bin/vred; rc=$?
+$vred; rc=$?
 #for debugging only
 #echo "$rc := vred out ::: $1, $2, $3"
 

@@ -11,4 +11,11 @@ awk '{print "rbfits0 /work/03946/hetdex/maverick/"$1"/virus/"$3".tar",$3"/"$4,in
 chmod +x rj2
 rj2
 
-~gebhardt/bin/vred
+if [[ -f ${SSR_vred} ]]; then
+  vred=${SSR_vred}
+else
+  vred=~gebhardt/bin/vred
+fi
+
+$vred
+#~gebhardt/bin/vred

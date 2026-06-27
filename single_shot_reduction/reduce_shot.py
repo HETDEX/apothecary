@@ -2446,6 +2446,20 @@ def set_fitradecsp(cfg):
         print(f"Exception in set_fitradecsp: {traceback.format_exc()}")
 
 
+def set_vred(cfg):
+    try:
+        os.environ['SSR_vred'] = f"{cfg.scriptdir}/vred"
+        print(f"[{cfg.datevshot}] Set SSR_vred to {os.getenv('SSR_vred')}")
+    except:
+        print(f"Exception in SSR_vred: {traceback.format_exc()}")
+
+def set_vred3(cfg):
+    try:
+        os.environ['SSR_vred3'] = f"{cfg.scriptdir}/vred3"
+        print(f"[{cfg.datevshot}] Set SSR_vred3 to {os.getenv('SSR_vred3')}")
+    except:
+        print(f"Exception in SSR_vred3: {traceback.format_exc()}")
+
 def get_het_raw_archive(cfg):
     """
     return best available het_raw archive
@@ -2903,6 +2917,8 @@ def initial_setup(cfg):
             cfg.scriptdir = os.path.join(ScriptRepo,"science_reductions")
 
     set_fitradecsp(cfg)
+    set_vred(cfg)
+    set_vred3(cfg)
     os.chdir(workdir)
     cfg.cwd = os.getcwd() #now under the sci<shot> directory
 
