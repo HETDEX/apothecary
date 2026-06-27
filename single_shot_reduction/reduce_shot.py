@@ -4495,7 +4495,7 @@ def mp_rf1_worker(out_list,cfg,set_idx,indicies,multis, ras, decs):
         grid_n = 3 #n x n so 3 = a 3x3 grid
         grid_step = 0.5 #grid step size
 
-        print(f"[{cfg.datevshot}] *** test *** set grid_step and grid_nto 0.0 1")
+        print(f"[{cfg.datevshot}] *** test *** set grid_step and grid_n to 0.0 1")
         grid_n = 1 #n x n so 3 = a 3x3 grid
         grid_step = 0.0 #grid step size
 
@@ -4601,7 +4601,7 @@ def rdet_rf1(cfg):
         grid_n = 3  # n x n so 3 = a 3x3 grid
         grid_step = 0.5  # grid step size
 
-        print(f"[{cfg.datevshot}] *** test *** set grid_step and grid_nto 0.0 1")
+        print(f"[{cfg.datevshot}] *** test *** set grid_step and grid_n to 0.0 1")
         grid_n = 1 #n x n so 3 = a 3x3 grid
         grid_step = 0.0 #grid step size
 
@@ -5925,7 +5925,7 @@ def prep_elixer(cfg):
             del tab
 
 
-        tasks_per_node = 40
+        tasks_per_node = 0 #use the default 40
 
         if line_ct > 500 or cont_ct > 500:
             tasks_per_node = 25 #slow it down and conserve memory
