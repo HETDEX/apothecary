@@ -4504,12 +4504,11 @@ def mp_rf1_worker(out_list,cfg,set_idx,indicies,multis, ras, decs):
     for multi, ra, dec, ix in zip(multis, ras, decs,indicies):
         print(f"[{cfg.datevshot}] (mp_rf1) : {set_idx}-{ix}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ",flush=True)  # ,end="")
 
-        grid_n = 3 #n x n so 3 = a 3x3 grid
-        grid_step = 0.5 #grid step size
-
-        print(f"[{cfg.datevshot}] *** test *** set grid_step and grid_n to 0.0 1")
-        grid_n = 1 #n x n so 3 = a 3x3 grid
-        grid_step = 0.0 #grid step size
+        #grid_n = 3 #n x n so 3 = a 3x3 grid
+        #grid_step = 0.5 #grid step size
+        #print(f"[{cfg.datevshot}] *** test *** set grid_step and grid_n to 0.0 1")
+        grid_n = 1
+        grid_step = 0.0
 
         #if cfg.numexp < 3 or cfg.dither_configuration == 0:
         #    grid_n = 13
@@ -4610,12 +4609,12 @@ def rdet_rf1(cfg):
         #print(f"[{cfg.datevshot}] line detections ***MULTITHREADED*** (rdet_rf1) ({len(ras)})")#, num_procs = {NumProcs_mp_rf1}...")
         mp_rf1(cfg,multis, ras, decs)#,num_procs=6)
 
-        grid_n = 3  # n x n so 3 = a 3x3 grid
-        grid_step = 0.5  # grid step size
-
-        print(f"[{cfg.datevshot}] *** test *** set grid_step and grid_n to 0.0 1")
-        grid_n = 1 #n x n so 3 = a 3x3 grid
-        grid_step = 0.0 #grid step size
+        #grid_n = 3  # n x n so 3 = a 3x3 grid
+        #grid_step = 0.5  # grid step size
+        #print(f"[{cfg.datevshot}] *** test *** set grid_step and grid_n to 0.0 1")
+        #DD 20260627 ... we like 1 and 0, so keep that as the new default
+        grid_n = 1
+        grid_step = 0.0
 
         # if cfg.numexp < 3 or cfg.dither_configuration == 0:
         #     grid_n = 13
