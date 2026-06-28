@@ -2530,7 +2530,7 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
                         continue
 
                     #*SHOULD* be exactly one, but may be some weirdness ?
-                    if len(idx) != 0:
+                    if len(idx) != 1:
                         print(f"[{datevshot}] Dupicate detectids: {len(idx)} for id = {did}; must skip.")
                         continue
                     else:
