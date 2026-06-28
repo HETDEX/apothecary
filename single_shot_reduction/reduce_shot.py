@@ -25,9 +25,9 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # 1.0.4 fix bug with swapping between GAIA, SDSS, PanStarrs on failure ; fix bug with tarfile path
 # 1.0.5 add dust correction at 4540AA to summary.txt
 # 1.0.6 add --linedet_filter options
-# 1.0.7 add normed, observed EW filter for bright objects
+# 1.0.7 add normed, observed EW filter for bright objects, tweak memory for rf1 (fitradecsp) based on total memory available
 
-__version__ = '1.0.6'
+__version__ = '1.0.7'
 
 import numpy as np
 import sys
@@ -100,8 +100,8 @@ GuiderFWHM_ALL = True #if True and using the GUIDER FWHM, use all within the obs
                       #if False, just use the two nearest in time to the end of the observation
 
 #if we know the number of active shots, use these limits / # of active shots
-MaxTotalProcs_mp_rcal = 60 #flux calibration
-MaxTotalProcs_mp_rf1 = 40 #line detections, 4 is about right (on averaged) to avoid memory issues on lonestar6
+MaxTotalProcs_mp_rcal = 80 #flux calibration
+MaxTotalProcs_mp_rf1 = 65 #line detections, 4 is about right (on averaged) to avoid memory issues on lonestar6
 
 #10 seems to be the max for a vm-small
 MaxPerShotProcs_mp_rcal = 10 #even if more Total processes are available, limit to this for any given shot
@@ -157,6 +157,18 @@ try:
     MaxSafeActiveShots = int(ApproxBaseRAM//AssumedMemFootprint)
     print(f"*** setting MaxSafeActiveShots to {MaxSafeActiveShots}. "
           f"BaseRAM {ApproxBaseRAM:0.1f}GB, Footprint ~ {AssumedMemFootprint}GB")
+
+
+    #make RAM based adjustments ... assumption is 251.1GB available for development or normal
+    #but if vm-small, this is only 31.2
+    mem_mux = max(1.0,round(251.1 / ApproxBaseRAM)) #round to an integer, but cast as float and at least 1
+
+    MaxTotalProcs_mp_rcal = max(1,round(MaxTotalProcs_mp_rcal / mem_mux))  # flux calibration
+    MaxTotalProcs_mp_rf1 = max(1,round(MaxTotalProcs_mp_rf1 / mem_mux)) # line detections
+
+    # MaxPerShotProcs_mp_rcal = max(1,round(MaxPerShotProcs_mp_rcal / mem_mux))
+    # MaxPerShotProcs_mp_rf1 = max(1,round(MaxPerShotProcs_mp_rf1 /mem_mux))
+
 except:
     ApproxBaseRAM = -1
     MaxSafeActiveShots = 0
@@ -4531,7 +4543,7 @@ def mp_rf1(cfg,multis, ras, decs,num_procs=NumProcs_mp_rf1):
     active_shots = node_active_ct(cfg)
     if active_shots > 0:
         num_procs = int(np.floor(MaxTotalProcs_mp_rf1 / active_shots))
-        num_procs = max(1,min(num_procs, MaxPerShotProcs_mp_rf1))
+        num_procs = max(1,min(num_procs, MaxPerShotProcs_mp_rf1)) #always at least one
 
     print(f"[{cfg.datevshot}] line detections ***MULTITHREADED*** (rdet_rf1) ({len(ras)}), using num_procs = {num_procs}...")
 
