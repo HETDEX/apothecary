@@ -26,8 +26,9 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # 1.0.5 add dust correction at 4540AA to summary.txt
 # 1.0.6 add --linedet_filter options
 # 1.0.7 add normed, observed EW filter for bright objects, tweak memory for rf1 (fitradecsp) based on total memory available
+# 1.0.8 add color-coded pngs of up to 3x dithers and all 4 amps per IFU in analysis folder
 
-__version__ = '1.0.7'
+__version__ = '1.0.8'
 
 import numpy as np
 import sys
@@ -79,6 +80,7 @@ import time
 import matplotlib
 matplotlib.use('agg')
 
+from matplotlib.colors import TwoSlopeNorm
 import matplotlib.pyplot as plt
 plt.style.use('default')
 
@@ -736,7 +738,7 @@ else:
 
 #check datevshot ... can only be numeric or in datevshot format, but could be truncated
 
-print(f"Evaluating with datevshot = {cfg.datevshot}",flush=True)
+print(f"[{cfg.datevshot}] Evaluating with datevshot = {cfg.datevshot}",flush=True)
 
 ########################################################################
 # worker functions
@@ -1765,12 +1767,12 @@ def get_guider_fwhm(cfg):
             fwhm = np.loadtxt(saved_fn,dtype=float) #just one value
             if fwhm is None or np.isnan(fwhm):
                  #we will continue below and rebuild
-                print(f"Found {saved_fn}, but guider seeing FWHM is inavlid ({fwhm}). Will recompute ...")
+                print(f"[{cfg.datevshot}] Found {saved_fn}, but guider seeing FWHM is inavlid ({fwhm}). Will recompute ...")
             else:
                 fail = False
                 try:
                     if len(fwhm) == 0 or fwhm[0] <= 0:
-                        print(f"Found {saved_fn}, but guider seeing FWHM is inavlid ({fwhm}). Will recompute ...")
+                        print(f"[{cfg.datevshot}] Found {saved_fn}, but guider seeing FWHM is inavlid ({fwhm}). Will recompute ...")
                         fail = True
                 except:
                     pass
@@ -1778,11 +1780,11 @@ def get_guider_fwhm(cfg):
                 try:
                     fwhm = float(fwhm)
                 except:
-                    print(f"Found {saved_fn}, but guider seeing FWHM is inavlid ({fwhm}). Will recompute ...")
+                    print(f"[{cfg.datevshot}] Found {saved_fn}, but guider seeing FWHM is inavlid ({fwhm}). Will recompute ...")
                     fail = True
 
                 if not fail:
-                    print(f"Found {saved_fn}. Using guider seeing FWHM = {fwhm}")
+                    print(f"[{cfg.datevshot}] Found {saved_fn}. Using guider seeing FWHM = {fwhm}")
                     return fwhm
 
         exposure_times = [] #exposure times (seconds) from HDU
@@ -2890,18 +2892,18 @@ def initial_setup(cfg):
                     #         shutil.copy2(cfg.code_fn_to_copy, os.getcwd())
 
                 if os.path.exists(LocalScriptRepo): #we want to use it
-                    print("Using local repo ...")
+                    print(f"[{cfg.datevshot}] Using local repo ...")
                     cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
                 else:
                     #copy first to local script repo
-                    print("Copying to local repo ...")
+                    print(f"[{cfg.datevshot}] Copying to local repo ...")
                     shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
                                     os.path.join(os.getcwd(),LocalScriptRepo), dirs_exist_ok=True)
                     cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
 
             #lock auto releases
         else:
-            print("Using main script repo (may be remote) ...")
+            print(f"[{cfg.datevshot}] Using main script repo (may be remote) ...")
             cfg.scriptdir = os.path.join(ScriptRepo,"science_reductions")
     else:
         if LocalScriptRepo is not None:
@@ -2910,22 +2912,22 @@ def initial_setup(cfg):
             with lock:
 
                 if cfg.update_local_repo:
-                    print("Updating local repo ... (this may take 1-2 minutes)")
+                    print(f"[{cfg.datevshot}] Updating local repo ... (this may take 1-2 minutes)")
                     shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
                                     os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
                     cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
 
                 if os.path.exists(LocalScriptRepo): #we want to use it
-                    print("Using local repo ...")
+                    print(f"[{cfg.datevshot}] Using local repo ...")
                     cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
                 else:
-                    print("Fatal! --resume selected, but no script repo.")
+                    print(f"[{cfg.datevshot}] Fatal! --resume selected, but no script repo.")
                     fatal_rtn = True
             # lock auto releases
             if fatal_rtn:
                 return -1
         else:
-            print("Using main script repo (may be remote) ...")
+            print(f"[{cfg.datevshot}] Using main script repo (may be remote) ...")
             cfg.scriptdir = os.path.join(ScriptRepo,"science_reductions")
 
     set_fitradecsp(cfg)
@@ -5234,7 +5236,17 @@ def shot_analyisis(cfg):
         slotids, ifus_in_shot = zip(*sorted(zip(slotids, ifus_in_shot)))
 
         img = "clean_image"
-        cmap = "gray"
+        #cmap = "gray"
+        cmap = "Spectral" #try a diverging colormap to help extremes stand out
+        #use this to force the colormap to be centered at a value of 0
+        #-30 to -50 may be good minimum to indicate a problem,
+        # vmax can be super high for bright though, in the thousands or 10's thousands or more (65K limit)
+        # maybe symmetric  -50 to +50?
+        #-100 to +100 is not horrible, but may allow too negative before a problem
+        # I see charge traps as weak as +50 to +75 maybe?
+        #a too high negative value (say -10 or -20) can trigger too much visual junk that is not important
+        #faint continuum is in the 25 to 40 range, emission lines a few pix might hit near 50, but most are 20 to 30
+        cmap_norm = TwoSlopeNorm(vmin=-30, vcenter=0, vmax=30) #sort of typical min/max values if there is weak continuum
 
         #just assume 3 dithers ... if they do not exist, they will be blank
         #there are a few that have 4 or more exposures and we will just ignore that
@@ -5260,16 +5272,26 @@ def shot_analyisis(cfg):
                     if np.count_nonzero(sel) == 1:
                         ax.set_title(f"{amp.decode()} x1")
                         vmin, vmax = Utils.get_vrange(data[sel][0], contrast=0.25)
+                        #cmap_norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
                         if amp != b'_LU':
                             ax.set_xticks([])
-                        ax.imshow(data[sel][0], cmap=cmap, vmin=vmin, vmax=vmax)
+                        else:
+                            ax.set_xticks([0,200,400,600,800,1000])
+                        #always set yticks on 1st column
+                        ax.set_yticks([0, 200, 400, 600, 800, 1000])
+                        # !!! Must use EITHER norm or vmin, vmax ... cannot do both
+                        #ax.imshow(data[sel][0], cmap=cmap, vmin=vmin, vmax=vmax,origin="lower")
+                        ax.imshow(data[sel][0], cmap=cmap, norm=cmap_norm, origin="lower")
                     else:
                         ax.set_xticks([])
                         ax.set_yticks([])
+                        #not uncommon ... could be just a single exposure by user selection, and not exp 1
+                        #print(f"[{cfg.datevshot}] No data found for {mf_base.decode()} exp 1")
 
                 except:
                     ax.set_xticks([])
                     ax.set_yticks([])
+                    print(f"[{cfg.datevshot}] *** DEBUG ***  Exception in shot_analysis on {mf_base.decode()}", traceback.format_exc())
 
                 sel = exp == 2
                 ax = axes[ai, ei]
@@ -5279,18 +5301,30 @@ def shot_analyisis(cfg):
 
                         ax.set_title(f"{amp.decode()} x2")
                         vmin, vmax = Utils.get_vrange(data[sel][0], contrast=0.25)
+                        #cmap_norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
                         # ax.yaxis.label.set_visible(False)
-                        ax.set_yticks([])
+
                         if amp != b'_LU':
                             ax.set_xticks([])
-                        ax.imshow(data[sel][0], cmap=cmap, vmin=vmin, vmax=vmax)
+                        else:
+                            ax.set_xticks([0,200,400,600,800,1000])
+
+                        # always unset yticks on not 1st column
+                        ax.set_yticks([])
+                        # !!! Must use EITHER norm or vmin, vmax ... cannot do both
+                        #ax.imshow(data[sel][0], cmap=cmap, vmin=vmin, vmax=vmax,origin="lower")
+                        ax.imshow(data[sel][0], cmap=cmap, norm=cmap_norm, origin="lower")
                     else:
                         ax.set_xticks([])
                         ax.set_yticks([])
+                        #not uncommon ... could be just a single exposure for this observation or by user selection
+                        #print(f"[{cfg.datevshot}] No data found for {mf_base.decode()} exp 2")
 
                 except:
                     ax.set_xticks([])
                     ax.set_yticks([])
+                    print(f"[{cfg.datevshot}] *** DEBUG ***  Exception in shot_analysis on {mf_base.decode()}",
+                          traceback.format_exc())
 
                 sel = exp == 3
                 ax = axes[ai, ei]
@@ -5299,17 +5333,28 @@ def shot_analyisis(cfg):
                     if np.count_nonzero(sel) == 1:
                         ax.set_title(f"{amp.decode()} x3")
                         vmin, vmax = Utils.get_vrange(data[sel][0], contrast=0.25)
+                        #cmap_norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
                         if amp != b'_LU':
                             ax.set_xticks([])
+                        else:
+                            ax.set_xticks([0,200,400,600,800,1000])
+
+                        # always unset yticks on not 1st column
                         ax.set_yticks([])
-                        ax.imshow(data[sel][0], cmap=cmap, vmin=vmin, vmax=vmax)
+                        #!!! Must use EITHER norm or vmin, vmax ... cannot do both
+                        #ax.imshow(data[sel][0], cmap=cmap, vmin=vmin, vmax=vmax,origin="lower")
+                        ax.imshow(data[sel][0], cmap=cmap, norm=cmap_norm, origin="lower")
                     else:
                         ax.set_xticks([])
                         ax.set_yticks([])
+                        #not uncommon ... could be just a single exposure for this observation or by user selection
+                        #print(f"[{cfg.datevshot}] No data found for {mf_base.decode()} exp 3")
 
                 except:
                     ax.set_xticks([])
                     ax.set_yticks([])
+                    print(f"[{cfg.datevshot}] *** DEBUG ***  Exception in shot_analysis on {mf_base.decode()}",
+                          traceback.format_exc())
 
             plt.tight_layout()
             plt.savefig(f"i{mf_base.decode()[10:13]}_{cfg.datevshot}_{mf_base.decode()}.png", dpi=96)
@@ -6127,7 +6172,7 @@ if cfg.numexp <= 0: # and not cfg.multifits_only:
 #     NumProcs_mp_rf1 = 10
 
 if cfg.exp <= 0 and not cfg.multifits_only:
-    print(f"Working on {cfg.datevshot} with {cfg.numexp} exposure(s) ...")
+    print(f"[{cfg.datevshot}] Working on {cfg.datevshot} with {cfg.numexp} exposure(s) ...")
     if cfg.numexp == 1 or cfg.numexp == 3: #okay
         pass
     elif not cfg.multifits_only:
@@ -6138,7 +6183,7 @@ if cfg.exp <= 0 and not cfg.multifits_only:
         print(f"********************************************************************************************")
 else:
     if cfg.exp <= cfg.numexp:
-        print(f"Working on {cfg.datevshot} exposure #{cfg.exp} ...")
+        print(f"[{cfg.datevshot}] Working on {cfg.datevshot} exposure #{cfg.exp} ...")
         if int(cfg.datevshot[0:8]) < 20240800 and cfg.numexp == 3:
             try:
                 dex_dvs = np.loadtxt("/corral-repl/utexas/Hobby-Eberly-Telesco/detect/fwhm.all",dtype=str,usecols=0)
@@ -6182,9 +6227,9 @@ if not cfg.multifits_only and (cfg.numexp < 3 or not cfg.hetdex_original):
     #print(f"[{cfg.datevshot}] Checking guider for seeing FWHM (this can take a while) ...")
     cfg.guider_fwhm = get_guider_fwhm(cfg) #this also gets the exposure times
     if cfg.guider_fwhm is not None:
-        print(f"Using guider FWHM = {cfg.guider_fwhm}")
+        print(f"[{cfg.datevshot}] Using guider FWHM = {cfg.guider_fwhm}")
     else:
-        print(f"Unable to obtain guider seeing FWHM. Will measure as best can be from available data.")
+        print(f"[{cfg.datevshot}] Unable to obtain guider seeing FWHM. Will measure as best can be from available data.")
 
 if not cfg.multifits_only and (cfg.total_exp_time is None or cfg.total_exp_time == 0):
     get_exposure_times(cfg)
@@ -6249,7 +6294,7 @@ if s01_run1s and not dtprog["s01_run1s"]:
 
     progress_update(cfg,dtprog,"s01_run1s")
 else:
-    print(f"[{cfg.datevshot}] Skipping run1s")
+    print(f"[{cfg.datevshot}] Skipping s01_run1s run1s")
 
 if cfg.multifits_only:
     print(f"[{cfg.datevshot}] multi*fits files generated. "
@@ -6274,7 +6319,7 @@ if s02_vdrp and not dtprog["s02_vdrp"]:
     progress_update(cfg,dtprog, "s02_vdrp")
 
 else:
-    print(f"[{cfg.datevshot}] Skipping vdrp")
+    print(f"[{cfg.datevshot}] Skipping s02_vdrp vdrp")
 
 
 
@@ -6390,7 +6435,7 @@ if s03_fluxcal and not dtprog["s03_fluxcal"]:
 
     progress_update(cfg,dtprog,"s03_fluxcal")
 else:
-    print(f"[{cfg.datevshot}] Skipping flux calibration")
+    print(f"[{cfg.datevshot}] Skipping s03_fluxcal flux calibration")
 
 
 ###########
@@ -6408,7 +6453,7 @@ if s04_make_shot and not dtprog["s04_make_shot"]:
         else:
             progress_update(cfg,dtprog, "s04a_get_ifucens")
     else:
-        print(f"[{cfg.datevshot}] Skipping IFU centers ...")
+        print(f"[{cfg.datevshot}] Skipping s04a_get_ifucens IFU centers ...")
 
     if s04b_rfft and not dtprog["s04b_rfft"]:
         print(f"[{cfg.datevshot}] Running rfft (this may take a while) ...")
@@ -6420,7 +6465,7 @@ if s04_make_shot and not dtprog["s04_make_shot"]:
         else:
             progress_update(cfg,dtprog, "s04b_rfft")
     else:
-        print(f"[{cfg.datevshot}] Skipping rfft")
+        print(f"[{cfg.datevshot}] Skipping s04b_rfft rfft")
 
 
     if s04c_rcal_all and not dtprog["s04c_rcal_all"]:
@@ -6435,13 +6480,15 @@ if s04_make_shot and not dtprog["s04_make_shot"]:
         #else keep going
 
     else:
-        print(f"[{cfg.datevshot}] Skipping rcal_all")
+        print(f"[{cfg.datevshot}] Skipping s04c_rcal_all rcal_all")
 
     if s04d_shot_h5 and not dtprog["s04d_shot_h5"]:
         rc = build_shot_h5(cfg)
         if rc < 0:
             Quit(cfg, -1, "FATAL. Could not build shot h5 file. Cannot continue with catalog creation.")
         progress_update(cfg,dtprog, "s04d_shot_h5")
+    else:
+        print(f"[{cfg.datevshot}] Skipping s04d_shot_h5 build of shot HDF5 file.")
 
     # check stats
     if s04e_amp_stats and not dtprog["s04e_amp_stats"]:
@@ -6460,13 +6507,17 @@ if s04_make_shot and not dtprog["s04_make_shot"]:
                 print(f"[{cfg.datevshot}] Non-fatal. Could not update shot h5 file with fiber level masking. Will continue anyway with catalog creation.")
 
         progress_update(cfg,dtprog, "s04e_amp_stats")
+    else:
+        print(f"[{cfg.datevshot}] Skipping s04e_amp_stats compute and appending of per-amp diagnostic info.")
 
     #basic shot analysis (mostly images for review)
     if s04f_analysis and not dtprog["s04f_analysis"]:
         rc = shot_analyisis(cfg)
         if rc < 0:
-            print(f"[{cfg.datevshot}]Non-fatal. Could not complete basic shot analysis output.")
+            print(f"[{cfg.datevshot}] Non-fatal. Could not complete basic shot analysis output.")
         progress_update(cfg,dtprog, "s04f_analysis")
+    else:
+        print(f"[{cfg.datevshot}] Skipping s04f_analysis analysis/creation of diagnostic info.")
 
     if dtprog["s04a_get_ifucens"] and dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] and dtprog["s04e_amp_stats"]:
         progress_update(cfg,dtprog, "s04_make_shot")
@@ -6518,7 +6569,7 @@ if s05_detection and not dtprog["s05_detection"]:
 
         progress_update(cfg,dtprog, "s05b_rdet_rf1")
     else:
-        print("skipping rdet_rf1 (line detection)")
+        print(f"[{cfg.datevshot}] Skipping s05b_rdet_rf1 rdet_rf1 (line detection)")
 
     if s05c_rgetmax  and not dtprog["s05c_rgetmax"]:
         print("Running rgetmax (continuum detection) ...")
@@ -6530,7 +6581,7 @@ if s05_detection and not dtprog["s05_detection"]:
 
         progress_update(cfg,dtprog, "s05c_rgetmax")
     else:
-        print("skipping rgetmax (continuum detection)")
+        print(f"[{cfg.datevshot}] Skipping s05c_rgetmax rgetmax (continuum detection)")
 
     if s05e_detection_hdf5 and not dtprog["s05e_detection_hdf5"]:
         rc = build_detection_hdf5(cfg)
@@ -6541,7 +6592,7 @@ if s05_detection and not dtprog["s05_detection"]:
         progress_update(cfg,dtprog, "s05_detection")
 
 else:
-    print("Skipping detections")
+    print(f"[{cfg.datevshot}] Skipping detections")
 
 
 ##################################################
@@ -6553,7 +6604,7 @@ else:
 
 if s06_catalogs and not dtprog["s06_catalogs"]:
 
-    print("Catalog creation ... ")
+    print(f"[{cfg.datevshot}] Catalog creation ... ")
 
     if s06b_fof and not dtprog["s06b_fof"]:
         try:
@@ -6752,7 +6803,9 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
             print(f"[{cfg.datevshot}] Error! Could not combine continuum detections by FoF.")
             print(traceback.format_exc())
 
-    progress_update(cfg,dtprog, "s06b_fof")
+        progress_update(cfg,dtprog, "s06b_fof")
+    else:
+        print(f"[{cfg.datevshot}] Skipping s06b_fof Friends of Friends clustering.")
     #end if s06b_fof
 
     #we now have clustered lines and continuum
@@ -6776,12 +6829,16 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
             print(f"[{cfg.datevshot}] Diagnose conversion: Limited success. Non-fatal. Will continue")
 
         progress_update(cfg,dtprog, "s06c_diagnose")
+    else:
+        print(f"[{cfg.datevshot}] Skipping s06c_diagnose Diagnose.")
 
     if s06d_elixer and not dtprog["s06d_elixer"]:
 
         rc = prep_elixer(cfg)
 
         progress_update(cfg,dtprog, "s06d_elixer")
+    else:
+        print(f"[{cfg.datevshot}] Skipping s06d_elixer ELiXer prep.")
 
     #s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
     if dtprog["s06b_fof"] and dtprog["s06c_diagnose"] and dtprog["s06d_elixer"]:
