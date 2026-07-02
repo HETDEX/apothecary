@@ -27,8 +27,9 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # 1.0.6 add --linedet_filter options
 # 1.0.7 add normed, observed EW filter for bright objects, tweak memory for rf1 (fitradecsp) based on total memory available
 # 1.0.8 add color-coded pngs of up to 3x dithers and all 4 amps per IFU in analysis folder
+# 1.0.9 set color-coded pngs to run with step 01 and/or as part of more complete analysis in step 04
 
-__version__ = '1.0.8'
+__version__ = '1.0.9'
 
 import numpy as np
 import sys
@@ -146,6 +147,11 @@ hetdex_api_path = "/".join(hetdex_api_path.split("/")[0:-1])
 MAX_SAFE_AVG_SKY = 1000.0 #avg sky "background" from *amp.out (d*amp.dat) above this value is a problem
 FAIL_AVG_SKY = 9999.0 #avg sky "background" from *amp.out (d*amp.dat) above this value is a full fail
 
+DIAG_AMP_IMG_VMIN_VMAX = (-30, 30)  # fixed ranges for the IFU+amp diag images (shot_analysis() and make_amp_images())
+DIAG_AMP_IMG_DPI = 100
+
+DEFAULT_MIN_SNR_FOR_ELIXER = 4.3 #can be changed by --linedet_filter switch
+
 #since this is done outside (that is, the SLURM sets this up) it is not useful here, in this code, to know this
 # A way to deal with it here, would be to change the mutex to a sempahore and have a resource count
 #   and then throttle any use, regardless of SLURM ... e.g for a given /tmp/ only allow 1 shot to run for vm-small
@@ -178,6 +184,7 @@ except:
 
 #execute steps
 s01_run1s = True
+s01b_amp_images = True
 
 s02_vdrp = True
 do_panstarrs = False #only run PanSTARRS if true, otherwise just run the usual GAIA and SDSS
@@ -307,7 +314,7 @@ class Config:
     dither_configuration = None #-1 is bad, 0 = non-standard (maybe not dithered), 1 = standard hetdex
     linedet_filter = 0 #default, normal filtering
 
-
+    made_amp_images = False #used to indicate the diagnostic IFU+amp images were already made in this run instancee
 
 ########################################################################
 # Basic user input
@@ -1331,6 +1338,10 @@ def progress_init(cfg):
                 print("****************************")
                 cfg.resume = True
 
+            if "s01b_amp_images" not in dtprog.keys():
+                dtprog["s01b_amp_images"] = False
+
+
             if "s04f_analysis" not in dtprog.keys():
                 dtprog["s04f_analysis"] = False
 
@@ -1360,6 +1371,7 @@ def progress_init(cfg):
 
     if dtprog is None:
         dtprog = {"s01_run1s": False,
+                  "s01b_amp_images" : False,
                   "s02_vdrp": False,
                   "s03_fluxcal": False,
                   "s04_make_shot": False,
@@ -1816,8 +1828,6 @@ def get_guider_fwhm(cfg):
                 base_tarfn = os.path.join(cfg.virus_tar_path,f"{cfg.datevshot[0:8]}/virus/{virus_shot}.tar")
         else:
             base_tarfn = os.path.join(path, f"virus/{virus_shot}.tar")
-
-        #print(f"[{cfg.datevshot}] **** DEBUG **** base_tarfn = {base_tarfn}")
 
         if os.path.exists(base_tarfn):
             with tar.open(base_tarfn, "r") as tarfh:
@@ -3031,7 +3041,7 @@ def initial_setup(cfg):
             print(f"[{cfg.datevshot}] Mutex checked. Okay. Safe to local_repo.")
             # lock auto releases
 
-        print(f"Copying source code to working directory {cfg.cwd}...")
+        print(f"[{cfg.datevshot}] Copying source code to working directory {cfg.cwd}...")
         ## if ANY of this fails it is fatal
 
         #shutil.copy2(os.path.join(cfg.scriptdir, "science_reductions", "rsetups"),".") #no, this function is its equivalent
@@ -3076,7 +3086,7 @@ def initial_setup(cfg):
         if os.path.exists(os.path.join(karlfplane, f"fp{cfg.datevshot[0:8]}")):
             shutil.copy2(os.path.join(karlfplane, f"fp{cfg.datevshot[0:8]}"), os.path.join(cfg.cwd,"vdrp/fplane"))
         else:
-            print(f"{[cfg.datevshot]} !Warning! fplane file (fp{cfg.datevshot[0:8]}) not found. Using last known ({LastKnownFplane}) instead. ")
+            print(f"[{cfg.datevshot}] !Warning! fplane file (fp{cfg.datevshot[0:8]}) not found. Using last known ({LastKnownFplane}) instead. ")
             shutil.copy2(os.path.join(karlfplane, f"{LastKnownFplane}"), os.path.join(cfg.cwd, f"vdrp/fplane/fp{cfg.datevshot[0:8]}"))
 
         #fix paths in the . cfg files
@@ -3580,7 +3590,7 @@ def run_run1s(cfg):
     :return:
     """
 
-    print("run1s ...")
+    print(f"[{cfg.datevshot}] run1s ...")
     #probably should change to use subprocess
     if cfg.exp > 0:
         exps = [cfg.exp]
@@ -3953,15 +3963,6 @@ def run_vdrp(cfg):
             print(f"[{cfg.datevshot}] VDRP: PANSTARRS fail.", e, "\n", traceback.format_exc())
             fail_panstarrs = True
 
-    #print(f"[{cfg.datevshot}] *** DEBUG *** VDRP Astrometry:  used_gaia = {used_gaia} , used_sdss = {used_sdss}, "
-    #      f"used_panstarrs = {used_panstarrs}")
-
-
-    #print(f"[{cfg.datevshot}] *** DEBUG *** VDRP Astrometry:  fail_gaia = {fail_gaia} , fail_sdss = {fail_sdss}, "
-    #      f"fail_panstarrs = {fail_panstarrs}")
-
-    #print(f"[{cfg.datevshot}] *** DEBUG *** VDRP Astrometry: cfg.starcat_ast = {cfg.starcat_ast}")
-
     #update to which one was actually used (should be 0 or 1 at most)
     if used_gaia:
         if cfg.starcat_ast != 'gaia':
@@ -3977,9 +3978,6 @@ def run_vdrp(cfg):
             cfg.starcat_ast = "panstarrs"
     else: #going to be fatal
         print(f"[{cfg.datevshot}] VDRP: unable to fix astrometry.")
-
-    #print(f"[{cfg.datevshot}] *** DEBUG *** VDRP Astrometry: POST cfg.starcat_ast = {cfg.starcat_ast}")
-
 
     #todo: which is the main dithall, etc???? (normally it is SDSS for calibration and gaia for astrometry)
     #print("!!! todo: copy GAIA dithaall to /scatch/projects and /corral-repl ???")
@@ -4062,6 +4060,7 @@ def prepare_reduction_dir(cfg):
                 datadir = os.path.join(red1path,f"{date}/virus/{virus_shot}/{exp}/virus")
             else:
                 datadir = os.path.join(cfg.cwd_orig, f"reductions/{date}/virus/{virus_shot}/{exp}/virus")
+
             tarfile = f"d{cfg.datevshot[0:8]}s{cfg.datevshot[-3:]}{exp}_mu.tar"
 
             print(f"[{cfg.datevshot}] Creating directory and untarring ({expdir}/{tarfile}) multi*fits to: {datadir}")
@@ -4439,7 +4438,7 @@ def run_rcal(cfg):
         for multi, ra, dec in zip(multis, ras, decs):
             ct += 1
             #check the output exists cal_out/20240730v009_514_103_019_cal.fits
-            base_str = f"{ct}) checking run_cal [{cfg.datevshot}] {multi[6:]}  {ra:0.7f} {dec:0.7f} ... "
+            base_str = f"[{cfg.datevshot}] checking run_cal ({ct}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... "
             #print(f"{ct}) checking {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ", end="")
             outfn = f"{cfg.datevshot}_{multi[6:]}_cal.fits"
             if os.path.exists(os.path.join("cal_out/", outfn)):
@@ -4626,7 +4625,7 @@ def rdet_rf1(cfg):
         ct = 0
         for multi, ra, dec in zip(multis, ras, decs):
             ct +=1
-            base_str = f"{ct}) checking rdet_rf1 [{cfg.datevshot}] {multi[6:]}  {ra:0.7f} {dec:0.7f} ... "
+            base_str = f"[{cfg.datevshot}] checking rdet_rf1 ({ct}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... "
             #print(f"{ct}) checking [{cfg.datevshot}] {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ", end="")
             output_found = np.array([0,0,0])
             for i,ext in enumerate(output_extensions):
@@ -5046,7 +5045,7 @@ def amp_stats(cfg,shot_h5_fqfn=None):
             #needs the actual h5 file
 
             #NOTICE: the "flag" key DOES NOT EXIST here ... it is added to table t above, but not to the shot_dict
-            print(f"Adding AmpStats table to  {shot_h5_fqfn} ...")
+            print(f"[{cfg.datevshot}] Adding AmpStats table to  {shot_h5_fqfn} ...")
             h5 = tables.open_file(shot_h5_fqfn,mode="a")
 
             try:
@@ -5225,141 +5224,135 @@ def shot_analyisis(cfg):
         # 4amp x 3dither (normally) pngs for each IFU
         # there are many, so make a subdir
         ##################################################
+        if cfg.made_amp_images:
+            print(f"[{cfg.datevshot}] Diagnostic IFU+amp images already created. Will not re-run here.")
+        else:
+            analysis_dir = os.path.join(cfg.cwd,"analysis/ifus/")
+            Path(analysis_dir).mkdir(parents=True, exist_ok=True)
+            os.chdir(analysis_dir)
+            mfs_in_shot = np.unique(h5.root.Data.FiberIndex.read(field="multiframe"))
+            ifus_in_shot = np.unique([mfs[0:-3] for mfs in mfs_in_shot])
+            slotids = [ifu[10:13] for ifu in ifus_in_shot]
+            #put these in order of slotid
+            slotids, ifus_in_shot = zip(*sorted(zip(slotids, ifus_in_shot)))
 
-        analysis_dir = os.path.join(cfg.cwd,"analysis/ifus/")
-        Path(analysis_dir).mkdir(parents=True, exist_ok=True)
-        os.chdir(analysis_dir)
-        mfs_in_shot = np.unique(h5.root.Data.FiberIndex.read(field="multiframe"))
-        ifus_in_shot = np.unique([mfs[0:-3] for mfs in mfs_in_shot])
-        slotids = [ifu[10:13] for ifu in ifus_in_shot]
-        #put these in order of slotid
-        slotids, ifus_in_shot = zip(*sorted(zip(slotids, ifus_in_shot)))
+            img = "clean_image"
+            #cmap = "gray"
+            cmap = "Spectral" #try a diverging colormap to help extremes stand out
+            #use this to force the colormap to be centered at a value of 0
+            cmap_norm = TwoSlopeNorm(vmin=DIAG_AMP_IMG_VMIN_VMAX[0], vcenter=0, vmax=DIAG_AMP_IMG_VMIN_VMAX[1])
 
-        img = "clean_image"
-        #cmap = "gray"
-        cmap = "Spectral" #try a diverging colormap to help extremes stand out
-        #use this to force the colormap to be centered at a value of 0
-        #-30 to -50 may be good minimum to indicate a problem,
-        # vmax can be super high for bright though, in the thousands or 10's thousands or more (65K limit)
-        # maybe symmetric  -50 to +50?
-        #-100 to +100 is not horrible, but may allow too negative before a problem
-        # I see charge traps as weak as +50 to +75 maybe?
-        #a too high negative value (say -10 or -20) can trigger too much visual junk that is not important
-        #faint continuum is in the 25 to 40 range, emission lines a few pix might hit near 50, but most are 20 to 30
-        cmap_norm = TwoSlopeNorm(vmin=-30, vcenter=0, vmax=30) #sort of typical min/max values if there is weak continuum
+            #just assume 3 dithers ... if they do not exist, they will be blank
+            #there are a few that have 4 or more exposures and we will just ignore that
+            for ii, mf_base in enumerate(ifus_in_shot):
+                print(f"[{cfg.datevshot}] Making basic IFU analysis images: {mf_base.decode()}")
+                plt.close('all')
+                fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(9, 12))
+                #plot_config = list(np.arange(431, 443, 1))
+                fig.suptitle(f"{cfg.datevshot} {mf_base.decode()}")
 
-        #just assume 3 dithers ... if they do not exist, they will be blank
-        #there are a few that have 4 or more exposures and we will just ignore that
-        for ii, mf_base in enumerate(ifus_in_shot):
-            print(f"[{cfg.datevshot}] Making basic IFU analysis images: {mf_base.decode()}")
-            plt.close('all')
-            fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(9, 12))
-            plot_config = list(np.arange(431, 443, 1))
-            fig.suptitle(f"{cfg.datevshot} {mf_base.decode()}")
+                for ai, amp in enumerate([b'_RU', b'_RL', b'_LL', b'_LU']):
+                    ei = 0  # exposure index
+                    # print(ai,ei,amp)
+                    mf = mf_base + amp
+                    data = h5.root.Data.Images.read_where("multiframe==mf", field=img)
+                    exp = h5.root.Data.Images.read_where("multiframe==mf", field='expnum')
 
-            for ai, amp in enumerate([b'_RU', b'_RL', b'_LL', b'_LU']):
-                ei = 0  # exposure index
-                # print(ai,ei,amp)
-                mf = mf_base + amp
-                data = h5.root.Data.Images.read_where("multiframe==mf", field=img)
-                exp = h5.root.Data.Images.read_where("multiframe==mf", field='expnum')
-
-                # ax = plt.subplot(plot_config[ci])
-                ax = axes[ai, ei]
-                ei += 1
-                sel = exp == 1
-                try:
-                    if np.count_nonzero(sel) == 1:
-                        ax.set_title(f"{amp.decode()} x1")
-                        vmin, vmax = Utils.get_vrange(data[sel][0], contrast=0.25)
-                        #cmap_norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
-                        if amp != b'_LU':
-                            ax.set_xticks([])
+                    # ax = plt.subplot(plot_config[ci])
+                    ax = axes[ai, ei]
+                    ei += 1
+                    sel = exp == 1
+                    try:
+                        if np.count_nonzero(sel) == 1:
+                            ax.set_title(f"{amp.decode()} x1")
+                            vmin, vmax = Utils.get_vrange(data[sel][0], contrast=0.25)
+                            #cmap_norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
+                            if amp != b'_LU':
+                                ax.set_xticks([])
+                            else:
+                                ax.set_xticks([0,200,400,600,800,1000])
+                            #always set yticks on 1st column
+                            ax.set_yticks([0, 200, 400, 600, 800, 1000])
+                            # !!! Must use EITHER norm or vmin, vmax ... cannot do both
+                            #ax.imshow(data[sel][0], cmap=cmap, vmin=vmin, vmax=vmax,origin="lower")
+                            ax.imshow(data[sel][0], cmap=cmap, norm=cmap_norm, origin="lower")
                         else:
-                            ax.set_xticks([0,200,400,600,800,1000])
-                        #always set yticks on 1st column
-                        ax.set_yticks([0, 200, 400, 600, 800, 1000])
-                        # !!! Must use EITHER norm or vmin, vmax ... cannot do both
-                        #ax.imshow(data[sel][0], cmap=cmap, vmin=vmin, vmax=vmax,origin="lower")
-                        ax.imshow(data[sel][0], cmap=cmap, norm=cmap_norm, origin="lower")
-                    else:
+                            ax.set_xticks([])
+                            ax.set_yticks([])
+                            #not uncommon ... could be just a single exposure by user selection, and not exp 1
+                            #print(f"[{cfg.datevshot}] No data found for {mf_base.decode()} exp 1")
+
+                    except:
                         ax.set_xticks([])
                         ax.set_yticks([])
-                        #not uncommon ... could be just a single exposure by user selection, and not exp 1
-                        #print(f"[{cfg.datevshot}] No data found for {mf_base.decode()} exp 1")
+                        print(f"[{cfg.datevshot}] Exception in shot_analysis on {mf_base.decode()}", traceback.format_exc())
 
-                except:
-                    ax.set_xticks([])
-                    ax.set_yticks([])
-                    print(f"[{cfg.datevshot}] *** DEBUG ***  Exception in shot_analysis on {mf_base.decode()}", traceback.format_exc())
+                    sel = exp == 2
+                    ax = axes[ai, ei]
+                    ei += 1
+                    try:
+                        if np.count_nonzero(sel) == 1:
 
-                sel = exp == 2
-                ax = axes[ai, ei]
-                ei += 1
-                try:
-                    if np.count_nonzero(sel) == 1:
+                            ax.set_title(f"{amp.decode()} x2")
+                            vmin, vmax = Utils.get_vrange(data[sel][0], contrast=0.25)
+                            #cmap_norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
+                            # ax.yaxis.label.set_visible(False)
 
-                        ax.set_title(f"{amp.decode()} x2")
-                        vmin, vmax = Utils.get_vrange(data[sel][0], contrast=0.25)
-                        #cmap_norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
-                        # ax.yaxis.label.set_visible(False)
+                            if amp != b'_LU':
+                                ax.set_xticks([])
+                            else:
+                                ax.set_xticks([0,200,400,600,800,1000])
 
-                        if amp != b'_LU':
-                            ax.set_xticks([])
+                            # always unset yticks on not 1st column
+                            ax.set_yticks([])
+                            # !!! Must use EITHER norm or vmin, vmax ... cannot do both
+                            #ax.imshow(data[sel][0], cmap=cmap, vmin=vmin, vmax=vmax,origin="lower")
+                            ax.imshow(data[sel][0], cmap=cmap, norm=cmap_norm, origin="lower")
                         else:
-                            ax.set_xticks([0,200,400,600,800,1000])
+                            ax.set_xticks([])
+                            ax.set_yticks([])
+                            #not uncommon ... could be just a single exposure for this observation or by user selection
+                            #print(f"[{cfg.datevshot}] No data found for {mf_base.decode()} exp 2")
 
-                        # always unset yticks on not 1st column
-                        ax.set_yticks([])
-                        # !!! Must use EITHER norm or vmin, vmax ... cannot do both
-                        #ax.imshow(data[sel][0], cmap=cmap, vmin=vmin, vmax=vmax,origin="lower")
-                        ax.imshow(data[sel][0], cmap=cmap, norm=cmap_norm, origin="lower")
-                    else:
+                    except:
                         ax.set_xticks([])
                         ax.set_yticks([])
-                        #not uncommon ... could be just a single exposure for this observation or by user selection
-                        #print(f"[{cfg.datevshot}] No data found for {mf_base.decode()} exp 2")
+                        print(f"[{cfg.datevshot}] Exception in shot_analysis on {mf_base.decode()}",
+                              traceback.format_exc())
 
-                except:
-                    ax.set_xticks([])
-                    ax.set_yticks([])
-                    print(f"[{cfg.datevshot}] *** DEBUG ***  Exception in shot_analysis on {mf_base.decode()}",
-                          traceback.format_exc())
+                    sel = exp == 3
+                    ax = axes[ai, ei]
+                    ei += 1
+                    try:
+                        if np.count_nonzero(sel) == 1:
+                            ax.set_title(f"{amp.decode()} x3")
+                            vmin, vmax = Utils.get_vrange(data[sel][0], contrast=0.25)
+                            #cmap_norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
+                            if amp != b'_LU':
+                                ax.set_xticks([])
+                            else:
+                                ax.set_xticks([0,200,400,600,800,1000])
 
-                sel = exp == 3
-                ax = axes[ai, ei]
-                ei += 1
-                try:
-                    if np.count_nonzero(sel) == 1:
-                        ax.set_title(f"{amp.decode()} x3")
-                        vmin, vmax = Utils.get_vrange(data[sel][0], contrast=0.25)
-                        #cmap_norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
-                        if amp != b'_LU':
-                            ax.set_xticks([])
+                            # always unset yticks on not 1st column
+                            ax.set_yticks([])
+                            #!!! Must use EITHER norm or vmin, vmax ... cannot do both
+                            #ax.imshow(data[sel][0], cmap=cmap, vmin=vmin, vmax=vmax,origin="lower")
+                            ax.imshow(data[sel][0], cmap=cmap, norm=cmap_norm, origin="lower")
                         else:
-                            ax.set_xticks([0,200,400,600,800,1000])
+                            ax.set_xticks([])
+                            ax.set_yticks([])
+                            #not uncommon ... could be just a single exposure for this observation or by user selection
+                            #print(f"[{cfg.datevshot}] No data found for {mf_base.decode()} exp 3")
 
-                        # always unset yticks on not 1st column
-                        ax.set_yticks([])
-                        #!!! Must use EITHER norm or vmin, vmax ... cannot do both
-                        #ax.imshow(data[sel][0], cmap=cmap, vmin=vmin, vmax=vmax,origin="lower")
-                        ax.imshow(data[sel][0], cmap=cmap, norm=cmap_norm, origin="lower")
-                    else:
+                    except:
                         ax.set_xticks([])
                         ax.set_yticks([])
-                        #not uncommon ... could be just a single exposure for this observation or by user selection
-                        #print(f"[{cfg.datevshot}] No data found for {mf_base.decode()} exp 3")
+                        print(f"[{cfg.datevshot}] Exception in shot_analysis on {mf_base.decode()}",
+                              traceback.format_exc())
 
-                except:
-                    ax.set_xticks([])
-                    ax.set_yticks([])
-                    print(f"[{cfg.datevshot}] *** DEBUG ***  Exception in shot_analysis on {mf_base.decode()}",
-                          traceback.format_exc())
-
-            plt.tight_layout()
-            plt.savefig(f"i{mf_base.decode()[10:13]}_{cfg.datevshot}_{mf_base.decode()}.png", dpi=96)
-
-
+                plt.tight_layout()
+                plt.savefig(f"i{mf_base.decode()[10:13]}_{cfg.datevshot}_{mf_base.decode()}.png", dpi=DIAG_AMP_IMG_DPI)
+                cfg.made_amp_images = True
     except:
         #print(traceback.format_exc())
         rc = -1
@@ -5370,6 +5363,168 @@ def shot_analyisis(cfg):
     except:
         pass
 
+    return rc
+
+def make_amp_images(cfg):
+    """
+
+    originally shot_analysis ... and is based on that but intended only for the
+    color-coded amp images and to be run at the end of step1
+    :param cfg:
+    :return:
+    """
+
+    try:
+        print(f"[{cfg.datevshot}] Making colore-coded IFU+amp images ...")
+        rc = 0
+
+        #make the output location
+        analysis_dir = os.path.join(cfg.cwd,"analysis/")
+        Path(analysis_dir).mkdir(parents=True, exist_ok=True)
+        os.chdir(analysis_dir)
+
+        analysis_dir = os.path.join(cfg.cwd, "analysis/ifus/")
+        Path(analysis_dir).mkdir(parents=True, exist_ok=True)
+        os.chdir(analysis_dir)
+
+
+        #get all the reduction paths
+        date = cfg.datevshot[0:8]
+        virus_shot = "virus0000" + cfg.datevshot[-3:]
+        if red1path is not None:
+            datadir = os.path.join(red1path, f"{date}/virus/{virus_shot}") #/{exp}/virus")
+        else:
+            datadir = os.path.join(cfg.cwd_orig, f"reductions/{date}/virus/{virus_shot}") #/{exp}/virus")
+
+        exps = sorted(glob.glob(f"{datadir}/exp*"))
+        expdirs = [d + "/virus" for d in exps]
+        exps = [int(os.path.basename(d)[-2:]) for d in exps] #now an integer 1, 2, 3 ...
+
+        if len(expdirs) == 1: #this is common
+            expdirs.append("")
+            expdirs.append("")
+        elif len(expdirs) == 2:
+            expdirs.append("")
+
+
+        #could assume the same mfs in each directory, though there could be some weird failure
+
+        mfs_in_exp = []
+        for expdir in expdirs:
+            mfs_in_exp += list(sorted(glob.glob(f"{expdir}/multi_*.fits")))
+
+        #strip off the _RL.fits
+        ifus_in_exp = np.unique([os.path.basename(mfs)[0:-8] for mfs in mfs_in_exp])
+        slotids = [ifu[10:13] for ifu in ifus_in_exp]
+        #put these in order of slotid
+        slotids, ifus_in_exp = zip(*sorted(zip(slotids, ifus_in_exp)))
+
+        img = "clean_image"
+        #cmap = "gray"
+        cmap = "Spectral" #try a diverging colormap to help extremes stand out
+        #use this to force the colormap to be centered at a value of 0
+        cmap_norm = TwoSlopeNorm(vmin=DIAG_AMP_IMG_VMIN_VMAX[0], vcenter=0, vmax=DIAG_AMP_IMG_VMIN_VMAX[1])
+
+        #just assume 3 dithers ... if they do not exist, they will be blank
+        #there are a few that have 4 or more exposures and we will just ignore that
+        for ii, mf_base in enumerate(ifus_in_exp):
+            print(f"[{cfg.datevshot}] Making basic IFU analysis images: {mf_base}")
+            plt.close('all')
+            fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(9, 12))
+           # plot_config = list(np.arange(431, 443, 1))
+            fig.suptitle(f"{cfg.datevshot} {mf_base}")
+
+            for ei, expdir in enumerate(expdirs):
+
+                ##################################################
+                # 4amp x 3dither (normally) pngs for each IFU
+                # there are many, so make a subdir
+                ##################################################
+
+                if ei > 2:
+                    break #we're done for the images, limited to only 3 exp max
+
+                try:
+                    exp = int(expdir.split("/exp")[1][:2])
+                except:
+                    exp = ei + 1
+
+
+                # images should be under the reduction directory
+                for ai, amp in enumerate(['_RU', '_RL', '_LL', '_LU']):
+                    # print(ai,ei,amp)
+                    mf_fn = mf_base + amp + ".fits"
+
+                    try:
+                        with fits.open(os.path.join(expdir,mf_fn)) as hdu:
+                            data = hdu[img].data
+                            ax = axes[ai, ei]
+
+                            try:
+                                ax.set_title(f"{amp} x{exps[ei]}")
+                                #vmin, vmax = Utils.get_vrange(data, contrast=0.25)
+                                #cmap_norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
+                                if amp == '_LU':
+                                    ax.set_xticks([0, 200, 400, 600, 800, 1000])
+                                else:
+                                    ax.set_xticks([])
+
+                                if ei == 0:
+                                    #always set yticks on 1st column
+                                    ax.set_yticks([0, 200, 400, 600, 800, 1000])
+                                else:
+                                    # always unset yticks on not 1st column
+                                    ax.set_yticks([])
+                                # !!! Must use EITHER norm or vmin, vmax ... cannot do both
+                                #ax.imshow(data[sel][0], cmap=cmap, vmin=vmin, vmax=vmax,origin="lower")
+                                ax.imshow(data, cmap=cmap, norm=cmap_norm, origin="lower")
+
+                            except:
+                                ax.set_xticks([])
+                                ax.set_yticks([])
+                                print(f"[{cfg.datevshot}] Exception in make_amp_images on {mf_base}", traceback.format_exc())
+                    except:
+                        if os.path.exists(os.path.join(expdir, mf_fn)):
+                            print(f"[{cfg.datevshot}] Exception in make_amp_images on {mf_base}",
+                                  traceback.format_exc())
+                        else:
+                            if len(expdir) > 1:
+                                #the multifits does not exist, probably a pre-defined bad amp like 095RU
+                                #if expdir is an empty string, then it is just there to clean up the
+                                #  image frames and was not to be printed
+                                print(f"[{cfg.datevshot}] omitting {mf_base}{amp} x{exp}. Does not exist.")
+                            try:
+                                ax = axes[ai, ei]
+                                if amp == '_LU':
+                                    ax.set_xticks([0, 200, 400, 600, 800, 1000])
+                                else:
+                                    ax.set_xticks([])
+
+                                if ei == 0:
+                                    #always set yticks on 1st column
+                                    ax.set_yticks([0, 200, 400, 600, 800, 1000])
+                                else:
+                                    # always unset yticks on not 1st column
+                                    ax.set_yticks([])
+                            except:
+                                pass
+
+            plt.tight_layout()
+            plt.savefig(f"i{mf_base[10:13]}_{cfg.datevshot}_{mf_base}.png", dpi=DIAG_AMP_IMG_DPI)
+
+    except:
+        #print(traceback.format_exc())
+        rc = -1
+        print(f"[{cfg.datevshot}] Could complete amp images.",traceback.format_exc())
+
+
+    if rc >= 0:
+        cfg.made_amp_images = True #this is checked later in shot_analysis to not re-do the images IF they
+                                   #were done in THIS call (note: that if this is a --resume, this will
+                                   #not be set and they will be re-made, and that is on purpose
+                                   #as something could have changed, including the analysis code
+        #print("*** DEBUG *** forcing cfg.made_amp_images to False so the shot_analysis version will run.")
+        #cfg.made_amp_images = False
     return rc
 
 
@@ -6279,14 +6434,12 @@ with open("status.run", "w") as f:
 # step1
 ###########
 
-
 if s01_run1s and not dtprog["s01_run1s"]:
     run_run1s(cfg)
 
     # run any checks
     if check_run1s(cfg) < 0:
         Quit(cfg, -1, "FATAL. Initial extraction and/or base calibration failure.")
-
 
     #todo: this would be manual here, I think, but CAN copy /red1/xxx to /scratch/local/projects
     #  all the various CoFe*.fits and multi*.fits ... these are also in the
@@ -6296,9 +6449,19 @@ if s01_run1s and not dtprog["s01_run1s"]:
 else:
     print(f"[{cfg.datevshot}] Skipping s01_run1s run1s")
 
+
+if s01b_amp_images and not dtprog["s01b_amp_images"]:
+    if make_amp_images(cfg) < 0: #this is non-fatal if it fails
+        print(f"[{cfg.datevshot}] creation of IFU+amp diagnostic images failed. Non-fatal. Will continue.")
+    else:
+        progress_update(cfg,dtprog,"s01b_amp_images")
+else:
+    print(f"[{cfg.datevshot}] Skipping s01b_amp_images")
+
 if cfg.multifits_only:
     print(f"[{cfg.datevshot}] multi*fits files generated. "
           f"Check paths under ./reductions/{cfg.datevshot[0:8]}/virus/virus*{cfg.datevshot[-3]}/")
+    print(f"[{cfg.datevshot}] Also look for iagnostic IFU+amp images under sci{cfg.datevshot}/analysis/ifus")
     Quit(cfg, 0, f"Done. Enforcing --multifits_only switch. {cfg.datevshot}", write_status=False)
 
 
@@ -6511,7 +6674,7 @@ if s04_make_shot and not dtprog["s04_make_shot"]:
         print(f"[{cfg.datevshot}] Skipping s04e_amp_stats compute and appending of per-amp diagnostic info.")
 
     #basic shot analysis (mostly images for review)
-    if s04f_analysis and not dtprog["s04f_analysis"]:
+    if s04f_analysis and not dtprog["s04f_analysis"] and not cfg.multifits_only:
         rc = shot_analyisis(cfg)
         if rc < 0:
             print(f"[{cfg.datevshot}] Non-fatal. Could not complete basic shot analysis output.")
@@ -6572,12 +6735,12 @@ if s05_detection and not dtprog["s05_detection"]:
         print(f"[{cfg.datevshot}] Skipping s05b_rdet_rf1 rdet_rf1 (line detection)")
 
     if s05c_rgetmax  and not dtprog["s05c_rgetmax"]:
-        print("Running rgetmax (continuum detection) ...")
+        print(f"[{cfg.datevshot}] Running rgetmax (continuum detection) ...")
         rc = rgetmax(cfg)
         if rc < 0:
             Quit(cfg, -1, "FATAL. rgetmax fail.")
         elif rc > 0:
-            print("rgetmax: Limited success. Non-fatal. Will continue")
+            print(f"[{cfg.datevshot}] rgetmax: Limited success. Non-fatal. Will continue")
 
         progress_update(cfg,dtprog, "s05c_rgetmax")
     else:
@@ -6626,19 +6789,28 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
 
             #subselect "nominal" good
             if cfg.linedet_filter == 0:
-                print(f"[{cfg.datevshot}]  Standard extra restriction on line detections.")
+                print(f"[{cfg.datevshot}] Standard extra restriction on line detections. "
+                      f"Includes SNR >= {DEFAULT_MIN_SNR_FOR_ELIXER}")
                 esel = np.array(line_tab['continuum'] >= -3)
-                esel = esel & np.array(line_tab['sn'] >= 4.8)
+                esel = esel & np.array(line_tab['sn'] >= DEFAULT_MIN_SNR_FOR_ELIXER)
                 esel = esel & np.array(line_tab['chi2'] <= 2.5)
                 # this is a bit more liberal than standard HETDEX_API (1.6 and 14, I think)
                 esel = esel & np.array(line_tab['linewidth'] >= 1.5) & np.array(line_tab['linewidth'] <= 16)
                 esel = esel & np.array(line_tab['chi2fib'] <= 4.5)  # fairly restrictive, this is from .mc file column #19
                # esel = esel &
-            else: #if cfg.linedet_filter == 1 or cfg.linedet_filter == 2:
-                print(f"[{cfg.datevshot}]  Limited extra restriction on line detections.")
+            else:
                 esel = np.full(len(line_tab),True)
-                esel = np.array(line_tab['linewidth'] >= 1.5) #just the lower limit
+                esel = esel & np.array(line_tab['linewidth'] >= 1.5) #just the lower limit
                 esel = esel & np.array(line_tab['chi2fib'] <= 4.5)
+                if cfg.linedet_filter >= 1.1:
+                    # note: the SNR restriction is passed to HETDEX_API in --sn_min so there
+                    # should not be any in the base set that are less than that level, but just to be
+                    # consistent, apply it anyway
+                    esel = esel & np.array(line_tab['sn'] >= cfg.linedet_filter)
+                    print(f"[{cfg.datevshot}] Limited extra restriction on line detections. "
+                          f"Includes SNR >= {cfg.linedet_filter}")
+                else:
+                    print(f"[{cfg.datevshot}] Limited extra restriction on line detections.")
 
             if norm_obs_ew is not None:
                 try:
@@ -6653,7 +6825,7 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
             if line_tab is not None:
                 tname = f"{cfg.datevshot}_line_sourcecat.tab"
                 line_tab.write(tname, format="ascii", overwrite=True)
-                print(f"Initial lines source table, {len(line_tab)} rows: {os.getcwd()}/{tname}")
+                print(f"[{cfg.datevshot}] Initial lines source table, {len(line_tab)} rows: {os.getcwd()}/{tname}")
 
                 fof_3d_lines_tab = make_3d_friend_table_for_shot(line_tab, dsky_3D=6.0, dwave=4.0)
                 if fof_3d_lines_tab is not None:
@@ -6706,7 +6878,7 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
                         # line_tab.write(tname, format="fits", overwrite=True)
                         tname = f"{cfg.datevshot}_line_sourcecat.tab"
                         line_tab.write(tname, format="ascii", overwrite=True)
-                        print(f"Updated lines source table, {len(line_tab)} rows: {os.getcwd()}/{tname}")
+                        print(f"[{cfg.datevshot}] Updated lines source table, {len(line_tab)} rows: {os.getcwd()}/{tname}")
 
                         #esel = np.array(line_tab['sel_det'] == True)
                         #np.savetxt('elixer_line.dets',line_tab['detectid'][esel],fmt="%d")
