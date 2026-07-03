@@ -1,0 +1,33 @@
+spec=$1
+#month=202408
+month=$2
+mkdir -p spec${spec}
+cd spec${spec}
+
+#awk '{print "ls /scratch/03261/polonius/parallel/m"m0"/reductions/"$1"/virus/virus0000"$2"/exp01/virus/multi_"spec0"_???_???_??.fits"}' m0=${month} spec0=${spec} ../mlist > rtmp1
+#because we are in a subdirectory now, need to go back up one level to start the directory listing
+awk '{print "ls ../"$1"/virus/virus0000"$2"/exp01/virus/multi_"spec0"_???_???_??.fits"}' m0=${month} spec0=${spec} ../mlist > rtmp1
+chmod +x rtmp1
+rtmp1 | awk '{print "\""$1"\""}' > inlist0
+rm -f out.fits
+
+grep LL inlist0 > inlist
+echo "${spec} LL ... "
+~gebhardt/bin/immkres2
+mv out.fits res${spec}LL.fits
+
+grep LU inlist0 > inlist
+echo "${spec} LU ... "
+~gebhardt/bin/immkres2
+mv out.fits res${spec}LU.fits
+
+
+grep RL inlist0 > inlist
+echo "${spec} RL ... "
+~gebhardt/bin/immkres2
+mv out.fits res${spec}RL.fits
+
+grep RU inlist0 > inlist
+echo "${spec} RU ... "
+~gebhardt/bin/immkres2
+mv out.fits res${spec}RU.fits
