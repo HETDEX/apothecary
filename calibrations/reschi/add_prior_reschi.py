@@ -40,14 +40,17 @@ all_prior_res_files_basenames = [os.path.basename(x) for x in all_prior_res_file
 
 #get all the currently generate fits files
 all_new_res_files = glob.glob(f"spec*/res*.fits")
-all_new_res_files_basenames = [os.path.basename(x) for x in all_prior_res_files]
+all_new_res_files_basenames = [os.path.basename(x) for x in all_new_res_files]
 
 
 #match them up, and add
 ct_already_updated = 0
 ct_newly_updated = 0
 ct_failed = 0
+list_failed = []
 for new_fn in tqdm(all_new_res_files_basenames):
+    new_ix = None
+    prior_ix = None
     try:
         new_ix = all_new_res_files_basenames.index(new_fn)
         if os.path.exists(f"{all_new_res_files[new_ix]}.done"):
@@ -77,9 +80,16 @@ for new_fn in tqdm(all_new_res_files_basenames):
         prior_hdu.close()
 
     except:
-        print(f"Unable to add prior reschi to {new_fn}: {traceback.format_exc()}")
+        #print(f"Unable to add prior reschi to {new_fn}: {traceback.format_exc()}")
+        if prior_ix is None:
+            print(f"Unable to add prior reschi to {new_fn}, no matching file")
+        else:
+            print(f"Unable to add prior reschi to {new_fn}: {traceback.format_exc()}")
         ct_failed += 1
+        list_failed.append(new_fn)
 
 print(f"New updates : {ct_newly_updated}")
 print(f"Already done: {ct_already_updated}")
 print(f"Failed      : {ct_failed}")
+for fn in list_failed:
+    print(fn)
