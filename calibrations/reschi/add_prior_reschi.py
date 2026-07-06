@@ -3,6 +3,38 @@ related to and to be run after make_reshi.py
 
 This is the part that takes the prior reschi and adds it in to the current (newly generated) resXXXAA.fits files
 
+Notes: from email 20260627
+res*fits : average residual after sky subtraction (112x1036 arrays). This is designed to provide an additional
+sky subtraction in vred. It is important to get this correct. This is only used in vred.
+
+rres*fits : stands for ratio of the residuals, which is the error at that element. The idea here was to use as an
+additional uncertainty when measuring s/n. This was too hard to get correct, so I dropped it. Currently it is only used
+ as a flag in fitradecsp, and removes elements that have the value<-0.05
+
+chi*fits: not really informative, but it looks at the distribution of residuals at that element and measure a chi^2
+
+Well, turns out that none of those arrays are being used, except for in extreme cases. Looks like I turned all this off
+ some time ago (years ago) since the idea was to get the sky subtraction correct from the start.
+
+The only thing that is being used is if rres is below -0.5, then that element is flagged to not be used.
+
+It is coming back to me since the proper thing to do is to fix it. I just could never trust the analysis of the
+residual corrections for detections.
+
+So, fitradecsp does not need any of them, except for flags. However ...
+I had put the residual correction in the main reductions of vred. And that is pointing to the old setup.
+For that correction, it only uses the res*.fits
+
+Ok, so this changes what we do. Let's only track res by month, and use rres for flags.
+So then each month in reschi would have a full suite of res*fits, and then only a handful of rres*fits that have flags.
+
+
+Maybe in a future date, we can address ability to use rres as intended. We might be able to explore with some of the
+high sky frames.
+
+This explains why it was not doing what I thought it should be doing.
+
+
 
 """
 import glob
@@ -47,7 +79,8 @@ all_new_res_files_basenames = [os.path.basename(x) for x in all_new_res_files]
 ct_already_updated = 0
 ct_newly_updated = 0
 ct_failed = 0
-list_failed = []
+list_failed = [] #basically specids in the current month that are not in the prior month
+
 for new_fn in tqdm(all_new_res_files_basenames):
     new_ix = None
     prior_ix = None
@@ -55,7 +88,7 @@ for new_fn in tqdm(all_new_res_files_basenames):
         new_ix = all_new_res_files_basenames.index(new_fn)
         if os.path.exists(f"{all_new_res_files[new_ix]}.done"):
             #this one was already done
-            print(f"{new_fn} already updated with prior reschi")
+            #print(f"{new_fn} already updated with prior reschi")
             ct_already_updated += 1
             continue
 
@@ -82,14 +115,29 @@ for new_fn in tqdm(all_new_res_files_basenames):
     except:
         #print(f"Unable to add prior reschi to {new_fn}: {traceback.format_exc()}")
         if prior_ix is None:
-            print(f"Unable to add prior reschi to {new_fn}, no matching file")
+            #print(f"Unable to add prior reschi to {new_fn}, no matching file")
+            pass #will show up in later count
         else:
             print(f"Unable to add prior reschi to {new_fn}: {traceback.format_exc()}")
         ct_failed += 1
         list_failed.append(new_fn)
 
+
+
+#we only care about mismatches for this purpose
+#files in prior month that are not in the current month
+list_prior_month_no_match = np.setdiff1d(all_new_res_files_basenames,all_prior_res_files_basenames)
+#files in the current month that are not in the prior month
+list_current_month_no_match = np.setdiff1d(all_prior_res_files_basenames,all_new_res_files_basenames)
+
 print(f"New updates : {ct_newly_updated}")
 print(f"Already done: {ct_already_updated}")
 print(f"Failed      : {ct_failed}")
-for fn in list_failed:
-    print(fn)
+for fn in sorted(list_failed):
+    if fn in list_prior_month_no_match:
+        print(f"  {fn} not in prior month")
+    else:
+        print(f"  {fn} failed - unknown")
+
+print(f"\nCurrent specIDs that are no in prior month: \n{list_prior_month_no_match}")
+print(f"\nPrior specIDs that are not in current month: \n{list_current_month_no_match}")
