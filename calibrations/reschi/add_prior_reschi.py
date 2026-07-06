@@ -3,39 +3,6 @@ related to and to be run after make_reshi.py
 
 This is the part that takes the prior reschi and adds it in to the current (newly generated) resXXXAA.fits files
 
-Notes: from email 20260627
-res*fits : average residual after sky subtraction (112x1036 arrays). This is designed to provide an additional
-sky subtraction in vred. It is important to get this correct. This is only used in vred.
-
-rres*fits : stands for ratio of the residuals, which is the error at that element. The idea here was to use as an
-additional uncertainty when measuring s/n. This was too hard to get correct, so I dropped it. Currently it is only used
- as a flag in fitradecsp, and removes elements that have the value<-0.05
-
-chi*fits: not really informative, but it looks at the distribution of residuals at that element and measure a chi^2
-
-Well, turns out that none of those arrays are being used, except for in extreme cases. Looks like I turned all this off
- some time ago (years ago) since the idea was to get the sky subtraction correct from the start.
-
-The only thing that is being used is if rres is below -0.5, then that element is flagged to not be used.
-
-It is coming back to me since the proper thing to do is to fix it. I just could never trust the analysis of the
-residual corrections for detections.
-
-So, fitradecsp does not need any of them, except for flags. However ...
-I had put the residual correction in the main reductions of vred. And that is pointing to the old setup.
-For that correction, it only uses the res*.fits
-
-Ok, so this changes what we do. Let's only track res by month, and use rres for flags.
-So then each month in reschi would have a full suite of res*fits, and then only a handful of rres*fits that have flags.
-
-
-Maybe in a future date, we can address ability to use rres as intended. We might be able to explore with some of the
-high sky frames.
-
-This explains why it was not doing what I thought it should be doing.
-
-
-
 """
 import glob
 import os
