@@ -104,6 +104,7 @@ def new_fT(stats_dict=None):
                         fT.add_row(None)
                 else: #just add one row
                     fT.add_row(None)
+                    num_fibers = 1 #just so an insert happens
 
                 if stats_dict['multiframe'] is not None:
                     toks = stats_dict['multiframe'].split("_")
@@ -118,6 +119,13 @@ def new_fT(stats_dict=None):
                 amp = stats_dict['ifu_amp'][5:7]
                 mf_base = f"{str(specid).zfill(3)}_{str(ifuslot).zfill(3)}_{str(ifuid).zfill(3)}"
                 cmbf = f"{stats_dict['ifu_amp']}cmbf.fits"
+
+                fT['yyyymm'] = np.full(num_fibers, int(stats_dict['month']))
+                fT['cmbf'] = np.full(num_fibers, cmbf)
+                fT['specid'] = np.full(num_fibers, specid)
+                fT['ifuslot'] = np.full(num_fibers, ifuslot)
+                fT['ifuid'] = np.full(num_fibers, ifuid)
+                fT['amp'] = np.full(num_fibers, amp)
 
                 fT['status'] = -999
                 fT['reason'] = 0xffffffff
@@ -665,7 +673,7 @@ ifu_map = get_ifu_mapping_table()
 
 cmbfpath = "/scratch/projects/hetdex/lib_calib"
 #cmbfpath = "/corral/utexas/Hobby-Eberly-Telesco/lib_calib/"
-for date in tqdm(dates[53:55]):
+for date in tqdm(dates):
     date_fT = new_fT()
     fns = sorted(glob.glob(f"{cmbfpath}/{date}/i{str(ifuslot).zfill(3)}a{amp}cmbf.fits"))
     for fn in tqdm(fns):
