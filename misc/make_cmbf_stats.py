@@ -682,6 +682,7 @@ for date in tqdm(dates):
         fT = new_fT(d)
         date_fT = vstack([date_fT,fT])
 
+    date_fT.write(f"cmbf_stats.dat.{date}", format="ascii", overwrite=True)
     all_fT = vstack([all_fT,date_fT])
 
 all_fT.write("cmbf_stats.dat",format="ascii",overwrite=True)
