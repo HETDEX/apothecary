@@ -95,7 +95,6 @@ def find_nested_twi_from_tar(yyyymmdd, ifu_pattern=None, do_extract=False, first
     top level is still a tar, e.g. /corral/utexas/Hobby-Eberly-Telesco/het_raw/
 
     """
-
     all_twilights = []
     all_outfiles = []
 
@@ -115,6 +114,7 @@ def find_nested_twi_from_tar(yyyymmdd, ifu_pattern=None, do_extract=False, first
                     tar_to_check.append(topname)
                 topname = toptar.next()
 
+            tar_to_check = sorted(tar_to_check)
             done_done = False
             for topname in tqdm(tar_to_check):
             #for topname in tar_to_check:
@@ -152,8 +152,12 @@ def find_nested_twi_from_tar(yyyymmdd, ifu_pattern=None, do_extract=False, first
                                             done_done = True
                                             break
                                 else: #these might be science frames or dark frames or bias, etc; no point in continuuing
-                                    sub_done = True
-                                    break
+                                    #note: for at least some .next() you get intermediate directory names,
+                                    #not just file nodes, so before bailing out, need to make sure
+                                    #the pathname is a fits file
+                                    if nextname[-5:] == "fits":
+                                        sub_done = True
+                                        break
 
                         #doing the extract must also advance the file pointer, so it messes up
                         #the *.next() call
