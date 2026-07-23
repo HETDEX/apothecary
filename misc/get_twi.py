@@ -1,4 +1,28 @@
+"""
 
+quick collection of twilight fits based on a single date
+
+the idea is to then copy the fitls locally and look with ds9
+
+common use:
+1) python get_twi.py YYYYMM
+ .. this checks all the dates that exist under that  YYYYMM
+ .. NOTE: not all those dates will have twilights for VIRUS
+
+2) python get_twi.py YYYYMMDD <IFU+AMP> extract xx first
+.. IFU+AMP is a string to match, so 096RU for example or even 096 (will get all the amps)
+.. "extract" keyword will put the matching .fits in the local director
+.. xx is the spot for a prefix to add to the .fits name, so "xx_<fitsname>" in this case, this makes it easy then
+    to copy or delete with $ cp xx*.fits   or $rm xx*.fits
+.. "first" key word means to stop when you have hit the first matching fits, whatever it is
+    the idea being that if you just want to look at one of them for a date, you don't need all the twilights for that
+    date. However, it is the firts match, so you should really only use it if you specify an IFUSLOT + AMP fully.
+
+NOTE: the ORDER is required. These are all positional arguments.
+      <YYYYMMDD> and <IFU+AMP> are required, but the next three are not. Each does, however, depend on the previous,
+      so you cannot have "first" without specifying "extract" and a prefix (e.g. xx here).
+
+"""
 import sys
 import os
 import glob
