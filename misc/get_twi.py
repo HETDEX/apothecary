@@ -33,8 +33,8 @@ if len(args) > 4:
     if "first" in args[4]:
         first_only = True
 
-top_path = "/corral-repl/utexas/Hobby-Eberly-Telesco/het_raw"
-alt_top_path = "/work/03946/hetdex/maverick/"
+top_path = "/work/03946/hetdex/maverick/" #first choice, use maverick
+alt_top_path = "/corral-repl/utexas/Hobby-Eberly-Telesco/het_raw"
 use_dir = False
 #top_path = "/scratch/03261/polonius/bad_fibers"
 
@@ -47,23 +47,25 @@ def check_basepath(yyyymmdd):
 
     global top_path, alt_top_path, use_dir
 
-    if os.path.exists(os.path.join(top_path,f"{yyyymmdd}.tar")):
+    if os.path.exists(os.path.join(top_path,f"{yyyymmdd}")):
         #all good, do nothing
+        use_dir = True
         return top_path
     elif os.path.exists(os.path.join(alt_top_path,f"{yyyymmdd}.tar")):
         #update and return
         top_path = alt_top_path
+        use_dir = False
         return top_path
-    elif os.path.exists(os.path.join(alt_top_path,f"{yyyymmdd}")):
+    elif os.path.exists(os.path.join(alt_top_path,f"{yyyymmdd}.tar")):
         #the directory is here, not the tar
         top_path = alt_top_path
-        use_dir = True
+        use_dir = False
         return top_path
     else:
         print("Cannot find any paths")
         return None
 
-def find_nested_twi(yyyymmdd, ifu_pattern=None, do_extract=False, first=False):
+def find_nested_twi_from_tar(yyyymmdd, ifu_pattern=None, do_extract=False, first=False):
     """
     todo: maybe allow an IFU or IFU+amp (ifu_pattern could be 096 or 096R or 096RU)
     top level is still a tar, e.g. /corral/utexas/Hobby-Eberly-Telesco/het_raw/
@@ -175,7 +177,7 @@ def find_nested_twi_from_dir(yyyymmdd, ifu_pattern=None, do_extract=False, first
                 # print(f"DEBUG: opening from tar: {topname}")
                 twilights = []
                 outfiles = []
-                if True: #just here to keep the same indentation as the find_nested_twi() function
+                if True: #just here to keep the same indentation as the find_nested_twi_from_tar() function
                     with tarfile.open(subtar, mode="r") as tarf:
                         sub_done = False
                         while not sub_done:
@@ -238,11 +240,11 @@ def main():
     else:
         check_basepath(yyyymmdd)
 
-
+        print(f"Using {top_path}")
         if use_dir:
             twi, out = find_nested_twi_from_dir(yyyymmdd, ifu_pattern=ifu_pattern, do_extract=do_extract, first=first_only)
         else:
-            twi,out = find_nested_twi(yyyymmdd, ifu_pattern=ifu_pattern, do_extract=do_extract,first=first_only)
+            twi,out = find_nested_twi_from_tar(yyyymmdd, ifu_pattern=ifu_pattern, do_extract=do_extract,first=first_only)
         if len(out) > 0:
             for t,o in zip(twi,out):
                 print(t,"-->",o)
