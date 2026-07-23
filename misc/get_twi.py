@@ -155,7 +155,7 @@ def find_nested_twi_from_tar(yyyymmdd, ifu_pattern=None, do_extract=False, first
                                     #note: for at least some .next() you get intermediate directory names,
                                     #not just file nodes, so before bailing out, need to make sure
                                     #the pathname is a fits file
-                                    if nextname[-5:] == "fits":
+                                    if nextname[-5:] == ".fits":
                                         sub_done = True
                                         break
 
