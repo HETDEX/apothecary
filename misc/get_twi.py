@@ -232,9 +232,11 @@ def find_nested_twi_from_dir(yyyymmdd, ifu_pattern=None, do_extract=False, first
 def main():
 
     if yyyymmdd < 210000: #probably just a YYYYMM
-        to_check = os.path.join(top_path,f"{yyyymmdd}??.tar")
-        print(f"Listing tars for month: {to_check} ... ")
-        fns = sorted(glob.glob(to_check))
+        to_check_tars = os.path.join(top_path,f"{yyyymmdd}??.tar")
+        print(f"Listing dates to check for month: {yyyymmdd} ... ")
+        fns1 = sorted(glob.glob(os.path.join(top_path,f"{yyyymmdd}")))
+        fns2 = sorted(glob.glob(os.path.join(alt_top_path,f"{yyyymmdd}??.tar")))
+        fns = list(fns1) + list(fns2)
         for f in fns:
             print(os.path.basename(f))
     else:
