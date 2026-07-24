@@ -162,16 +162,8 @@ def zero_fibers(ifu, amp, fiber_number_list=[], startmonth=None, stopmonth=None,
 
 
 def main():
-    # print("todo: execute with:")
-    # print(ifuslot)
-    # print(amp)
-    # print(fiber_number_list)
-    # print(startmonth)
-    # print(startmonth)
-    # print(cmbf_topdir)
 
     zero_fibers(ifuslot,amp,fiber_number_list,startmonth,stopmonth,cmbf_topdir)
-
 
 if __name__ == "__main__":
     main()
