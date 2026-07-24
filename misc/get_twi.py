@@ -98,6 +98,8 @@ def find_nested_twi_from_tar(yyyymmdd, ifu_pattern=None, do_extract=False, first
     all_twilights = []
     all_outfiles = []
 
+    any_twilights = False
+
     if type(yyyymmdd) is int:
         yyyymmdd = str(yyyymmdd)
 
@@ -136,6 +138,7 @@ def find_nested_twi_from_tar(yyyymmdd, ifu_pattern=None, do_extract=False, first
                                 nextname = nextname.path
                                 #print(f"DEBUG: checking: {nextname}")
                                 if nextname[-8:] == "twi.fits":
+                                    any_twilights = True
                                     found = False
                                     if ifu_pattern is not None:
                                         if ifu_pattern in os.path.basename(nextname):
@@ -174,6 +177,9 @@ def find_nested_twi_from_tar(yyyymmdd, ifu_pattern=None, do_extract=False, first
                         all_outfiles += outfiles
     else:
         print("path does not exist")
+
+    if not any_twilights:
+        print("No twilights for any IFU found.")
 
     #print(len(twilights),len(outfiles))
     return all_twilights, all_outfiles
