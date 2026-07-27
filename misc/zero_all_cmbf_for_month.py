@@ -33,7 +33,7 @@ from astropy.table import Table
 #hetdex_api_path = hetdex_api.__path__
 
 badfib_path = "/corral-repl/utexas/Hobby-Eberly-Telesco/hdrX/software/hetdex_api/known_issues/hdr5/badfib.tab"
-ifu_map_path = "/corral-repl/utexas/Hobby-Eberly-Telesco/hdrX/software/apothecary/misc/ifu_mf_map_full_hetdex.tab"
+ifu_map_path = "/corral-repl/utexas/Hobby-Eberly-Telesco/hdrX/software/apothecary/misc/ifu_mf_map_full_hetdex.dat"
 
 #cmbf_topdir = "/scratch/03261/polonius/bad_fibers/cmbf_test/lib_calib"
 cmbf_topdir = "/scratch/projects/hetdex/lib_calib"
@@ -255,11 +255,11 @@ def main():
 
         #now, find out if there are any hits in the BADFIB
         sel = BADFIB['multiframe']==mf  #there can be 0 or more
-        ct = np.count_nonzero(ct)
+        ct = np.count_nonzero(sel)
 
         if ct > 0:
             print("")
-            zero_fibers_one_file(fn, BADFIB['fibnum'][sel])
+            zero_fibers_one_file(fn, list(BADFIB['fibnum'][sel]))
 
 if __name__ == "__main__":
     main()
