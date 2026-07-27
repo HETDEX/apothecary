@@ -145,7 +145,8 @@ def zero_fibers_one_file(fn, fiber_number_list=[]):
 
         if os.path.exists(fn):
             if not NO_ACTION: #nice double negative
-                fnb = fn.replace("cmbf.fits", "cmbf.backup.fits")
+                #notice: the largest number is then the most recent backup
+                fnb = fn.replace("cmbf.fits", "cmbf.backup_1.fits")
                 target_ready = False
                 ct = 0
                 while not target_ready:
@@ -165,9 +166,9 @@ def zero_fibers_one_file(fn, fiber_number_list=[]):
                 for fnum in fiber_number_list:
                     hdu[0].data[fnum - 1] *= 0
 
-            print(f"{fn} updated")
+            print(f"{fn} updated. Fibers: {fiber_number_list}")
         else:
-            print(f"{fn} would be updated")
+            print(f"{fn} would be updated. Fibers: {fiber_number_list}")
 
 
 
@@ -258,8 +259,8 @@ def main():
         ct = np.count_nonzero(sel)
 
         if ct > 0:
-            print("")
-            zero_fibers_one_file(fn, list(BADFIB['fibnum'][sel]))
+            #print("")
+            zero_fibers_one_file(fn, sorted(list(BADFIB['fibnum'][sel])))
 
 if __name__ == "__main__":
     main()
