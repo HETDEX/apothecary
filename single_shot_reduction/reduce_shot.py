@@ -1679,6 +1679,20 @@ def get_exposure_times(cfg):
         #base_tarfn = os.path.join(path, f"virus/{virus_shot}.tar")
         if cfg.virus_tar_path is not None:
             base_tarfn = cfg.virus_tar_path
+            if base_tarfn[-4:] != ".tar": #this is probably an intermediate directory
+                extended_tarfn = os.path.join(base_tarfn,f"{cfg.datevshot[0:8]}/virus/{virus_shot}.tar")
+                if os.path.exists(extended_tarfn):
+                    base_tarfn = extended_tarfn
+                else:
+                    extended_tarfn = os.path.join(base_tarfn, f"/virus/{virus_shot}.tar")
+                    if os.path.exists(extended_tarfn):
+                        base_tarfn = extended_tarfn
+                    else:
+                        extended_tarfn = os.path.join(base_tarfn, f"{virus_shot}.tar")
+                        if os.path.exists(extended_tarfn):
+                            base_tarfn = extended_tarfn
+                        else: #did not find it ... could try to scan for any {virus_shot}.tar below here
+                            print(f"[{cfg.datevshot}] could not find tarfile?")
         else:
             base_tarfn = os.path.join(path, f"virus/{virus_shot}.tar")
 
