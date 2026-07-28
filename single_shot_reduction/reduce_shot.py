@@ -28,8 +28,10 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # 1.0.7 add normed, observed EW filter for bright objects, tweak memory for rf1 (fitradecsp) based on total memory available
 # 1.0.8 add color-coded pngs of up to 3x dithers and all 4 amps per IFU in analysis folder
 # 1.0.9 set color-coded pngs to run with step 01 and/or as part of more complete analysis in step 04
+# 1.0.10 fix issue with --hetdex tar copy sticking on the directory instead of the tar file; check lib_calib before reducing
 
-__version__ = '1.0.9'
+
+__version__ = '1.0.10'
 
 import numpy as np
 import sys
@@ -750,6 +752,34 @@ print(f"[{cfg.datevshot}] Evaluating with datevshot = {cfg.datevshot}",flush=Tru
 ########################################################################
 # worker functions
 ########################################################################
+
+def check_lib_calib(cfg):
+    """
+    if the lib_calib/yyyymm directory is in the process of updating (e.g. if calibrations are being made)
+      do not allow a reduction to start
+
+    NOTE: this is incomplete protection as a calibration could start AFTER a reduction and it would not be
+    protected.
+
+    :param yyyymm:
+    :return:
+    """
+
+    #todo: check the path to lib_calib/yyyymm and see if the update in progress marker is present
+    #todo: is this even worth doing?? ... might be more meaningful since the time window is actually pretty big once
+    #      you include the --multifts_only run for the whole month to build up the new reschi stuff
+    rc = 0
+    try:
+        month = cfg.datevshot[0:6]
+        path_check = os.path.join(hetdex_projects_path,f"lib_calib/{month}/status.updating")
+        if os.path.exists(path_check):
+            rc = 1 #warn, we are updating
+    except:
+        print(f"[{cfg.datevshot}] Could not check on lib_calib status.")
+        rc = -1
+
+    return rc
+
 
 
 def safe_cd(path):
@@ -2414,7 +2444,11 @@ def precheck(cfg):
         month = cfg.datevshot[0:6]
         path_check = os.path.join(hetdex_projects_path,f"lib_calib/{month}")
         if not os.path.exists(path_check):
-            print(f"Precheck fail. Dir does not exist: {path_check}")
+            print(f"[{cfg.datevshot}] Precheck fail. Dir does not exist: {path_check}")
+            return -1
+
+        if check_lib_calib(cfg) != 0:
+            print(f"[{cfg.datevshot}] Precheck fail. lib_calib/{cfg.datevshot[0:6]} directory not ready")
             return -1
 
         #common missing installs (that don't show up until later)
@@ -2422,8 +2456,42 @@ def precheck(cfg):
         rc = 0
         for pkg in pkgs:
             if importlib.util.find_spec(pkg) is None:
-                print(f"Fatal. You need to install '{pkg}'")
+                print(f"Fatal. You need to (pip) install '{pkg}'")
                 rc = -1
+
+
+        #warn if missing HTEDEX packages
+        pkgs=["hetdex_shuffle","vdrp"]
+        for pkg in pkgs:
+            if importlib.util.find_spec(pkg) is None:
+                print(f"Warn! You may need to manually install '{pkg}'")
+                if pkg == "hetdex_shuffle":
+                    install_help = """
+                    for hetdex_shuffle (you need this BEFORE vdrp)
+                        $ pip install --user svn+svn://luna.mpe.mpg.de/hetdexshuffle/trunk#egg=shuffle
+                        then cd in that directory and run
+                        $ pip install --user -e .
+                    """
+                    print(install_help)
+                elif pkg == "vdrp":
+                    install_help = """
+                    for vdrp:
+                        $ git clone https://github.com/HETDEX/vdrp.git
+                        then cd in that directory and run
+                        $ pip install --user -e .
+                    """
+                    print(install_help)
+
+        #for hetdex_shuffle (you need this BEFORE vdrp)
+        #$ pip install --user svn+svn://luna.mpe.mpg.de/hetdexshuffle/trunk#egg=shuffle
+        #then cd in that directory and
+        #$ pip install --user -e . (edited)
+
+
+        #for vdrp:
+        #$ git clone https://github.com/HETDEX/vdrp.git
+        #then cd into it and run the
+        #$ pip install --user -e .
 
 
         #is this a hetdex shot and if so, is it allowed?
