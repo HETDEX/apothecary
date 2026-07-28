@@ -20,6 +20,8 @@ the original file is backedup locally, then the cmbf.fits file is updated with t
 
 
 """
+import copy
+
 import numpy as np
 import os
 import sys
@@ -28,6 +30,7 @@ import astropy.io.fits as fits
 import shutil
 import traceback
 from astropy.table import Table
+from datetime import datetime
 
 #import hetdex_api
 #hetdex_api_path = hetdex_api.__path__
@@ -143,34 +146,51 @@ def zero_fibers_one_file(fn, fiber_number_list=[]):
             print(f"{fn} Invalid fiber_number_list. Out of range values.")
             return -1
 
+        do_change = False
         if os.path.exists(fn):
-            if not NO_ACTION: #nice double negative
-                #notice: the largest number is then the most recent backup
-                fnb = fn.replace("cmbf.fits", "cmbf.backup_1.fits")
-                target_ready = False
-                ct = 0
-                while not target_ready:
-                    if os.path.exists(fnb):
-                        ct += 1
-                        fnb = fn.replace("cmbf.fits", f"cmbf.backup_{ct}.fits")
+
+            #is a change going to happen? could be the current .fits is already marked
+            with fits.open(fn, mode='readonly') as hdu:
+                data = copy.copy(hdu[0].data)
+                for fnum in fiber_number_list:
+                    data[fnum - 1] *= 0
+
+                if np.any(data - hdu[0].data):
+                    #there is going to be a change
+                    do_change = True
+
+                if not NO_ACTION:  # nice double negative
+                    if do_change:
+                        #notice: the largest number is then the most recent backup
+                        fnb = fn.replace("cmbf.fits", "cmbf.backup_1.fits")
+                        target_ready = False
+                        ct = 0
+                        while not target_ready:
+                            if os.path.exists(fnb):
+                                ct += 1
+                                fnb = fn.replace("cmbf.fits", f"cmbf.backup_{ct}.fits")
+                            else:
+                                target_ready = True
+                        shutil.copy(fn, fnb)
+                        print(f"Backup: {fnb}")
+
+                        with fits.open(fn, mode='update') as hdu:
+                            now = datetime.now().strftime("%Y-%m-%d")
+                            for fnum in fiber_number_list:
+                                hdu[0].data[fnum - 1] *= 0
+                                hdu[0].header.add_history(f"{now} set fiber number {str(fnum).zfill(3)} to zero. Bad fiber.")
+
+                        print(f"{fn} updated. Fibers: {fiber_number_list}")
                     else:
-                        target_ready = True
-                shutil.copy(fn, fnb)
-                print(f"Backup: {fnb}")
+                        #DEFBUG
+                        print(f"{fn} already updated.")
+                else:
+                    if do_change:
+                        print(f"{fn} would be updated. Fibers: {fiber_number_list}")
+
         else:
             print(f"{fn} File does not exist")
             return -1
-
-        if not NO_ACTION: #nice double negative
-            with fits.open(fn, mode='update') as hdu:
-                for fnum in fiber_number_list:
-                    hdu[0].data[fnum - 1] *= 0
-
-            print(f"{fn} updated. Fibers: {fiber_number_list}")
-        else:
-            print(f"{fn} would be updated. Fibers: {fiber_number_list}")
-
-
 
     except:
         print(traceback.format_exc())
