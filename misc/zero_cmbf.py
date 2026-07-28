@@ -190,8 +190,9 @@ def zero_fibers_one_file(fn, fiber_number_list=[]):
                         with fits.open(fn, mode='update') as hdu:
                             now = datetime.now().strftime("%Y-%m-%d")
                             for fnum in fiber_number_list:
-                                hdu[0].data[fnum - 1] *= 0
-                                hdu[0].header.add_history(f"{now} set fiber number {str(fnum).zfill(3)} to zero. Bad fiber.")
+                                if np.any(hdu[0].data[fnum - 1]):
+                                    hdu[0].data[fnum - 1] *= 0
+                                    hdu[0].header.add_history(f"{now} set fiber number {str(fnum).zfill(3)} to zero. Bad fiber.")
 
                         print(f"{fn} updated. Fibers: {fiber_number_list}")
                     else:
