@@ -287,7 +287,7 @@ def main():
             for t,o in zip(sci,out):
                 print(t,"-->",o)
         else:
-            for t in twi:
+            for t in sci:
                 print(t)
 
 if __name__ == "__main__":
