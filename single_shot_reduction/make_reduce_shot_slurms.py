@@ -15,11 +15,16 @@ import shutil
 NOTIFICATION_EMAIL = None # "XXX@astro.as.utexas.edu"
 SU_ACCOUNT = "AST25019"
 BASE_FILENAME = "parallel"
+MIN_TOTAL_EXPTIME = 300.0 #seconds
+MAX_TOTAL_EXPTIME = 999999.0 #seconds
+START_DATE = 20240801  #inclusive
+END_DATE = 20240831    #inclusive
 
 QUEUE = "normal"
 MAX_NODES = 5 #this is a TACC request to limit
 MAX_TASKS_PER_NODE = 11 #this is a memory issue
 NOMINAL_TIME_REQUEST = "3:00:00"
+NUM_SLURM_FILES = None # if None, let the script fit, otherwise use this value?
 
 #if you have defined a common shell wrapper, use it, otherwise use the direct python call to the python script
 if shutil.which("reduce_shot"):
@@ -47,13 +52,13 @@ else:
 ##################
 # shot selection
 ##################
-sel = np.array(T['exptime'] > 300) * np.array(T['exptime'] < 999999)
+sel = np.array(T['exptime'] >= MIN_TOTAL_EXPTIME) * np.array(T['exptime'] <= MAX_TOTAL_EXPTIME)
 
 #new version of the virus_shot_summary_table.tab is a whitelist, so no need to kick out VDFI as it is not already there
 #still, just to be safe ....
 #sel = sel * np.array(T['name'] == 'parallel')
 sel = sel * np.array([n[0:4] != 'VDFI' for n in T['name']])
-sel = sel * np.array(T['date'] >= 20260401) * np.array(T['date'] < 20260501)
+sel = sel * np.array(T['date'] >= START_DATE) * np.array(T['date'] < END_DATE)
 #sel = sel * np.array(T['num_exp'] == 1)
 #T[sel]
 
@@ -148,9 +153,16 @@ tasks_per_node = MAX_TASKS_PER_NODE
 if "multifits_only" in EXTRA_SWITCHES:
     step = len(T[sel])
     num_files = 1
+elif NUM_SLURM_FILES is not None:
+    if NUM_SLURM_FILES > len(T[sel]):
+        step = 1
+        num_files = len(T[sel])
+    else:
+        step = len(T[sel]) // NUM_SLURM_FILES
+        num_files = len(T[sel]) // step + (1 if len(T[sel]) % step != 0 else 0)
 else:
     step = nodes * tasks_per_node  # how many per file, 55 is 5 nodes with 11 per node (given the memory requirements)
-    num_files = len(T[sel]) // step + 1 if len(T[sel]) % step != 0 else 0
+    num_files = len(T[sel]) // step + (1 if len(T[sel]) % step != 0 else 0)
 
 print(f"Making {num_files} files at {tasks_per_node} tasks_per_node and {nodes} nodes")
 
