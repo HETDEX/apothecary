@@ -8,6 +8,7 @@ User should edit near the top to set the email address for notifications
 """
 
 import numpy as np
+import os
 from astropy.table import Table
 import shutil
 
@@ -26,21 +27,31 @@ if shutil.which("reduce_shot"):
 else:
     BASE_CMD = "python reduce_shot.py "
 
-EXTRA_SWITCHES = "" #"--multifits_only --clean 0"
+#EXTRA_SWITCHES = "" #"--multifits_only --clean 0"
+EXTRA_SWITCHES = "--multifits_only --local_het_raw_path /scratch/03261/polonius/het_raw --clean 0"
 
 #note: these are the defaults
 #--cal_flux 'sdss' --cal_astro 'gaia'  --clean 1
 
 
 #read the table
-T = Table.read("virus_shot_summary_table.tab",format="ascii")
+if os.path.exists("virus_shot_summary_table.tab"):
+    T = Table.read("virus_shot_summary_table.tab",format="ascii")
+elif os.path.exists("/work/03261/polonius/hetdex/single_shot/virus_shot_summary_table.tab"):
+    T = Table.read("/work/03261/polonius/hetdex/single_shot/virus_shot_summary_table.tab", format="ascii")
+else:
+    print("Fatal. Cannot locate virus_shot_summary_table.tab")
+    exit(-1)
+
 
 ##################
 # shot selection
 ##################
-sel = np.array(T['exptime'] > 300) * np.array(T['exptime'] < 9999)
+sel = np.array(T['exptime'] > 300) * np.array(T['exptime'] < 999999)
 
-sel = sel * np.array(T['name'] == 'parallel')
+#new version of the virus_shot_summary_table.tab is a whitelist, so no need to kick out VDFI as it is not already there
+#still, just to be safe ....
+#sel = sel * np.array(T['name'] == 'parallel')
 sel = sel * np.array([n[0:4] != 'VDFI' for n in T['name']])
 sel = sel * np.array(T['date'] >= 20260401) * np.array(T['date'] < 20260501)
 #sel = sel * np.array(T['num_exp'] == 1)
@@ -134,8 +145,12 @@ echo " "
 
 nodes = MAX_NODES
 tasks_per_node = MAX_TASKS_PER_NODE
-step = nodes * tasks_per_node  # how many per file, 55 is 5 nodes with 11 per node (given the memory requirements)
-num_files = len(T[sel]) // step + 1 if len(T[sel]) % step != 0 else 0
+if "multifits_only" in EXTRA_SWITCHES:
+    step = len(T[sel])
+    num_files = 1
+else:
+    step = nodes * tasks_per_node  # how many per file, 55 is 5 nodes with 11 per node (given the memory requirements)
+    num_files = len(T[sel]) // step + 1 if len(T[sel]) % step != 0 else 0
 
 print(f"Making {num_files} files at {tasks_per_node} tasks_per_node and {nodes} nodes")
 
