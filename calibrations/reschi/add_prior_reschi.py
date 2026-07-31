@@ -106,5 +106,5 @@ for fn in sorted(list_failed):
     else:
         print(f"  {fn} failed - unknown")
 
-print(f"\nCurrent specIDs that are no in prior month: \n{list_prior_month_no_match}")
+print(f"\nCurrent specIDs that are not in prior month: \n{list_prior_month_no_match}")
 print(f"\nPrior specIDs that are not in current month: \n{list_current_month_no_match}")
