@@ -16,6 +16,8 @@ import glob
 from tqdm import tqdm
 import traceback
 
+import sys
+
 # lets build a table of fibers over time
 # need to record the full fiber information* (specid, slot, ifuid, amp, fiber number, date (or month))
 #   *initially might only have the slot
@@ -144,15 +146,20 @@ def new_fT(stats_dict=None):
 def get_nearest_past_date(date_array, date):
     """
     """
-    if len(str(date)) == 6:
+    if len(str(date)) == 6 and len(str(date_array[0]))==8:
         date = int(str(date) + "15")  # we'll just assume mid month for now (don't need to worry about 28-31)
+    elif len(str(date)) == 8 and len(str(date_array[0]))==6:
+        date = int(str(date[0:6]))
 
     if type(date_array) == list:
         date_array = np.array(date_array)
 
-    idx = (np.abs(date_array - date)).argmin()
+    _date_array = np.unique(date_array)
+    _date_array = _date_array[_date_array < date]
 
-    if date_array[idx] <= date:
+    idx = (np.abs(_date_array - date)).argmin()
+
+    if _date_array[idx] <= date:
         pass  # this is good, it is either the same or the nearest is less than the current date
     else:  # nearest is > current date, so back up one
         idx = idx - 1
@@ -160,7 +167,7 @@ def get_nearest_past_date(date_array, date):
     if idx < 0:
         return None
     else:
-        return date_array[idx]
+        return _date_array[idx]
 
 
 def get_ifu_mapping_table():
@@ -286,9 +293,9 @@ def ifu_date_to_multiframe(map_tab, date, ifu):
                 else:  # unexpected
                     # print(f"xx {yyyymmdd} {ifu}")
                     print(
-                        f"Could not map {date} {ifu}. Unexpected ({np.count_nonzero(sel)}) matches found for date.")
+                        f"\nCould not map {date} {ifu}. Unexpected ({np.count_nonzero(sel)}) matches found for date.")
             else:
-                print(f"Could not map {date} {ifu}. No match found.")
+                print(f"\nCould not map {date} {ifu}. No match found.")
 
         return dlist, len(dlist)
 
@@ -652,8 +659,66 @@ def bad_fiber_over_time(stats_dict_array):
     pass
 
 
+###############################
 #basic (main)
-dates = [201701,201702,201703,201704,201705,201706,201707,201708,201709,201710,201711,201712,
+###############################
+
+args = list(sys.argv) #python3 map is no longer a list, so need to cast here
+del args[0] #args.pop(0) #remove THIS file
+args = [x.replace("--","-") for x in args]
+
+
+make_new = False
+if "-new" in args:
+    args.remove("-new")
+    make_new = True
+
+yyyymm = None
+if "-yyyymm" in args:
+    i = args.index("-yyyymm")
+    try:
+        yyyymm = int(args[i+1])
+        if 201601 <= yyyymm <= 209912:
+            pass #assume is good
+        else:
+            print(f"Invalid -yyyymm specified: {args[i+1]} ")
+            exit(-1)
+    except:
+        print(f"Invalid -yyyymm specified")
+        exit(-1)
+
+    del args[i+1]  # args.pop(0) #remove THIS file
+    args.remove("-yyyymm")
+
+table_fn = "cmbf_stats.dat"
+if "-name" in args:
+    i = args.index("-name")
+    try:
+        table_fn = args[i+1]
+
+    except:
+        print(f"Invalid -name specified")
+        exit(-1)
+
+    del args[i+1]  # args.pop(0) #remove THIS file
+    args.remove("-name")
+
+summary_only = False
+if "-summary" in args:
+    i = args.index("-summary")
+    summary_only = True
+    args.remove("-summary")
+
+
+if len(args) > 0:
+    print(f"Fail. Unknown args: {args}")
+    exit(-1)
+#otherwise the assumption is this is an append
+
+
+if make_new:
+    dates = \
+        [201701,201702,201703,201704,201705,201706,201707,201708,201709,201710,201711,201712,
          201801,201802,201803,201804,201805,201806,201807,201808,201809,201810,201811,201812,
          201901,201902,201903,201904,201905,201906,201907,201908,201909,201910,201911,201912,
          202001,202002,202003,202004,202005,202006,202007,202008,202009,202010,202011,202012,
@@ -663,26 +728,76 @@ dates = [201701,201702,201703,201704,201705,201706,201707,201708,201709,201710,2
          202401,202402,202403,202404,202405,202406,202407]#,202408,202409,202410,202411,202412,
          #202501,202502,202503,202504,202505,202506,202507,202508,202509,202510,202511,202512,
          #202601,202602,202603,202604,202605,202606,202607,202608,202609,202610,202611,202612]
+else:
+    dates = [yyyymm]
 
 ifuslot = "???"
 amp = "??"
 
-all_fT = new_fT()
+
 
 ifu_map = get_ifu_mapping_table()
 
 cmbfpath = "/scratch/projects/hetdex/lib_calib"
 #cmbfpath = "/corral/utexas/Hobby-Eberly-Telesco/lib_calib/"
-for date in tqdm(dates):
-    date_fT = new_fT()
-    fns = sorted(glob.glob(f"{cmbfpath}/{date}/i{str(ifuslot).zfill(3)}a{amp}cmbf.fits"))
-    for fn in tqdm(fns):
-        d = get_cmbf_all_fiber_stats(fn,ifu_map)
-        d = evaluate_cmbf_dict(d)
-        fT = new_fT(d)
-        date_fT = vstack([date_fT,fT])
 
-    date_fT.write(f"cmbf_stats.dat.{date}", format="ascii", overwrite=True)
-    all_fT = vstack([all_fT,date_fT])
+if make_new:
+    all_fT = new_fT()
+else:
+    print(f"Loading {table_fn} ... ")
+    all_fT = Table.read(table_fn, format="ascii")
 
-all_fT.write("cmbf_stats.dat",format="ascii",overwrite=True)
+if not summary_only:
+    for date in tqdm(dates):
+        date_fT = new_fT()
+        fns = sorted(glob.glob(f"{cmbfpath}/{date}/i{str(ifuslot).zfill(3)}a{amp}cmbf.fits"))
+        print(f"Working on {date} ...")
+        for fn in tqdm(fns):
+            d = get_cmbf_all_fiber_stats(fn,ifu_map)
+            d = evaluate_cmbf_dict(d)
+            fT = new_fT(d)
+            date_fT = vstack([date_fT,fT])
+
+        date_fT.write(f"{table_fn}.{date}", format="ascii", overwrite=True)
+        all_fT = vstack([all_fT,date_fT])
+
+    print(f"Writing out {table_fn} ... ")
+    all_fT.write(table_fn,format="ascii",overwrite=True)
+    print("Done")
+
+if not make_new: #then this was just one month, add a summary
+    print("\nSummary:")
+    print("Iffy:")
+    sel_status = np.array(all_fT["status"] > 0)
+    sel_date =  np.array(all_fT["yyyymm"] == yyyymm)
+    last_yyyymm = get_nearest_past_date(all_fT["yyyymm"],yyyymm)
+    sel_prev = np.array(all_fT["yyyymm"] == last_yyyymm)
+    for row in all_fT[sel_status * sel_date]:
+        #was this iffy last month?
+        last_sel = np.array(all_fT['yyyymm']==last_yyyymm) * np.array(all_fT['fiberid']==row["fiberid"])
+        if np.count_nonzero(last_sel) > 0:
+            last_status, last_reason = list(all_fT['status'][last_sel]), list(all_fT['reason'][last_sel])
+            if last_status == row["status"]:
+                print(row["yyyymm"], row["cmbf"], row["fiberid"], row["status"], row["reason"],
+                      f"**prev {last_yyyymm} = {last_status}, {last_reason}")
+            else:
+                print(row["yyyymm"], row["cmbf"], row["fiberid"], row["status"], row["reason"],
+                      f"*** NEW *** (prev {last_yyyymm} = {last_status}, {last_reason})")
+        else:
+            print(row["yyyymm"], row["cmbf"], row["fiberid"], row["status"], row["reason"],"***NEW***")
+
+
+    print("Bad:")
+    sel = np.array(all_fT["status"] < 0) * np.array(all_fT["yyyymm"] == yyyymm)
+    for row in all_fT[sel]:
+        last_sel = np.array(all_fT['yyyymm']==last_yyyymm) * np.array(all_fT['fiberid']==row["fiberid"])
+        if np.count_nonzero(last_sel) > 0:
+            last_status, last_reason = list(all_fT['status'][last_sel]), list(all_fT['reason'][last_sel])
+            if last_status == row["status"]:
+                print(row["yyyymm"], row["cmbf"], row["fiberid"], row["status"], row["reason"],
+                      f"**prev {last_yyyymm} = {last_status}, {last_reason}")
+            else:
+                print(row["yyyymm"], row["cmbf"], row["fiberid"], row["status"], row["reason"],
+                      f"*** NEW *** (prev {last_yyyymm} = {last_status}, {last_reason})")
+        else:
+            print(row["yyyymm"], row["cmbf"], row["fiberid"], row["status"], row["reason"],"***NEW***")
