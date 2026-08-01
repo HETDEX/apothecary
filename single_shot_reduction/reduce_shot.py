@@ -2502,12 +2502,12 @@ def precheck(cfg):
             h5.close()
             if np.int64(cfg.datevshot.replace("v","")) in dex_shots:
                 cfg.hetdex_original = True
-                if not cfg.hetdex:
+                if not cfg.hetdex and not cfg.multifits_only:
                     print(f"[{cfg.datevshot}] is an existing HETDEX shot. To re-reduce here, re-run with --hetdex")
                     rc = -1
                 else:
                     #this is okay
-                    print(f"[{cfg.datevshot}] is an existing HETDEX shot, but --hetdex specified, so will re-reduce.")
+                    print(f"[{cfg.datevshot}] is an existing HETDEX shot, but --hetdex or --multifits_only specified, so will re-reduce.")
         except:
             print(f"[{cfg.datevshot}] Exception checking HETDEX Survye file {HETDEXSurvey}", traceback.format_exc())
 
