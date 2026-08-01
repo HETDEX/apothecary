@@ -3,6 +3,11 @@ related to and to be run after make_reshi.py
 
 This is the part that takes the prior reschi and adds it in to the current (newly generated) resXXXAA.fits files
 
+This is run under the parallel reduction directory, normally under the directory for a specific month, and under
+   that directory's "reductions" folder (e.g. <somepath>/parallel/m202408/reductions/)
+   The directory above should have all the sci<YYYYMMDDvSSS> folders
+
+
 """
 import glob
 import os
@@ -11,8 +16,12 @@ from tqdm import tqdm
 from astropy.io import fits
 import traceback
 
-BASEDIR_reschi = "/scratch/projects/hetdex/lib_calib/reschi" #do not end with /
+#BASEDIR_reschi = "/scratch/projects/hetdex/lib_calib/reschi" #do not end with /
+#to use local reschi, copy the per specID contents to reschi/yyyymm/ locally and set BASEDIR_reschi to that path
+BASEDIR_reschi = "/scratch/03261/polonius/parallel/reschi" #do not end with /
 
+
+print(f"Using reschi under: {BASEDIR_reschi}")
 
 all_dateshot_paths = sorted(glob.glob("20*/virus/virus*"))
 all_dates = [x.split("/")[0] for x in all_dateshot_paths]

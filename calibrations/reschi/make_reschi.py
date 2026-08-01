@@ -1,7 +1,20 @@
 """
 make the reschi (res*.fits and rres*.fits) for a month
 
+
+This is run under the parallel reduction directory, normally under the directory for a specific month, and under
+   that directory's "reductions" folder (e.g. <somepath>/parallel/m202408/reductions/)
+   The directory above should have all the sci<YYYYMMDDvSSS> folders
+
+This is part 1 of 3. This will produce rgetres.sh and rgetres.run. This is very fast (just seconds).
+As part 2 of 3, run either ... rgetrsh.sh in an idev session (vm-small is fine and it can take more than 1 hour)
+   or build a slurm and run rgetres.run in that slurm.
+After this runs, part 3 of 3 is to run add_prior_reschi.py
+
+
+
 this is a wrapper for Karl's rgetres0, rgetres1 which call in to ~/gebhardt/bin/
+
 
 Notes: from email 20260627
 res*fits : average residual after sky subtraction (112x1036 arrays). This is designed to provide an additional
