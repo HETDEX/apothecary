@@ -13,7 +13,7 @@ from astropy.table import Table
 import shutil
 
 NOTIFICATION_EMAIL = None # "XXX@astro.as.utexas.edu"
-SU_ACCOUNT = "AST25019"
+SU_ACCOUNT = "AST23008"
 BASE_FILENAME = "parallel"
 MIN_TOTAL_EXPTIME = 300.0 #seconds
 MAX_TOTAL_EXPTIME = 999999.0 #seconds
