@@ -9,7 +9,8 @@ Perform science reduction (astrometry, flux calibration, line and continuum dete
          [optional] -overwrite (delete and overwrite the datevshot directory)
          [optional] -exp <##> (specify a single exposure to reduce, if there is more than one in the shot; 0 = all)
 
-
+!!! Warning !!! Not recommended for use with Pipes (have seen issues with lower level scripting calls). That is,
+  when running from an idev session DO NOT to something like: python reduce_shot.py (XXXX params) | tee out.txt
 
 This is just a large Python script. There is no defined main(), but the principle logic begins in a
   "main" commented section.
@@ -366,11 +367,15 @@ def check_version(cfg):
     except:
         print(f"Could not check version. Exception!",traceback.format_exc())
 
+print(f"version {__version__}")
+print(f"Command: {' '.join(sys.argv)}")
+
 args = list(sys.argv) #python3 map is no longer a list, so need to cast here
 del args[0] #args.pop(0) #remove THIS file
 args = [x.replace("--","-") for x in args]
 
-print(f"version {__version__}")
+
+
 
 cfg = Config()
 
@@ -1551,7 +1556,7 @@ def write_summary(cfg):
     os.chdir(orig_dir)
 
 
-def Quit(cfg,rc,msg=None,write_status=True):
+def Quit(cfg,rc,msg=None,write_status=True,do_post_clean=True):
     """
 
     :param cfg:
@@ -1586,7 +1591,8 @@ def Quit(cfg,rc,msg=None,write_status=True):
         #    print(f"({rc})")
 
     try: #remove the status.run file (if it exists)
-        system_command(cfg,f"rm {os.path.join(cfg.cwd,'status.run')}")
+        if os.path.exists(os.path.join(cfg.cwd,'status.run')):
+            system_command(cfg,f"rm {os.path.join(cfg.cwd,'status.run')}")
     except:
         pass
 
@@ -1624,9 +1630,9 @@ def Quit(cfg,rc,msg=None,write_status=True):
     except:
         pass
 
-    node_clean(cfg)
+    node_clean(cfg) #always clean the node
 
-    if rc >= 0:
+    if rc >= 0 and do_post_clean:
         post_clean(cfg)
 
     exit(rc)
@@ -2436,6 +2442,20 @@ def precheck(cfg):
     """
 
     try:
+
+        #if the user is (re)-running (e.g. --resume) and we are under a path that seems to be for
+        # this shot, stop and warn. The thinking is that the user may have been checking on the reduction,
+        # maybe editing progress.dat, and attempting to resume, but in the wrong directory
+        try:
+            if f"sci{cfg.datevshot}" in cfg.cwd_orig:
+                print(f"[{cfg.datevshot}] WARNING! Will abort! Working directory may not be as intended: {cfg.cwd_orig}")
+                print(f"[{cfg.datevshot}] It appears to already in include the reduction output dir (sci{cfg.datevshot}).")
+                if cfg.resume:
+                    print(f"[{cfg.datevshot}] Did you --resume from the wrong directory?")
+                return -1
+        except:
+            print(f"Warning! Could not validate current working directory.",traceback.format_exc())
+
 
         # echo a few key paths:
         print(f"[{cfg.datevshot}] Precheck. HETDEX_API path: {hetdex_api_path}",flush=True)
@@ -6379,11 +6399,11 @@ if prep_compress > -1:
 if cfg.clean_only:
     print(f"[{cfg.datevshot}] Performing only the CLEAN, level : {cfg.clean} ...")
     post_clean(cfg)
-    Quit(cfg,0,"Clean complete. Exiting",write_status=False)
+    Quit(cfg,0,"Clean complete. Exiting",write_status=False,do_post_clean=False) #just ran post_clean, don't need it twice
 
 rc = precheck(cfg)
 if rc < 0:
-    Quit(cfg,rc,"FATAL! Precheck failed. Reduction cannot run.",write_status=False)
+    Quit(cfg,rc,"FATAL! Precheck failed. Reduction cannot run.",write_status=False,do_post_clean=False)
 
 #if not cfg.multifits_only:
 cfg.numexp, cfg.gettar_fn = num_exposures_in_shot(cfg.shotid)

@@ -13,6 +13,16 @@ After this runs, part 3 of 3 is to run add_prior_reschi.py
 
 
 
+??? my current question is how, specifically, to generate rres*.fits ... they are the ratio of residuals (so oustensibly
+ res*.fits and another res*.fits (perhaps the previous month?) and should normally be around 1.0). BUT, if it is to the
+ previous month, is it current/prev or prev/current?
+
+>> per Karl, we will just ignore rres*.fits for now and proceed with just res*.fits
+>> ... yes, the calibration step needs to be re-run as we move foreward in time ... should not rely on the old
+>>     calibration that was done with the static res*.fits (though we note that res*.fits may be pretty stable, so
+>>     we can consider leapfrogging and only calibrate every few months
+
+
 this is a wrapper for Karl's rgetres0, rgetres1 which call in to ~/gebhardt/bin/
 
 
