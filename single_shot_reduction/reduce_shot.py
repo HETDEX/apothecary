@@ -317,7 +317,11 @@ class Config:
     dither_configuration = None #-1 is bad, 0 = non-standard (maybe not dithered), 1 = standard hetdex
     linedet_filter = 0 #default, normal filtering
 
-    made_amp_images = False #used to indicate the diagnostic IFU+amp images were already made in this run instancee
+    made_amp_images = False #used to indicate the diagnostic IFU+amp images were already made in this run instance
+
+    # for cleanup at the end
+    copy_lock_file = None
+    node_clean_done = False
 
 ########################################################################
 # Basic user input
@@ -1052,6 +1056,16 @@ def post_clean(cfg):
 
         if cfg.clean_done:
             return
+
+        #clean up the copy lock file
+        if cfg.copy_lock_file is not None:
+            try:
+                lock = FileLock(cfg.copy_lock_file)
+                with lock:
+                    os.remove(cfg.copy_lock_file)
+                    cfg.copy_lock_file = None
+            except:
+                pass
 
         #always try to clean up /tmp
         node_clean(cfg)
@@ -2800,8 +2814,8 @@ def copy_het_raw_file(cfg):
             cfg.virus_tar_path = virus_path
             #if it is being copied or untarred, the lock will be held by the other process that is doing it
             #so, wait on the lock ... once we have it, the copy or untar should be complete
-            copy_lock_file = os.path.join(cfg.local_het_raw_path, f"{cfg.datevshot}.lock")
-            lock = FileLock(copy_lock_file)
+            cfg.copy_lock_file = os.path.join(cfg.local_het_raw_path, f"{cfg.datevshot}.lock")
+            lock = FileLock(cfg.copy_lock_file)
             with lock:  # we have the lock now
                 destination_path = os.path.join(cfg.local_het_raw_path,
                                                 f"{cfg.datevshot[:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar")
@@ -2827,8 +2841,8 @@ def copy_het_raw_file(cfg):
 
 
             #copy_lock_file = os.path.join(cfg.local_het_raw_path, os.path.basename(virus_path)[0:-3] +"lock")
-            copy_lock_file = os.path.join(cfg.local_het_raw_path,  f"{cfg.datevshot}.lock")
-            lock = FileLock(copy_lock_file)
+            cfg.copy_lock_file = os.path.join(cfg.local_het_raw_path,  f"{cfg.datevshot}.lock")
+            lock = FileLock(cfg.copy_lock_file)
             with lock: #we have the lock now
                 #does the tar file already exist? someone else already copied got it?
                 # if os.path.exists(virus_path):  # someone else already copied it.
@@ -3498,19 +3512,21 @@ def node_clean(cfg):
     :return:
     """
 
-    try:
-        lock = FileLock(Lock_tmp_mutex_fn)
-        with lock:
-            #clean up my sync
-            try:
-                #this might have already been removed (e.g. if post_clean() ran successfully)
-                os.remove(os.path.join(Node_basedir,f"{cfg.datevshot}_{os.getpid()}.sync"))
-            except:
-                pass
+    if not cfg.node_clean_done:
+        try:
+            lock = FileLock(Lock_tmp_mutex_fn)
+            with lock:
+                #clean up my sync
+                try:
+                    #this might have already been removed (e.g. if post_clean() ran successfully)
+                    os.remove(os.path.join(Node_basedir,f"{cfg.datevshot}_{os.getpid()}.sync"))
+                    cfg.node_clean_done = True
+                except:
+                    pass
 
-        # lock auto releases
-    except:
-        print(f"Exception! in node_clean()",traceback.format_exc())
+            # lock auto releases
+        except:
+            print(f"Exception! in node_clean()",traceback.format_exc())
 
 
 def node_active_ct(cfg):
