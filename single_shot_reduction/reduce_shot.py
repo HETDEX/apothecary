@@ -5423,23 +5423,26 @@ def shot_analyisis(cfg):
             #  depends on moon, etc
             # HOWEVER, while the average seems to increase with sky and the stddev broadens maybe with sqrt(time)
             #   we still get negative values, so, maybe we do nothing??
+            # NOTICE: the negative end does not really move, only the positive end (vmax)
 
             try:
-                vmin_vmax_scale = min(1.0,np.sqrt(cfg.total_exp_time / (360. * cfg.numexp)))
+                #vmax_scale = min(1.0,np.sqrt(cfg.total_exp_time / (360. * cfg.numexp)))
+                #no ... more linear with time, rather than sqrt, but the avg sky seems to plays a part too (stretching
+                # out more than just the time) ... maybe linear time stretch + avg_sky stretch??
+                # the "zero" (average peak) seems consistently just about 0 cts, regardless, with a positive skew
+                #  as you would expect
+                #sky_stretch = cfg.avg_sky / 300.0 #where 300 is a typical-ish HETDEX sky
+                vmax_scale = min(1.0, cfg.total_exp_time / 360.0 /cfg.numexp)
             except:
-                vmin_vmax_scale = 1.0
+                vmax_scale = 1.0
 
-            vmin_vmax_shift = 0.0
+            #vmin_vmax_shift = 0.0 #we do not want to shift ... only scale (stretch) the vmax (positive) side
             #not sure we want to shift ... maybe just scale with time
-            # if cfg.avg_sky is not None and cfg.avg_sky > 0:
-            #     if cfg.avg_sky > 9999:
-            #         vmin_vmax_shift = 800.0 #cap
-            #     else:
-            #         vmin_vmax_shift = max(0,cfg.avg_sky / 12.5 - 15.0)
 
-            print(f"[{cfg.datevshot}] Shifting IFU diagnostic plot scaling by +{vmin_vmax_shift:0.1f}")
-            cmap_norm = TwoSlopeNorm(vmin=int(DIAG_AMP_IMG_VMIN_VMAX[0]*vmin_vmax_scale + vmin_vmax_shift), vcenter=0,
-                                     vmax=int(DIAG_AMP_IMG_VMIN_VMAX[1]*vmin_vmax_scale + vmin_vmax_shift) )
+
+            #print(f"[{cfg.datevshot}] Shifting IFU diagnostic plot scaling by +{vmax_scale:0.1f}")
+            cmap_norm = TwoSlopeNorm(vmin=int(DIAG_AMP_IMG_VMIN_VMAX[0]), vcenter=0,
+                                     vmax=int(DIAG_AMP_IMG_VMIN_VMAX[1]*vmax_scale) )
 
             #just assume 3 dithers ... if they do not exist, they will be blank
             #there are a few that have 4 or more exposures and we will just ignore that
@@ -5449,8 +5452,8 @@ def shot_analyisis(cfg):
                 fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(9, 12))
                 #plot_config = list(np.arange(431, 443, 1))
                 fig.suptitle(f"{cfg.datevshot} {mf_base.decode()} cmap scale: "
-                             f"({int(DIAG_AMP_IMG_VMIN_VMAX[0]*vmin_vmax_scale + vmin_vmax_shift)}),"
-                             f" {int(DIAG_AMP_IMG_VMIN_VMAX[1]*vmin_vmax_scale + vmin_vmax_shift)})")
+                             f"({int(DIAG_AMP_IMG_VMIN_VMAX[0])}),"
+                             f" {int(DIAG_AMP_IMG_VMIN_VMAX[1]*vmax_scale)})")
 
                 for ai, amp in enumerate([b'_RU', b'_RL', b'_LL', b'_LU']):
                     ei = 0  # exposure index
