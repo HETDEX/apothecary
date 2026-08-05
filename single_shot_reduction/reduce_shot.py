@@ -318,6 +318,9 @@ class Config:
     linedet_filter = 0 #default, normal filtering
 
     made_amp_images = False #used to indicate the diagnostic IFU+amp images were already made in this run instance
+    #active_ifus = None #number of active IFUs (note not normally set until late into step04e?)
+    amp_stats_problem = 0
+    num_bad_amps = 0
 
     # for cleanup at the end
     copy_lock_file = None
@@ -1559,6 +1562,18 @@ def write_summary(cfg):
             except:
                 f.write(f"Cont Dets:\t???\n")
 
+            try:
+                # outer file:
+                f.write(f"Bad Amps:\t{cfg.num_bad_amps}\n")
+                if cfg.amp_stats_problem != 0:
+                    f.write(f"Amp Stats:\tFail ({cfg.amp_stats_problem})\n")
+                    cfg.set_warn = True
+                else:
+                    f.write(f"Amp Stats:\tPass\n")
+            except:
+                f.write(f"Bad Amps:\t???\n")
+                f.write(f"Amp Stats:\t???\n")
+
     except:
         print(f"[{cfg.datevshot}] Exception! trying to write summary file", traceback.format_exc())
 
@@ -1637,7 +1652,11 @@ def Quit(cfg,rc,msg=None,write_status=True,do_post_clean=True):
                     #and we would be in the case above (rc < 0)
                     with open(f"{status_str}.warn", "w") as f:
                         f.write(f"[{cfg.datevshot}] ({rc}) {msg}\n")
-                        f.write(f"[{cfg.datevshot}] warn. Avg Sky is large: {cfg.avg_sky} \n")
+                        if (cfg.avg_sky is not None and cfg.avg_sky > MAX_SAFE_AVG_SKY):
+                            f.write(f"[{cfg.datevshot}] warn. Avg Sky is large: {cfg.avg_sky} \n")
+                        if cfg.amp_stats_problem != 0:
+                            f.write(f"[{cfg.datevshot}] warn. Amp Stats Issue ({cfg.amp_stats_problem}),"
+                                    f" {cfg.num_bad_amps} bad amps\n")
                 else:
                     with open(f"{status_str}.pass","w") as f:
                         f.write(f"[{cfg.datevshot}] ({rc}) {msg}\n")
@@ -5139,15 +5158,52 @@ def amp_stats(cfg,shot_h5_fqfn=None):
         print(f"[{cfg.datevshot}] Computing amp statistics from: {shot_h5_fqfn} ... ")
         shot_dict = AmpStats.make_stats_for_shot(fqfn=shot_h5_fqfn,save=True,preload=False)
 
-
         if shot_dict is not None:
             t = AmpStats.stats_shot_dict_to_table(shot_dict)
-            t = t[t['n_lo'] >= 0] #use n_lo column to select ... the -1 values are where this failed
+
+            #t = t[t['n_lo'] >= 0] #use n_lo column to select ... the -1 values are where this failed
                                   # (e.g. usually for dithers that don't exist)
+
+            # instead, might want to keep the n_lo == -1 ... (if they match to an expected dither)
+            #      these would indicate BAD AMPS?
+
+            sel_t = t['n_lo'] >= 0
+            stat_exps = np.unique(t['expnum'][sel_t])
+            #now reset and keep all with a valid exp
+            sel_t = np.array([e in stat_exps for e in t['expnum']])
+            t = t[sel_t]
+
+            num_amp_stats = len(t)
+            num_failed_amp_stats = np.count_nonzero(t['n_lo'] < 0)
+            print(f"[{cfg.datevshot}] Amp status computed for {num_amp_stats} amps, {num_failed_amp_stats} failed.")
+
+
+            # expectation is, generally, 78 IFUs x 4 amps x # exposures = 936 for full array, 3 exposures
+            #                                                            312 for full array 1 exposure
+            # noting: like 095 RU might be absent, so 311 might be reasonable
+            #          or earlier data might not have a full array
+
+
+            if num_failed_amp_stats > 2 * len(stat_exps): #allow up to 2 (* number of exposures)
+                # may be a problem
+                print(f"[{cfg.datevshot}] WARNING! {num_failed_amp_stats} failures to build amp stats."
+                      f" This may indicate a problem with the shot.")
+                cfg.amp_stats_problem = 1
+
 
             #???how much of stats_qc needs to be re-done since it is based on 3-dithers and some joint statistics???
             #several of the checks are looking for extreme variation over the dithers, which can't be done with just one dither
             t = AmpStats.stats_qc(t, extend=True,total_exp_time=cfg.total_exp_time)
+
+            print(f"[{cfg.datevshot}] {np.count_nonzero(t['flag']!=1)} amps marked explicitly 'bad'")
+
+            #for THIS (single shot reduction) we will ALSO assume the amp to be bad if n_lo < 0
+            sel_bad_n_lo = t['n_lo']<0
+            if np.count_nonzero(sel_bad_n_lo) > 0:
+                t['flag'][sel_bad_n_lo] = 0 #0 is bad
+                print(f"[{cfg.datevshot}] {np.count_nonzero(sel_bad_n_lo)} additional amps marked bad for failure"
+                      f" to compute stats.")
+
 
             t.write(f"{cfg.datevshot}_ampstats.fits",format="fits",overwrite=True)
             t.write(f"{cfg.datevshot}_ampstats.tab", format="ascii",overwrite=True)
@@ -5156,6 +5212,8 @@ def amp_stats(cfg,shot_h5_fqfn=None):
             with open(f"{cfg.datevshot}_badamps.txt","w") as f:
                 for row in t[t['flag']!=1]: #1 == Good, 0 = Bad
                     f.write(f"{row['multiframe']} exp{str(row['expnum']).zfill(2)} \n")
+
+            cfg.num_bad_amps = np.count_nonzero(t['flag']!=1)
 
 
             #assuming these are post-HETDEX, go ahead and put this in the shot.h5 file
@@ -5178,13 +5236,15 @@ def amp_stats(cfg,shot_h5_fqfn=None):
 
         else:
             print(f"[{cfg.datevshot}] FAIL. Could not compute amp stats.")
+            cfg.amp_stats_problem = 2
             rc = -1
 
 
     except:
         #print(traceback.format_exc())
         rc = -1
-        print(f"[{cfg.datevshot}] Could produce amp statistics.", traceback.format_exc())
+        print(f"[{cfg.datevshot}] Could not produce amp statistics.", traceback.format_exc())
+        cfg.amp_stats_problem = 3
 
     return rc
 
@@ -5493,7 +5553,7 @@ def make_amp_images(cfg):
     """
 
     try:
-        print(f"[{cfg.datevshot}] Making colore-coded IFU+amp images ...")
+        print(f"[{cfg.datevshot}] Making color-coded IFU+amp images ...")
         rc = 0
 
         #make the output location
