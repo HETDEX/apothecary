@@ -5418,7 +5418,28 @@ def shot_analyisis(cfg):
             #cmap = "gray"
             cmap = "Spectral" #try a diverging colormap to help extremes stand out
             #use this to force the colormap to be centered at a value of 0
-            cmap_norm = TwoSlopeNorm(vmin=DIAG_AMP_IMG_VMIN_VMAX[0], vcenter=0, vmax=DIAG_AMP_IMG_VMIN_VMAX[1])
+            #todo: this should be scaled based on the avg sky? and or time? ... do we know that yet?
+            # typical 360 sec avg sky is in the 100-ish range (say 100-300 would not be uncommon)
+            #  depends on moon, etc
+            # HOWEVER, while the average seems to increase with sky and the stddev broadens maybe with sqrt(time)
+            #   we still get negative values, so, maybe we do nothing??
+
+            try:
+                vmin_vmax_scale = min(1.0,np.sqrt(cfg.total_exp_time / (360. * cfg.numexp)))
+            except:
+                vmin_vmax_scale = 1.0
+
+            vmin_vmax_shift = 0.0
+            #not sure we want to shift ... maybe just scale with time
+            # if cfg.avg_sky is not None and cfg.avg_sky > 0:
+            #     if cfg.avg_sky > 9999:
+            #         vmin_vmax_shift = 800.0 #cap
+            #     else:
+            #         vmin_vmax_shift = max(0,cfg.avg_sky / 12.5 - 15.0)
+
+            print(f"[{cfg.datevshot}] Shifting IFU diagnostic plot scaling by +{vmin_vmax_shift:0.1f}")
+            cmap_norm = TwoSlopeNorm(vmin=int(DIAG_AMP_IMG_VMIN_VMAX[0]*vmin_vmax_scale + vmin_vmax_shift), vcenter=0,
+                                     vmax=int(DIAG_AMP_IMG_VMIN_VMAX[1]*vmin_vmax_scale + vmin_vmax_shift) )
 
             #just assume 3 dithers ... if they do not exist, they will be blank
             #there are a few that have 4 or more exposures and we will just ignore that
@@ -5427,7 +5448,9 @@ def shot_analyisis(cfg):
                 plt.close('all')
                 fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(9, 12))
                 #plot_config = list(np.arange(431, 443, 1))
-                fig.suptitle(f"{cfg.datevshot} {mf_base.decode()}")
+                fig.suptitle(f"{cfg.datevshot} {mf_base.decode()} cmap scale: "
+                             f"({int(DIAG_AMP_IMG_VMIN_VMAX[0]*vmin_vmax_scale + vmin_vmax_shift)}),"
+                             f" {int(DIAG_AMP_IMG_VMIN_VMAX[1]*vmin_vmax_scale + vmin_vmax_shift)})")
 
                 for ai, amp in enumerate([b'_RU', b'_RL', b'_LL', b'_LU']):
                     ei = 0  # exposure index
