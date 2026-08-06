@@ -30,9 +30,9 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # 1.0.8 add color-coded pngs of up to 3x dithers and all 4 amps per IFU in analysis folder
 # 1.0.9 set color-coded pngs to run with step 01 and/or as part of more complete analysis in step 04
 # 1.0.10 fix issue with --hetdex tar copy sticking on the directory instead of the tar file; check lib_calib before reducing
+# 1.0.11 extra status.warn conditions, IFU analysis adjustments based on exptime
 
-
-__version__ = '1.0.10'
+__version__ = '1.0.11'
 
 import numpy as np
 import sys
@@ -154,6 +154,9 @@ DIAG_AMP_IMG_VMIN_VMAX = (-30, 30)  # fixed ranges for the IFU+amp diag images (
 DIAG_AMP_IMG_DPI = 100
 
 DEFAULT_MIN_SNR_FOR_ELIXER = 4.3 #can be changed by --linedet_filter switch
+#pretty generous here, maybe should also adjust the warnings based on exptime and observing conditions?
+WARN_NUM_LINE_DETS = 5000
+WARN_NUM_CONT_DETS = 500
 
 #since this is done outside (that is, the SLURM sets this up) it is not useful here, in this code, to know this
 # A way to deal with it here, would be to change the mutex to a sempahore and have a resource count
@@ -321,6 +324,9 @@ class Config:
     #active_ifus = None #number of active IFUs (note not normally set until late into step04e?)
     amp_stats_problem = 0
     num_bad_amps = 0
+
+    num_line_dets = -1 #unset
+    num_cont_dets = -1 #unset
 
     # for cleanup at the end
     copy_lock_file = None
@@ -1647,7 +1653,15 @@ def Quit(cfg,rc,msg=None,write_status=True,do_post_clean=True):
                 with open(f"{status_str}.fail","w") as f:
                     f.write(f"[{cfg.datevshot}] ({rc}) {msg}\n")
             else:
-                if cfg.set_warn or (cfg.avg_sky is not None and cfg.avg_sky > MAX_SAFE_AVG_SKY):
+
+                if cfg.num_line_dets > WARN_NUM_LINE_DETS:
+                    cfg.set_warn = True
+                if cfg.num_cont_dets > WARN_NUM_CONT_DETS:
+                    cfg.set_warn = True
+                if cfg.avg_sky is not None and cfg.avg_sky > MAX_SAFE_AVG_SKY:
+                    cfg.set_warn = True
+
+                if cfg.set_warn:
                     #note: if avg_sky > FAIL_AVG_SKY, then the failure condition would have already tripped
                     #and we would be in the case above (rc < 0)
                     with open(f"{status_str}.warn", "w") as f:
@@ -1657,6 +1671,10 @@ def Quit(cfg,rc,msg=None,write_status=True,do_post_clean=True):
                         if cfg.amp_stats_problem != 0:
                             f.write(f"[{cfg.datevshot}] warn. Amp Stats Issue ({cfg.amp_stats_problem}),"
                                     f" {cfg.num_bad_amps} bad amps\n")
+                        if cfg.num_line_dets > WARN_NUM_LINE_DETS:  # pretty generous here, maybe should also adjust with exptime and conditions?
+                            f.write(f"[{cfg.datevshot}] warn. Num of line dets is large: {cfg.num_line_dets} \n")
+                        if cfg.num_cont_dets > WARN_NUM_CONT_DETS:
+                            f.write(f"[{cfg.datevshot}] warn. Num of cont dets is large: {cfg.num_cont_dets} \n")
                 else:
                     with open(f"{status_str}.pass","w") as f:
                         f.write(f"[{cfg.datevshot}] ({rc}) {msg}\n")
@@ -7111,7 +7129,8 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
                         # line_tab.write(tname, format="fits", overwrite=True)
                         tname = f"{cfg.datevshot}_line_sourcecat.tab"
                         line_tab.write(tname, format="ascii", overwrite=True)
-                        print(f"[{cfg.datevshot}] Updated lines source table, {len(line_tab)} rows: {os.getcwd()}/{tname}")
+                        cfg.num_line_dets = len(line_tab)
+                        print(f"[{cfg.datevshot}] Updated lines source table, {cfg.num_line_dets} rows: {os.getcwd()}/{tname}")
 
                         #esel = np.array(line_tab['sel_det'] == True)
                         #np.savetxt('elixer_line.dets',line_tab['detectid'][esel],fmt="%d")
@@ -7190,7 +7209,8 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
                         # cont_tab.write(tname, format="fits", overwrite=True)
                         tname = f"{cfg.datevshot}_cont_sourcecat.tab"
                         cont_tab.write(tname, format="ascii", overwrite=True)
-                        print(f"[{cfg.datevshot}] Updated continuum source table, {len(cont_tab)} rows: {os.getcwd()}/{tname}")
+                        cfg.num_cont_dets = len(cont_tab)
+                        print(f"[{cfg.datevshot}] Updated continuum source table, {cfg.num_cont_dets} rows: {os.getcwd()}/{tname}")
                         #lastly sub select based on some minimum contflux ??
 
                         #now done elsewhere
