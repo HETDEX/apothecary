@@ -23,7 +23,9 @@ END_DATE = 20240831    #inclusive
 QUEUE = "normal"
 MAX_NODES = 5 #this is a TACC request to limit
 MAX_TASKS_PER_NODE = 11 #this is a memory issue
-NOMINAL_TIME_REQUEST = "3:00:00"
+NOMINAL_TIME_REQUEST = "3:00:00"  #this per SLURM file, the assumption here is there are 5*11 = 55 shots per file
+#for future, rather than fix a time, let it be estimated, like in elixer
+#PER_REDUCTION_TIME = 3.0 #hours (nominal worst case ... a 3-dither, deep observation)
 NUM_SLURM_FILES = None # if None, let the script fit, otherwise use this value?
 
 #if you have defined a common shell wrapper, use it, otherwise use the direct python call to the python script
@@ -32,8 +34,8 @@ if shutil.which("reduce_shot"):
 else:
     BASE_CMD = "python reduce_shot.py "
 
-#EXTRA_SWITCHES = "" #"--multifits_only --clean 0"
-EXTRA_SWITCHES = "--multifits_only --local_het_raw_path /scratch/03261/polonius/het_raw --clean 0"
+EXTRA_SWITCHES = "--linedet_filter 0 " #"--multifits_only --clean 0"
+#EXTRA_SWITCHES = "--multifits_only --local_het_raw_path /scratch/03261/polonius/het_raw --clean 0"
 
 #note: these are the defaults
 #--cal_flux 'sdss' --cal_astro 'gaia'  --clean 1
