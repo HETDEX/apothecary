@@ -5681,7 +5681,7 @@ def make_amp_images(cfg):
             plt.close('all')
             fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(9, 12))
            # plot_config = list(np.arange(431, 443, 1))
-            fig.suptitle(f"{cfg.datevshot} {mf_base.decode()} cmap scale: "
+            fig.suptitle(f"{cfg.datevshot} {mf_base} cmap scale: "
                          f"({int(DIAG_AMP_IMG_VMIN_VMAX[0])}),"
                          f" {int(DIAG_AMP_IMG_VMIN_VMAX[1] * vmax_scale)})")
 
