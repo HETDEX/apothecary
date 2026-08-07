@@ -20,6 +20,10 @@ output is a set of folders in the current working directory, one for each day of
 import sys
 import os
 import glob
+from pathlib import Path
+import numpy as np
+from dataclasses import dataclass
+import traceback
 import tarfile as tar
 from tqdm import tqdm
 
@@ -40,17 +44,27 @@ if not 201601 <= yyyymm <=209912:
     print(f"Invalid yyyymm {args[0]}")
     exit(-1)
 
-
+#HETRaw_archives = ["/work/03946/hetdex/maverick","/corral-repl/utexas/Hobby-Eberly-Telesco/het_raw/"]
 corral_basedir = "/corral/utexas/Hobby-Eberly-Telesco/het_raw"
 maverick_basedir = "/work/03946/hetdex/maverick"  #note calling it maverick to not confuse with my own "work"
+# print("TESTING!!!! Alternate corral_basedir, maverick_basedir")
+# corral_basedir = "/scratch/03261/polonius/het_raw_test_src_corral"
+# maverick_basedir = "/scratch/03261/polonius/het_raw_test_src_maverick"
 het_raw_path = None
+
+
+
+##################################
+# pseudo MAIN
+##################################
+
 
 #build list of each and compbne to be unique with a prefernce for the already "exploded" directories on maverick
 fns_maverick = glob.glob(os.path.join(maverick_basedir,f"{yyyymm}*"))
 fns_corral = glob.glob(os.path.join(corral_basedir,f"{yyyymm}*.tar"))
 
-dates_maverick = [int(os.path.basename(fn)) for fn in fns_maverick]
-dates_corral = [int(os.path.basename(fn)[0:8]) for fn in fns_corral] #strip off the .tar, just keep YYYYMMDD
+dates_maverick = [int(os.path.basename(fn).split(".")[0]) for fn in fns_maverick]
+dates_corral = [int(os.path.basename(fn).split(".")[0]) for fn in fns_corral] #strip off the .tar, just keep YYYYMMDD
 
 #combine for unique list
 #where there are duplicates, keep maverick
@@ -66,12 +80,88 @@ for date in dates_maverick:
 
 #now we have two lists without duplicates
 
-#could do maverick then corral OR go by date order, flipping back and forth?
-for fn in fns_maverick:
-    #do the copy
-    pass
 
-for fn in fns_corral:
-    #copy from tar (see reduce_shot.py)
-    pass
+#need subdirs gc1, gc2, virus  and nothing else (no acm, dimm, hpf, or lsr2)
+#each subdir has one or more *.tar files
+
+if het_raw_path is None: #if not configured, you are copying into the current directory
+    het_raw_path = "./"
+
+#could do maverick then corral OR go by date order, flipping back and forth?
+if len(fns_maverick) > 0:
+    print(f"Copy from {maverick_basedir} ... ")
+    for fn in tqdm(fns_maverick): #top level is a folder for the date
+        #do the copy
+        try:
+            yyyymmdd = os.path.basename(fn) #just a folder
+            dest = os.path.join(het_raw_path, yyyymmdd)
+            if not os.path.exists(dest):
+                Path(dest).mkdir(parents=True, exist_ok=True)
+
+            #need subdirs gc1, gc2, virus  and nothing else? (no acm, dimm, hpf, or lsr2
+            #do not copy if already there
+            src = os.path.join(fn,"gc1")
+            if not os.path.exists(os.path.join(dest,"gc1/gc1.tar")):
+                cmd = f"cp -r {src} {dest}"
+                os.system(cmd)
+            #else:
+            #    print("skipping gc1")
+
+            src = os.path.join(fn,"gc2")
+            if not os.path.exists(os.path.join(dest, "gc2/gc2.tar")):
+                cmd = f"cp -r {src} {dest}"
+                os.system(cmd)
+            #else:
+            #    print("skipping gc2")
+
+            src = os.path.join(fn,"virus")
+            subfiles_dest = sorted(glob.glob(f"{dest}/virus/virus*.tar"))
+
+            if len(subfiles_dest) == 0:
+                cmd = f"cp -r {src} {dest}"
+                os.system(cmd)
+            else:
+                #some might be here
+                subfiles_src = sorted(glob.glob(f"{src}/virus*.tar"))
+                fns_src = [os.path.basename(s) for s in subfiles_src]
+                fns_dest = [os.path.basename(s) for s in subfiles_dest]
+                sel_src = np.array([s not in fns_dest for s in fns_src])
+                subfiles_src = np.array(subfiles_src)[sel_src]
+
+                #print(f"Copying limited number of files: {subfiles_src}")
+
+                #dest += "/virus"
+                for fn in subfiles_src:
+                    cmd = f"cp -r {src} {dest}"
+                    os.system(cmd)
+
+        except:
+            print(f"[{yyyymmdd}] Failed to copy date dir.", traceback.format_exc())
+
+
+if len(fns_corral) > 0:
+    print(f"Copy/Untar from {corral_basedir} ... ")
+    for fn in tqdm(fns_corral): #top level is a tar for the date
+        # this is the date.tar, then need to extract parts of it
+        try:
+            yyyymmdd = os.path.basename(fn).split(".")[0] #strip off the ".tar
+
+            # if not os.path.exists(os.path.join(het_raw_path,yyyymmdd)):
+            #     Path(os.path.join(het_raw_path,yyyymmdd)).mkdir(parents=True, exist_ok=True)
+
+            file_to_extract = f"{yyyymmdd}/gc1"
+            cmd = f"tar -xvf {fn} --skip-old-files -C {het_raw_path} {file_to_extract}"
+            os.system(cmd)
+
+            file_to_extract = f"{yyyymmdd}/gc2"
+            cmd = f"tar -xvf {fn} --skip-old-files -C {het_raw_path} {file_to_extract}"
+            os.system(cmd)
+
+            file_to_extract = f"{yyyymmdd}/virus"
+            cmd = f"tar -xvf {fn} --skip-old-files -C {het_raw_path} {file_to_extract}"
+            os.system(cmd)
+
+        except:
+            print(f"[{yyyymmdd}] Failed to copy/extract date tar file.", traceback.format_exc())
+
 
