@@ -320,7 +320,7 @@ class Config:
     set_warn = False
     dither_configuration = None #-1 is bad, 0 = non-standard (maybe not dithered), 1 = standard hetdex
     linedet_filter = 0 #default, normal filtering
-    linedet_parms = (1.0, 0) #old HETDEX style = (3.0, 0.5)
+    linedet_parms = (1, 0.0) #old HETDEX style = (3, 0.5) #must be (<int>,<float>)
 
     made_amp_images = False #used to indicate the diagnostic IFU+amp images were already made in this run instance
     #active_ifus = None #number of active IFUs (note not normally set until late into step04e?)
@@ -448,7 +448,7 @@ if "-help" in args:
                     1 = OFF + normal HETDEX_API.  Only snr >= 4.5 filter.
                     1.x+ = OFF + HETDEX_API snr set to this value (i.e. for values 1.1 and up, single decimal precision)
                     
-    --linedet_parms : grid (float) and step (float) for line detections as <grid>,<step>
+    --linedet_parms : grid (int) and step (float) for line detections as <grid>,<step>
     
     --local_het_raw_path : if present, specifies the "local" het_raw path to use for locally copied data. This is a path
                      to which /het_raw/ will be appended.
@@ -627,13 +627,15 @@ if "-linedet_parms" in args:
     i = args.index("-linedet_parms")
     try:
         remove_chars = "()[]<>{} "
-        cfg.linedet_parms = tuple([float(x) for x in
-                                    args[i+1].translate(str.maketrans("", "", remove_chars)).split(",")])
-        if len(cfg.linedet_parms) != 2:
+        toks = args[i+1].translate(str.maketrans("", "", remove_chars)).split(",")
+        if len(toks) != 2:
             print(f"Invalid --linedet_filter specified: {args[i+1]}")
             exit(-1)
+
+        cfg.linedet_parms = (int(toks[0]),float(toks[1]))
+
     except:
-        print(f"Invalid --linedet_parms specified")
+        print(f"Invalid --linedet_parms specified {args[i+1]}")#,traceback.format_exc())
         exit(-1)
 
     del args[i+1]  # args.pop(0) #remove THIS file
@@ -4698,8 +4700,8 @@ def mp_rf1_worker(out_list,cfg,set_idx,indicies,multis, ras, decs):
         #print(f"[{cfg.datevshot}] *** test *** set grid_step and grid_n to 0.0 1")
         # grid_n = 1
         # grid_step = 0.0
-        grid_n = cfg.linedet_parms[0]
-        grid_step = cfg.linedet_parms[1]
+        grid_n = f"{int(cfg.linedet_parms[0])}"
+        grid_step = f"{float(cfg.linedet_parms[1]):0.1f}"
         #if cfg.numexp < 3 or cfg.dither_configuration == 0:
         #    grid_n = 13
         #    grid_step = 0.25
@@ -4804,8 +4806,8 @@ def rdet_rf1(cfg):
         #print(f"[{cfg.datevshot}] *** test *** set grid_step and grid_n to 0.0 1")
         #DD 20260627 ... we like 1 and 0, so keep that as the new default
         # grid_n = 1 , grid_step = 0.0
-        grid_n = cfg.linedet_parms[0]
-        grid_step = cfg.linedet_parms[1]
+        grid_n = f"{int(cfg.linedet_parms[0])}"
+        grid_step = f"{float(cfg.linedet_parms[1]):0.1f}"
 
         # if cfg.numexp < 3 or cfg.dither_configuration == 0:
         #     grid_n = 13
@@ -4940,44 +4942,44 @@ def check_line_detections(cfg):
               np.array(all_lw >= 1.5) * np.array(all_lw <= 16) * np.array(all_chi2_fib <= 4.5)
         all_snr = np.array(sorted(all_snr[sel]))
 
+        if len(all_snr) > 0:
+            data_min_snr = round(np.nanmin(all_snr),1)
+            data_max_snr = round(np.nanmax(all_snr),1)
 
-        data_min_snr = round(np.nanmin(all_snr),1)
-        data_max_snr = round(np.nanmax(all_snr),1)
+            min_snr = max(min_snr,data_min_snr)
+            max_snr = min(max_snr, data_max_snr)
+            xbins = np.arange(min_snr,max_snr+step_snr,step_snr)
 
-        min_snr = max(min_snr,data_min_snr)
-        max_snr = min(max_snr, data_max_snr)
-        xbins = np.arange(min_snr,max_snr+step_snr,step_snr)
+            binned_snr = np.histogram(all_snr,bins=xbins)
+            data_snr = np.sum(binned_snr[0])
 
-        binned_snr = np.histogram(all_snr,bins=xbins)
-        data_snr = np.sum(binned_snr[0])
+            model_snr = np.sum(approx_snr(xbins)) * np.sqrt(cfg.total_exp_time / 1080.) * num_ifus / 78
 
-        model_snr = np.sum(approx_snr(xbins)) * np.sqrt(cfg.total_exp_time / 1080.) * num_ifus / 78
+            print(f"[{cfg.datevshot}] Line dets for SNR [{min_snr:0.1f},{max_snr:0.1f}]. Data / Model {data_snr} / {model_snr} ")
 
-        print(f"[{cfg.datevshot}] Line dets for SNR [{min_snr:0.1f},{max_snr:0.1f}]. Data / Model {data_snr} / {model_snr} ")
+            cfg.ratio_line_dets = data_snr / model_snr
 
-        cfg.ratio_line_dets = data_snr / model_snr
-
-        if cfg.ratio_line_dets > fail_thresh:
-            if not FORCE_CONTINUE:
-                print(f"[{cfg.datevshot}] Fail! {cfg.ratio_line_dets:0.1f}x number of expected detections "
-                      f"SNR [{min_snr:0.1f},{max_snr:0.1f}]. Will terminate.")
-                rc = -1
-            else:
+            if cfg.ratio_line_dets > fail_thresh:
+                if not FORCE_CONTINUE:
+                    print(f"[{cfg.datevshot}] Fail! {cfg.ratio_line_dets:0.1f}x number of expected detections "
+                          f"SNR [{min_snr:0.1f},{max_snr:0.1f}]. Will terminate.")
+                    rc = -1
+                else:
+                    print(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x number of expected detections "
+                          f"SNR [{min_snr:0.1f},{max_snr:0.1f}]. "
+                          f"Force flag set, so will continue")
+                    rc = 1
+            elif cfg.ratio_line_dets > warn_thresh:
                 print(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x number of expected detections "
-                      f"SNR [{min_snr:0.1f},{max_snr:0.1f}]. "
-                      f"Force flag set, so will continue")
+                      f"SNR [{min_snr:0.1f},{max_snr:0.1f}]")
                 rc = 1
-        elif cfg.ratio_line_dets > warn_thresh:
-            print(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x number of expected detections "
-                  f"SNR [{min_snr:0.1f},{max_snr:0.1f}]")
-            rc = 1
-        else: # probably fine here
-            print(f"[{cfg.datevshot}] (DEBUG) {cfg.ratio_line_dets:0.1f}x number of expected detections "
-                  f"SNR [{min_snr:0.1f},{max_snr:0.1f}]")
-            rc = 0
+            else: # probably fine here
+                print(f"[{cfg.datevshot}] (DEBUG) {cfg.ratio_line_dets:0.1f}x number of expected detections "
+                      f"SNR [{min_snr:0.1f},{max_snr:0.1f}]")
+                rc = 0
 
-        print(f"[{cfg.datevshot}] !!! DEBUG !!! for now, force the rc to be zero")
-        rc  =0
+            print(f"[{cfg.datevshot}] !!! DEBUG !!! for now, force the rc to be zero")
+            rc  =0
 
     except:
         print(traceback.format_exc())
