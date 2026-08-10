@@ -31,6 +31,7 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # 1.0.9 set color-coded pngs to run with step 01 and/or as part of more complete analysis in step 04
 # 1.0.10 fix issue with --hetdex tar copy sticking on the directory instead of the tar file; check lib_calib before reducing
 # 1.0.11 extra status.warn conditions, IFU analysis adjustments based on exptime
+# 1.0.12 add options for --linedet_parms and --force
 
 __version__ = '1.0.11'
 
@@ -319,6 +320,7 @@ class Config:
     set_warn = False
     dither_configuration = None #-1 is bad, 0 = non-standard (maybe not dithered), 1 = standard hetdex
     linedet_filter = 0 #default, normal filtering
+    linedet_parms = (1.0, 0) #old HETDEX style = (3.0, 0.5)
 
     made_amp_images = False #used to indicate the diagnostic IFU+amp images were already made in this run instance
     #active_ifus = None #number of active IFUs (note not normally set until late into step04e?)
@@ -327,6 +329,7 @@ class Config:
 
     num_line_dets = -1 #unset
     num_cont_dets = -1 #unset
+    ratio_line_dets = 1.0 #unset, assume normal
 
     # for cleanup at the end
     copy_lock_file = None
@@ -429,6 +432,9 @@ if "-help" in args:
                       exactly one to reduce). If not present or set to (0), will use all exposures for the observation. 
                       
     --email <str> : if provided will attach to the elixer slurm job so this email address will get notifications
+                    
+    --force : continue the reduction regardless of select exit conditions
+              + ignore excesive line detections 
         
     --help : display this help text and exit
         
@@ -441,6 +447,8 @@ if "-help" in args:
                     0 = default: snr > 4.8, chi2 <= 2.5, 1.5 <= linewidth <= 16, chi2fib <= 4.5, continuum >= -3
                     1 = OFF + normal HETDEX_API.  Only snr >= 4.5 filter.
                     1.x+ = OFF + HETDEX_API snr set to this value (i.e. for values 1.1 and up, single decimal precision)
+                    
+    --linedet_parms : grid (float) and step (float) for line detections as <grid>,<step>
     
     --local_het_raw_path : if present, specifies the "local" het_raw path to use for locally copied data. This is a path
                      to which /het_raw/ will be appended.
@@ -482,7 +490,12 @@ if "-help" in args:
 len_args = len(args)
 queue_elixer = False
 prep_compress = -1 #not just a boolean, use as the max simultaneous shots to process
+FORCE_CONTINUE = False
 
+
+if "-force" in args:
+    FORCE_CONTINUE = True
+    args.remove("-force")
 
 if "-cal_flux" in args:
     i = args.index("-cal_flux")
@@ -608,6 +621,24 @@ if "-linedet_filter" in args:
     args.remove("-linedet_filter")
 else:
     cfg.linedet_filter = 0 #default
+
+
+if "-linedet_parms" in args:
+    i = args.index("-linedet_parms")
+    try:
+        remove_chars = "()[]<>{} "
+        cfg.linedet_parms = tuple([float(x) for x in
+                                    args[i+1].translate(str.maketrans("", "", remove_chars)).split(",")])
+        if len(cfg.linedet_parms) != 2:
+            print(f"Invalid --linedet_filter specified: {args[i+1]}")
+            exit(-1)
+    except:
+        print(f"Invalid --linedet_parms specified")
+        exit(-1)
+
+    del args[i+1]  # args.pop(0) #remove THIS file
+    args.remove("-linedet_parms")
+
 
 # if "-simul" in args:
 #     i = args.index("-simul")
@@ -4663,9 +4694,10 @@ def mp_rf1_worker(out_list,cfg,set_idx,indicies,multis, ras, decs):
         #grid_n = 3 #n x n so 3 = a 3x3 grid
         #grid_step = 0.5 #grid step size
         #print(f"[{cfg.datevshot}] *** test *** set grid_step and grid_n to 0.0 1")
-        grid_n = 1
-        grid_step = 0.0
-
+        # grid_n = 1
+        # grid_step = 0.0
+        grid_n = cfg.linedet_parms[0]
+        grid_step = cfg.linedet_parms[1]
         #if cfg.numexp < 3 or cfg.dither_configuration == 0:
         #    grid_n = 13
         #    grid_step = 0.25
@@ -4769,8 +4801,9 @@ def rdet_rf1(cfg):
         #grid_step = 0.5  # grid step size
         #print(f"[{cfg.datevshot}] *** test *** set grid_step and grid_n to 0.0 1")
         #DD 20260627 ... we like 1 and 0, so keep that as the new default
-        grid_n = 1
-        grid_step = 0.0
+        # grid_n = 1 , grid_step = 0.0
+        grid_n = cfg.linedet_parms[0]
+        grid_step = cfg.linedet_parms[1]
 
         # if cfg.numexp < 3 or cfg.dither_configuration == 0:
         #     grid_n = 13
@@ -4831,6 +4864,122 @@ def rdet_rf1(cfg):
 
     return rc
 
+
+def check_line_detections(cfg):
+    """
+    basic examination of results of line detecetions (rdet_rf1)
+
+    summary --- if there are too many line detections (with adjustments for exposure time, SNR, etc)
+                then either warn and continue or fail and abort
+
+    not worried about too few detections at this time
+
+    :param cfg:
+    :return:
+    """
+
+    #todo: switch to per IFU
+    #      use biweight instead of sum ... so we need to track the dets by IFU to do this
+
+    def approx_snr(x):
+        """
+        a curve that approximates what we expect from a normal SNR (good down to around 4.5 to 4.8 and out to 10.0)
+
+        :param x: (snr array, normalluy 4.8 to 10.0 in steps of 0.1)
+        :return:
+        """
+        #todo: this is way too high ?
+        #return 30000.0 * np.exp(-0.75 * x)
+        return 33000. * np.exp(-0.9 * x) #assumes full 78 IFUs though, down to snr 4.8 with limited validation
+
+    rc = 0
+    min_snr = 4.8
+    max_snr = 10.0
+    step_snr = 0.1
+    warn_thresh = 3.0
+    fail_thresh = 10.0
+    try:
+        #recall, .mc has the 1 line per detction (.spec has the spectra, .list has all the involved fibers)
+        #        colnames = ['wave', 'wave_err','flux','flux_err','linewidth','linewidth_err',
+        #             'continuum','continuum_err','sn','sn_err','chi2','chi2_err','ra','dec',
+        #             'datevshot','noise_ratio','linewidth_fix','chi2_fix', 'chi2fib',
+        #             'src_index','multiname', 'exp','xifu','yifu','xraw','yraw','weight',
+        #             'apcor','sn_cen', 'flux_noise_1sigma', 'sn_3fib', 'sn_3fib_cen','dummy']
+
+        fns = glob.glob(os.path.join(cfg.cwd, "alldet/detect_out/*.mc"))
+
+        #one per IFU
+        num_ifus = len(fns)
+        all_lw = []
+        all_cont = []
+        all_snr = []
+        all_chi2 = []
+        all_chi2_fib = []
+
+        for fn in fns:
+            xlw, xcont, xsnr, xchi2, xchi2fib = np.loadtxt(fn, usecols=[4, 6, 8, 10, 18], unpack=True)
+            all_lw += list(xlw)
+            all_cont += list(xcont)
+            all_snr += list(xsnr)
+            all_chi2 += list(xchi2)
+            all_chi2_fib += list(xchi2fib)
+
+        all_lw = np.array(all_lw)
+        all_cont = np.array(all_cont)
+        all_snr = np.array(all_snr)
+        all_chi2 = np.array(all_chi2)
+        all_chi2_fib = np.array(all_chi2_fib)
+
+        # default: based on snr >=4.8
+        #all_snr = np.array(sorted(all_snr[all_snr >= min_snr]))
+
+        #basic, standard selection, but not exhaustive
+        sel = np.array(all_cont > -3) * np.array(all_snr >= 4.8) * np.array(all_chi2 < 1.5) * \
+              np.array(all_lw >= 1.5) * np.array(all_lw <= 16) * np.array(all_chi2_fib <= 4.5)
+        all_snr = np.array(sorted(all_snr[sel]))
+
+
+        data_min_snr = round(np.nanmin(all_snr),1)
+        data_max_snr = round(np.nanmax(all_snr),1)
+
+        min_snr = max(min_snr,data_min_snr)
+        max_snr = min(max_snr, data_max_snr)
+        xbins = np.arange(min_snr,max_snr+step_snr,step_snr)
+
+        binned_snr = np.histogram(all_snr,bins=xbins)
+        data_snr = np.sum(binned_snr[0])
+
+        model_snr = np.sum(approx_snr(xbins)) * np.sqrt(cfg.total_exp_time / 1080.) * num_ifus / 78
+
+        cfg.ratio_line_dets = data_snr / model_snr
+
+        if cfg.ratio_line_dets > fail_thresh:
+            if not FORCE_CONTINUE:
+                print(f"[{cfg.datevshot}] Fail! {cfg.ratio_line_dets:0.1f}x number of expected detections "
+                      f"SNR [{min_snr:0.1f},{max_snr:0.1f}]. Will terminate.")
+                rc = -1
+            else:
+                print(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x number of expected detections "
+                      f"SNR [{min_snr:0.1f},{max_snr:0.1f}]. "
+                      f"Force flag set, so will continue")
+                rc = 1
+        elif cfg.ratio_line_dets > warn_thresh:
+            print(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x number of expected detections "
+                  f"SNR [{min_snr:0.1f},{max_snr:0.1f}]")
+            rc = 1
+        else: # probably fine here
+            print(f"[{cfg.datevshot}] (DEBUG) {cfg.ratio_line_dets:0.1f}x number of expected detections "
+                  f"SNR [{min_snr:0.1f},{max_snr:0.1f}]")
+            rc = 0
+
+        print(f"[{cfg.datevshot}] !!! DEBUG !!! for now, force the rc to be zero")
+        rc  =0
+
+    except:
+        print(traceback.format_exc())
+        rc = 0 #cannot make a call here
+
+    return rc
 
 
 #continuum detection
@@ -5979,7 +6128,7 @@ def diagnose(cfg):
 
             #reminder: if fof clustering re-runs (the step before this one), the gmag will be wiped out
             if 'gmag' not in line_tab.columns:
-                print(f"[{cfg.datevshot}] Computing gmags for Diagnose...")
+                print(f"[{cfg.datevshot}] Computing {len(line_tab)} line det gmags for Diagnose sub-selection ...")
                 # subselect ... these do not currently have a gmag, so need to make one (since ELiXer has not run yet)
                 line_tab['gmag'] = 99.0
 
@@ -6109,7 +6258,8 @@ def diagnose(cfg):
             cont_h5 = tables.open_file(os.path.join(cfg.cwd, f"{cfg.datevshot}_cont.h5"))
 
             if 'gmag' not in cont_tab.columns:
-                print(f"[{cfg.datevshot}] Computing gmags for Diagnose ...")
+                #print(f"[{cfg.datevshot}] Computing gmags for Diagnose ...")
+                print(f"[{cfg.datevshot}] Computing {len(cont_tab)} continuum det gmags for Diagnose sub-selection ...")
                 # subselect ... these do not currently have a gmag, so need to make one (since ELiXer has not run yet)
                 cont_tab['gmag'] = 99.0
 
@@ -6642,6 +6792,12 @@ if not cfg.multifits_only and (cfg.total_exp_time is None or cfg.total_exp_time 
 
 
 
+
+# print(f"!!! DEBUG !!!")
+# check_line_detections(cfg)
+#
+# Quit(cfg, 0, f"DEBUG exit. {cfg.datevshot}",write_status=False)
+
 #########
 # after the initial setup, move stdout and stderr to a log file
 #########
@@ -6984,6 +7140,15 @@ if s05_detection and not dtprog["s05_detection"]:
         progress_update(cfg,dtprog, "s05b_rdet_rf1")
     else:
         print(f"[{cfg.datevshot}] Skipping s05b_rdet_rf1 rdet_rf1 (line detection)")
+
+
+    #check the line detections for excesses
+    rc = check_line_detections(cfg)
+    if rc < 0:
+        Quit(cfg, -1, "FATAL. rget_rf1 (line detections) fail.")
+
+
+
 
     if s05c_rgetmax  and not dtprog["s05c_rgetmax"]:
         print(f"[{cfg.datevshot}] Running rgetmax (continuum detection) ...")
