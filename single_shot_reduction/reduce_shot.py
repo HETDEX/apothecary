@@ -776,6 +776,8 @@ if len(args) != 1:
         cfg.datevshot = None
     else:
         print(f"Fatal: Problem with remaining args: {args}")
+        if "-clear" in args:
+            print(f"--clear found ... did you mean --clean ?")
         print(f"exititing....")
         exit(-1)
 else:
@@ -4950,6 +4952,8 @@ def check_line_detections(cfg):
         data_snr = np.sum(binned_snr[0])
 
         model_snr = np.sum(approx_snr(xbins)) * np.sqrt(cfg.total_exp_time / 1080.) * num_ifus / 78
+
+        print(f"[{cfg.datevshot}] Line dets for SNR [{min_snr:0.1f},{max_snr:0.1f}]. Data / Model {data_snr} / {model_snr} ")
 
         cfg.ratio_line_dets = data_snr / model_snr
 
