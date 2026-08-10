@@ -76,8 +76,11 @@ for new_fn in tqdm(all_new_res_files_basenames):
         prior_hdu = fits.open(all_prior_res_files[prior_ix])
         new_hdu = fits.open(all_new_res_files[new_ix],mode='update')
 
-        new_hdu[0].data += prior_hdu[0].data
-        new_hdu.flush()
+        if prior_hdu[0].data is not None and np.size(prior_hdu[0].data) == np.size(new_hdu[0].data):
+            new_hdu[0].data += prior_hdu[0].data
+            new_hdu.flush()
+        else:
+            print(f"Bad data on prior fits: {all_prior_res_files[prior_ix]}")
 
         new_hdu.writeto(all_new_res_files[new_ix], overwrite=True)
 
