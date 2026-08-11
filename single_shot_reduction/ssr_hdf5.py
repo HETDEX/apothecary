@@ -26,7 +26,7 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 # 0.1.8 add dust_corr_4540 to VIRUSSHOT (Shot) table
 # 0.1.9 add NeighborID table
 # 0.1.10 add healpix IDs to shot table and Detections (already in Fibers)
-# 0.1.11 add status and status_reason to VIRUSShot table
+# 0.1.11 add reduction_date,  reduction_status, and reduction_status_ext to VIRUSShot table
 
 __version__ = '0.1.11'
 
@@ -47,6 +47,7 @@ import astropy.units as u
 from astropy.coordinates import SkyCoord
 from hetdex_api.extinction import deredden_spectra
 import healpy as hp
+from datetime import datetime
 #from elixer import utilities as utils
 
 try:
@@ -665,12 +666,13 @@ class VIRUSShot(tables.IsDescription): #Shot table
     nstars_fit = tables.Int32Col((3))
 
     obsind = tables.Int32Col()
-    avg_sky= tables.Float32Col() #not the same as AmpStat table avg_orig, but related
+    avg_sky = tables.Float32Col() #not the same as AmpStat table avg_orig, but related
     dust_corr_4540 = tables.Float32Col()
 
     #added 0.1.11
-    status = tables.StringCol(4,dflt="unk") # enough for "warn" "pass" "fail" "unk"
-    status_reason = tables.StringCol(256,dflt="unk") #basically contents of status.xxxx file, with [datevshot] stripped out
+    reduction_date = tables.Int32Col()
+    reduction_status = tables.StringCol(4,dflt="unk") # enough for "warn" "pass" "fail" "unk"
+    reduction_status_ext = tables.StringCol(256,dflt="unk") #basically contents of status.xxxx file, with [datevshot] stripped out
 
 
 #these next two tables decide on 16 or 32 at runtime, so can't use the predefs
@@ -1079,6 +1081,7 @@ def read_shot_status_file(basepath="./"):
     :return:
     """
 
+    date = None
     status = None #unset?
     status_str = None
     #or "pass" "warn" "fail" "unk" "na"
@@ -1095,12 +1098,16 @@ def read_shot_status_file(basepath="./"):
                         status_str = f.read()
                         status = fn.split(".")[-1]
                 # else, we keep the previous one
+
+        if time_fn is not None:
+            time_fn = datetime.fromtimestamp(time_fn)
+            date = int(time_fn.year * 1e4 + time_fn.month * 1e2 + time_fn.day)
     except:
         log.minor(f"[{datevshot}] Exception! read_shot_status_file", exc_info=True)
 
     log.debug(f"[{datevshot}] status file read: {status} : {status_str}")
 
-    return status, status_str
+    return date, status, status_str
 
 def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
     """
@@ -1191,7 +1198,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
         #todo: should we check more than one directory, if this comes back as None?
         #  i.e. maybe the same basedir + "sci<datevshot> ?
-        shot_status, shot_status_str = read_shot_status_file(basepath=os.path.dirname(shot_fn))
+        shot_date, shot_status, shot_status_str = read_shot_status_file(basepath=os.path.dirname(shot_fn))
 
         #just one row for Shot table, so just do a direct copy
         #but there are additional columns
@@ -1238,13 +1245,16 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
 
             try:
+
+                new_row['reduction_date'] = shot_date
+
                 if shot_status is not None:
-                    new_row['status'] = shot_status
+                    new_row['reduction_status'] = shot_status
 
                 if shot_status_str is not None:
                     dvs = str(new_row['shotid'])
                     dvs = dvs[0:8]+"v"+dvs[-3:]
-                    new_row['status_reason'] = shot_status_str.replace(f"[{dvs}] {shot_status}.","")[0:256]
+                    new_row['reduction_status_ext'] = shot_status_str.replace(f"[{dvs}] {shot_status}.","")[0:256]
             except:
                 pass
 
