@@ -1686,7 +1686,7 @@ def Quit(cfg,rc,msg=None,write_status=True,do_post_clean=True):
 
             if rc < 0:
                 with open(f"{status_str}.fail","w") as f:
-                    f.write(f"[{cfg.datevshot}] ({rc}) {msg}\n")
+                    f.write(f"[{cfg.datevshot}] fail. ({rc}) {msg}\n")
             else:
 
                 if cfg.num_line_dets > WARN_NUM_LINE_DETS:
@@ -1700,7 +1700,7 @@ def Quit(cfg,rc,msg=None,write_status=True,do_post_clean=True):
                     #note: if avg_sky > FAIL_AVG_SKY, then the failure condition would have already tripped
                     #and we would be in the case above (rc < 0)
                     with open(f"{status_str}.warn", "w") as f:
-                        f.write(f"[{cfg.datevshot}] ({rc}) {msg}\n")
+                        f.write(f"[{cfg.datevshot}] warn. ({rc}) {msg}\n")
                         if (cfg.avg_sky is not None and cfg.avg_sky > MAX_SAFE_AVG_SKY):
                             f.write(f"[{cfg.datevshot}] warn. Avg Sky is large: {cfg.avg_sky} \n")
                         if cfg.amp_stats_problem != 0:
@@ -1712,7 +1712,7 @@ def Quit(cfg,rc,msg=None,write_status=True,do_post_clean=True):
                             f.write(f"[{cfg.datevshot}] warn. Num of cont dets is large: {cfg.num_cont_dets} \n")
                 else:
                     with open(f"{status_str}.pass","w") as f:
-                        f.write(f"[{cfg.datevshot}] ({rc}) {msg}\n")
+                        f.write(f"[{cfg.datevshot}] pass. ({rc}) {msg}\n")
     except:
         pass
 
