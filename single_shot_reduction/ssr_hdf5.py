@@ -26,8 +26,9 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 # 0.1.8 add dust_corr_4540 to VIRUSSHOT (Shot) table
 # 0.1.9 add NeighborID table
 # 0.1.10 add healpix IDs to shot table and Detections (already in Fibers)
+# 0.1.11 add status and status_reason to VIRUSShot table
 
-__version__ = '0.1.10'
+__version__ = '0.1.11'
 
 
 import numpy as np
@@ -667,6 +668,10 @@ class VIRUSShot(tables.IsDescription): #Shot table
     avg_sky= tables.Float32Col() #not the same as AmpStat table avg_orig, but related
     dust_corr_4540 = tables.Float32Col()
 
+    #added 0.1.11
+    status = tables.StringCol(4,dflt="unk") # enough for "warn" "pass" "fail" "unk"
+    status_reason = tables.StringCol(256,dflt="unk") #basically contents of status.xxxx file, with [datevshot] stripped out
+
 
 #these next two tables decide on 16 or 32 at runtime, so can't use the predefs
 class VIRUSFiber16(tables.IsDescription): #uses Float16 where possibly
@@ -1062,6 +1067,41 @@ def get_healpix_id(ra,dec,Nside=32768):
 
     return hp_id
 
+
+def read_shot_status_file(basepath="./"):
+    """
+
+    check for status.pass, .warn or .fail
+
+    read it and return status information
+
+    :param basepath: if None, look in the local directory
+    :return:
+    """
+
+    status = None #unset?
+    status_str = None
+    #or "pass" "warn" "fail" "unk" "na"
+    try:
+        time_fn = None
+        fn_to_check = ["status.fail","status.warn","status.pass"]
+
+        for fn in fn_to_check:
+            fp = os.path.join(basepath, "status.warn")
+            if os.path.exists(fp):
+                if time_fn is None or os.path.getmtime(fp) > time_fn:
+                    time_fn = os.path.getmtime(fp) #update the time stamp to this file
+                    with open(fp, "r") as f:
+                        status_str = f.read()
+                        status = fn.split(".")[-1]
+                # else, we keep the previous one
+    except:
+        log.minor(f"[{datevshot}] Exception! read_shot_status_file", exc_info=True)
+
+    log.debug(f"[{datevshot}] status file read: {status} : {status_str}")
+
+    return status, status_str
+
 def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
     """
     combine and trim the original <shot.h5> and <elixer.h5> files
@@ -1146,8 +1186,15 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
         fileh.create_table(fileh.root, 'Shot', VIRUSShot, 'Shot Summary Table')
 
+        #see if status.pass, .warn, .fail exists and read it in
+        #it should normally be in the same directory as the shot_fn
+
+        #todo: should we check more than one directory, if this comes back as None?
+        #  i.e. maybe the same basedir + "sci<datevshot> ?
+        shot_status, shot_status_str = read_shot_status_file(basepath=os.path.dirname(shot_fn))
+
         #just one row for Shot table, so just do a direct copy
-        #but there is an additional column
+        #but there are additional columns
         for row in tqdm(shot_h5.root.Shot.read(),disable=not SHOW_TQDM):
             # for row in shot_h5.root.Data.Fibers.read():
             new_row = fileh.root.Shot.row
@@ -1189,6 +1236,17 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 new_row['healpix'] = -999
                 #print(f"**** temp log. Failed to get dust_corr_4540. Exception.",traceback.format_exc())
 
+
+            try:
+                if shot_status is not None:
+                    new_row['status'] = shot_status
+
+                if shot_status_str is not None:
+                    dvs = str(new_row['shotid'])
+                    dvs = dvs[0:8]+"v"+dvs[-3:]
+                    new_row['status_reason'] = shot_status_str.replace(f"[{dvs}] {shot_status}.","")[0:256]
+            except:
+                pass
 
             new_row.append()
 
