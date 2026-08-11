@@ -4953,7 +4953,7 @@ def check_line_detections(cfg):
             binned_snr = np.histogram(all_snr,bins=xbins)
             data_snr = np.sum(binned_snr[0])
 
-            model_snr = np.sum(approx_snr(xbins)) * np.sqrt(cfg.total_exp_time / 1080.) * num_ifus / 78
+            model_snr = int(np.sum(approx_snr(xbins)) * np.sqrt(cfg.total_exp_time / 1080.) * num_ifus / 78)
 
             print(f"[{cfg.datevshot}] Line dets for SNR [{min_snr:0.1f},{max_snr:0.1f}]. Data / Model {data_snr} / {model_snr} ")
 
