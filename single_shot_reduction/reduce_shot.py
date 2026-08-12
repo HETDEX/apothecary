@@ -780,7 +780,7 @@ if len(args) != 1:
         print(f"Fatal: Problem with remaining args: {args}")
         if "-clear" in args:
             print(f"--clear found ... did you mean --clean ?")
-        print(f"exititing....")
+        print(f"exiting....")
         exit(-1)
 else:
     if not (queue_elixer or prep_compress > -1):
@@ -1670,6 +1670,11 @@ def Quit(cfg,rc,msg=None,write_status=True,do_post_clean=True):
         if write_status and safe_cd(cfg.cwd):
 
             status_str = "status"
+
+
+            #
+            # note: each status line should be of the form
+            #   [<datevsshot>] <status>. <msg>
 
             if os.path.exists(f"{status_str}.fail") or \
                os.path.exists(f"{status_str}.warn") or \
@@ -6133,22 +6138,64 @@ def diagnose(cfg):
             line_h5 = tables.open_file(os.path.join(cfg.cwd, f"{cfg.datevshot}_line.h5"))
 
             #reminder: if fof clustering re-runs (the step before this one), the gmag will be wiped out
-            if 'gmag' not in line_tab.columns:
+            if cfg.resume or 'gmag' not in line_tab.columns:
                 print(f"[{cfg.datevshot}] Computing {len(line_tab)} line det gmags for Diagnose sub-selection ...")
                 # subselect ... these do not currently have a gmag, so need to make one (since ELiXer has not run yet)
-                line_tab['gmag'] = 99.0
+                line_tab['gmag'] = 99.0 #not-computed or failed compute value
 
+
+                # pre-read all columns
+                # will match to detectid
+                # !!! Remember. line_tab (from the line_sourcat.tab) is downselected from line.h5
+                #   ... line.h5 will have equal or MORE detections than are in line_tab
+                print(f"[{cfg.datevshot}] Preloading spectra ...")
+                all_detid = list(line_h5.root.Spectra.read(field="detectid"))
+                all_spec1d = line_h5.root.Spectra.read(field="spec1d")
+                all_spec1d_err = line_h5.root.Spectra.read(field="spec1d_err")
+                all_approx_gmag = np.nansum(all_spec1d,axis=1)
+
+                #print(f"[{cfg.datevshot}] DEBUG: all_approx_gmag shape = {np.shape(all_approx_gmag)}")
+
+                #for i in tqdm(range(len(line_tab))):
                 for i in range(len(line_tab)):
                     d = line_tab[i]['detectid']
-
-                    rows = line_h5.root.Spectra.read_where("detectid==d")
-                    if len(rows) != 1:
-                        print(f"[{cfg.datevshot}] Diagnose preselection gmag failure for {d}")
+                    try:
+                        j = all_detid.index(d) #match line_tab detectid to line.h5 detectid
+                    except:
+                        print(f"[{cfg.datevshot}] Warning! detectid: {d} not found in *_line.h5 file?")
                         continue
-                    row=rows[0]
-                    gmag, gmag_unc, *_ = SU.get_best_gmag(row['spec1d']*1e-17,row['spec1d_err']*1e-17,G.CALFIB_WAVEGRID)
-                    line_tab['gmag'][i] = gmag
 
+                    if all_approx_gmag[j] < 640.0: #too faint (fainter than about 23 in g)
+                        #640.0 ~ sum along the flux: flux for g = 23 @ 4640AA is about 0.32e-17 erg/s/cm2/AA
+                        # for 0.32 * 2AA * 1000 bins = 640.0
+                        continue
+
+
+                    #older method, just reading as needed ... (the newer way (above) needs more memory, but is much
+                    #   faster, pre-loading all in advance)
+
+
+                    # rows = line_h5.root.Spectra.read_where("detectid==d")
+                    # if len(rows) != 1:
+                    #     print(f"[{cfg.datevshot}] Diagnose preselection gmag failure for {d}")
+                    #     continue
+                    # row = rows[0]
+                    # gmag, gmag_unc, *_ = SU.get_best_gmag(row['spec1d'] * 1e-17, row['spec1d_err'] * 1e-17,
+                    #                                      G.CALFIB_WAVEGRID)
+
+                    #reading less but using two reads: overall time cost is about the same
+                    # spec1d = line_h5.root.Spectra.read_where("detectid==d",field="spec1d")
+                    # if len(spec1d) != 1:
+                    #     print(f"[{cfg.datevshot}] Diagnose preselection gmag failure for {d}")
+                    #     continue
+                    # spec1d_err = line_h5.root.Spectra.read_where("detectid==d",field="spec1d_err")
+                    # gmag, gmag_unc, *_ = SU.get_best_gmag(spec1d[0]*1e-17,spec1d_err[0]*1e-17,G.CALFIB_WAVEGRID)
+
+
+                    gmag, gmag_unc, *_ = SU.get_best_gmag(all_spec1d[j]*1e-17,all_spec1d_err[j]*1e-17,G.CALFIB_WAVEGRID)
+
+
+                    line_tab['gmag'][i] = gmag
 
                 #update
                 line_tab.write(name, format="ascii", overwrite=True)
@@ -6269,17 +6316,53 @@ def diagnose(cfg):
                 # subselect ... these do not currently have a gmag, so need to make one (since ELiXer has not run yet)
                 cont_tab['gmag'] = 99.0
 
+
+                # pre-read all columns
+                # will match to detectid
+                # !!! Remember. cont_tab (from the cont_sourcat.tab) is downselected from cont.h5
+                #   ... cont.h5 will have equal or MORE detections than are in cont_tab
+                print(f"[{cfg.datevshot}] Preloading spectra ...")
+                all_detid = list(cont_h5.root.Spectra.read(field="detectid"))
+                all_spec1d = cont_h5.root.Spectra.read(field="spec1d")
+                all_spec1d_err = cont_h5.root.Spectra.read(field="spec1d_err")
+                # No. If already marked as a continuum source, use Diagnose and need the real gmag
+                #all_approx_gmag = np.nansum(all_spec1d,axis=1)
+
                 for i in range(len(cont_tab)):
                     d = cont_tab[i]['detectid']
 
-                    rows = cont_h5.root.Spectra.read_where("detectid==d")
-                    if len(rows) != 1:
-                        print(f"[{cfg.datevshot}] Diagnose preselection gmag failure for {d}")
+                    try:
+                        j = all_detid.index(d) #match cont_tab detectid to cont.h5 detectid
+                    except:
+                        print(f"[{cfg.datevshot}] Warning! detectid: {d} not found in *_line.h5 file?")
                         continue
-                    row=rows[0]
-                    gmag, gmag_unc, *_ = SU.get_best_gmag(row['spec1d']*1e-17,row['spec1d_err']*1e-17,G.CALFIB_WAVEGRID)
-                    cont_tab['gmag'][i] = gmag
 
+                    #No. If already marked as a continuum source, use Diagnose and need the real gmag
+                    # if all_approx_gmag[j] < 640.0: #too faint (fainter than about 23 in g)
+                    #     #640.0 ~ sum along the flux: flux for g = 23 @ 4640AA is about 0.32e-17 erg/s/cm2/AA
+                    #     # for 0.32 * 2AA * 1000 bins = 640.0
+                    #     continue
+
+                    # rows = cont_h5.root.Spectra.read_where("detectid==d")
+                    # if len(rows) != 1:
+                    #     print(f"[{cfg.datevshot}] Diagnose preselection gmag failure for {d}")
+                    #     continue
+                    # row=rows[0]
+                    # gmag, gmag_unc, *_ = SU.get_best_gmag(row['spec1d']*1e-17,row['spec1d_err']*1e-17,G.CALFIB_WAVEGRID)
+                    # cont_tab['gmag'][i] = gmag
+
+                    # spec1d = cont_h5.root.Spectra.read_where("detectid==d",field="spec1d")
+                    # if len(spec1d) != 1:
+                    #     print(f"[{cfg.datevshot}] Diagnose preselection gmag failure for {d}")
+                    #     continue
+                    #
+                    # spec1d_err = cont_h5.root.Spectra.read_where("detectid==d",field="spec1d_err")
+                    #
+                    # gmag, gmag_unc, *_ = SU.get_best_gmag(spec1d[0]*1e-17,spec1d_err[0]*1e-17,G.CALFIB_WAVEGRID)
+
+                    gmag, gmag_unc, *_ = SU.get_best_gmag(all_spec1d[j] * 1e-17, all_spec1d_err[j] * 1e-17,
+                                                          G.CALFIB_WAVEGRID)
+                    cont_tab['gmag'][i] = gmag
 
                 #update
                 cont_tab.write(name, format="ascii", overwrite=True)
