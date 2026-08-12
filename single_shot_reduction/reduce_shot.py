@@ -324,8 +324,9 @@ class Config:
 
     made_amp_images = False #used to indicate the diagnostic IFU+amp images were already made in this run instance
     #active_ifus = None #number of active IFUs (note not normally set until late into step04e?)
-    amp_stats_problem = 0
-    num_bad_amps = 0
+    amp_stats_problem = -1
+    num_bad_amps = -1
+    num_all_amps = -1
 
     num_line_dets = -1 #unset
     num_cont_dets = -1 #unset
@@ -1510,9 +1511,6 @@ def write_summary(cfg):
             ra = -999.9
             dec = -999.9
 
-
-
-
         with open("summary.txt","w") as f:
             f.write(f"shot:\t\t{cfg.datevshot}\n")
             f.write(f"field:\t\t{h5.root.Shot.read(field='field')[0]}\n")
@@ -1605,10 +1603,16 @@ def write_summary(cfg):
 
             try:
                 # outer file:
-                f.write(f"Bad Amps:\t{cfg.num_bad_amps}\n")
-                if cfg.amp_stats_problem != 0:
+
+                if cfg.num_bad_amps < 0:
+                    _ = count_amps(cfg)
+
+                f.write(f"Bad Amps:\t{cfg.num_bad_amps}/{cfg.num_all_amps}\n")
+                if cfg.amp_stats_problem > 0:
                     f.write(f"Amp Stats:\tFail ({cfg.amp_stats_problem})\n")
                     cfg.set_warn = True
+                elif cfg.amp_stats_problem < 0:
+                    f.write(f"Amp Stats:\tUnspecified\n")
                 else:
                     f.write(f"Amp Stats:\tPass\n")
             except:
@@ -1668,9 +1672,7 @@ def Quit(cfg,rc,msg=None,write_status=True,do_post_clean=True):
 
     try:
         if write_status and safe_cd(cfg.cwd):
-
             status_str = "status"
-
 
             #
             # note: each status line should be of the form
@@ -1701,16 +1703,27 @@ def Quit(cfg,rc,msg=None,write_status=True,do_post_clean=True):
                 if cfg.avg_sky is not None and cfg.avg_sky > MAX_SAFE_AVG_SKY:
                     cfg.set_warn = True
 
+                if cfg.num_bad_amps < 0:
+                    _ = count_amps(cfg)
+
+                if cfg.num_bad_amps > 0 and cfg.num_all_amps > 0:
+                    if cfg.num_bad_amps / cfg.num_all_amps >= 0.5:
+                        #half or more are bad
+                        cfg.set_warn = True
+                        if cfg.amp_stats_problem <= 0:
+                            cfg.amp_stats_problem = 1
+
+
                 if cfg.set_warn:
                     #note: if avg_sky > FAIL_AVG_SKY, then the failure condition would have already tripped
                     #and we would be in the case above (rc < 0)
                     with open(f"{status_str}.warn", "w") as f:
                         f.write(f"[{cfg.datevshot}] warn. ({rc}) {msg}\n")
                         if (cfg.avg_sky is not None and cfg.avg_sky > MAX_SAFE_AVG_SKY):
-                            f.write(f"[{cfg.datevshot}] warn. Avg Sky is large: {cfg.avg_sky} \n")
+                            f.write(f"[{cfg.datevshot}] warn. Avg Sky is large: {cfg.avg_sky:0.1f} \n")
                         if cfg.amp_stats_problem != 0:
                             f.write(f"[{cfg.datevshot}] warn. Amp Stats Issue ({cfg.amp_stats_problem}),"
-                                    f" {cfg.num_bad_amps} bad amps\n")
+                                    f" {cfg.num_bad_amps}/{cfg.num_all_amps} bad amps\n")
                         if cfg.num_line_dets > WARN_NUM_LINE_DETS:  # pretty generous here, maybe should also adjust with exptime and conditions?
                             f.write(f"[{cfg.datevshot}] warn. Num of line dets is large: {cfg.num_line_dets} \n")
                         if cfg.num_cont_dets > WARN_NUM_CONT_DETS:
@@ -5320,6 +5333,27 @@ def build_shot_h5(cfg):
     return rc
 
 
+def count_amps(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+
+    bad_amps_list = []
+    amps_list = []
+    try:
+        h5 = tables.open_file(os.path.join(cfg.cwd,f"{cfg.datevshot}.h5"), mode='r')
+        amps_list = list(h5.root.AmpStats.read(field="multiframe").astype(str))
+        bad_amps_list = list(h5.root.AmpStats.read_where("flag==0", field="multiframe").astype(str))
+        cfg.num_bad_amps = len(bad_amps_list)
+        cfg.num_all_amps = len(amps_list)
+        h5.close()
+    except:
+        print(f"[{cfg.datevshot}] Could not load amps_list",traceback.format_exc())
+
+    return amps_list,bad_amps_list
+
 def amp_stats(cfg,shot_h5_fqfn=None):
     """
 
@@ -5328,8 +5362,12 @@ def amp_stats(cfg,shot_h5_fqfn=None):
     :return:
     """
 
+    if cfg.amp_stats_problem < 0:
+        cfg.amp_stats_problem = 0
+
     try:
         rc = 0
+
         if shot_h5_fqfn is None:
             shot_h5_fqfn = os.path.join(cfg.cwd,f"{cfg.datevshot}.h5")
 
@@ -5392,6 +5430,7 @@ def amp_stats(cfg,shot_h5_fqfn=None):
                     f.write(f"{row['multiframe']} exp{str(row['expnum']).zfill(2)} \n")
 
             cfg.num_bad_amps = np.count_nonzero(t['flag']!=1)
+            cfg.num_all_amps = len(t)
 
 
             #assuming these are post-HETDEX, go ahead and put this in the shot.h5 file
@@ -6148,7 +6187,7 @@ def diagnose(cfg):
                 # will match to detectid
                 # !!! Remember. line_tab (from the line_sourcat.tab) is downselected from line.h5
                 #   ... line.h5 will have equal or MORE detections than are in line_tab
-                print(f"[{cfg.datevshot}] Preloading spectra ...")
+                print(f"[{cfg.datevshot}] Preloading emission line spectra ...")
                 all_detid = list(line_h5.root.Spectra.read(field="detectid"))
                 all_spec1d = line_h5.root.Spectra.read(field="spec1d")
                 all_spec1d_err = line_h5.root.Spectra.read(field="spec1d_err")
@@ -6157,6 +6196,7 @@ def diagnose(cfg):
 
                 #print(f"[{cfg.datevshot}] DEBUG: all_approx_gmag shape = {np.shape(all_approx_gmag)}")
 
+                print(f"[{cfg.datevshot}] Evaluating pseudo gmags ... ")
                 #for i in tqdm(range(len(line_tab))):
                 for i in range(len(line_tab)):
                     d = line_tab[i]['detectid']
@@ -6336,13 +6376,14 @@ def diagnose(cfg):
                 # will match to detectid
                 # !!! Remember. cont_tab (from the cont_sourcat.tab) is downselected from cont.h5
                 #   ... cont.h5 will have equal or MORE detections than are in cont_tab
-                print(f"[{cfg.datevshot}] Preloading spectra ...")
+                print(f"[{cfg.datevshot}] Preloading continuum spectra ...")
                 all_detid = list(cont_h5.root.Spectra.read(field="detectid"))
                 all_spec1d = cont_h5.root.Spectra.read(field="spec1d")
                 all_spec1d_err = cont_h5.root.Spectra.read(field="spec1d_err")
                 # No. If already marked as a continuum source, use Diagnose and need the real gmag
                 #all_approx_gmag = np.nansum(all_spec1d,axis=1)
 
+                print(f"[{cfg.datevshot}] Evaluating pseudo gmags ... ")
                 for i in range(len(cont_tab)):
                     d = cont_tab[i]['detectid']
 
@@ -6610,14 +6651,18 @@ def prep_elixer(cfg):
         Path(elixdir).mkdir(parents=True, exist_ok=True)
 
         if FilterDetsOnBadAmps:
-            try:
-                #we are in the shot working dir
-                h5 = tables.open_file(f"{cfg.datevshot}.h5",mode='r')
-                bad_amps_list = list(h5.root.AmpStats.read_where("flag==0", field="multiframe").astype(str))
-                print(f"[{cfg.datevshot}] Loaded {len(bad_amps_list)} bad amps ...")
-                h5.close()
-            except:
-                print(f"[{cfg.datevshot}] Could not load bad_amps_list")
+            if not FORCE_CONTINUE:
+                try:
+                    #we are in the shot working dir
+                    h5 = tables.open_file(f"{cfg.datevshot}.h5",mode='r')
+                    bad_amps_list = list(h5.root.AmpStats.read_where("flag==0", field="multiframe").astype(str))
+                    print(f"[{cfg.datevshot}] Loaded {len(bad_amps_list)} bad amps ...")
+                    h5.close()
+                except:
+                    print(f"[{cfg.datevshot}] Could not load bad_amps_list")
+                    bad_amps_list = []
+            else:
+                print(f"[{cfg.datevshot}] --force specified. Will not restrict bad amps.")
                 bad_amps_list = []
         else:
             bad_amps_list = []
@@ -6728,12 +6773,30 @@ def prep_elixer(cfg):
                             with open("elixer.slurm",'r') as slurm_file:
                                 for line in slurm_file:
                                     if "#SBATCH -t" in line and "Run time" in line:
-                                        toks = line.split()
-                                        t_idx = toks.index("-t")
-                                        t_idx += 1
-                                        t = datetime.strptime(toks[t_idx],"%H:%M:%S")
-                                        minutes = int(t.hour * 60 + t.minute)
-                                        break
+                                        if "days" in line: #this is a problem
+                                            #example: #SBATCH -t 2 days, 1:54:00            # Run time (hh:mm:ss)
+
+                                            print(f"[{cfg.datevshot}] WARNING!!! Excessive ELiXer run time {line.rstrip()}")
+                                            print(f"[{cfg.datevshot}] You may need to manually configure.")
+
+                                            toks = line.split()
+
+                                            t_idx = toks.index("-t")
+                                            t_idx += 1 #now on the integer leading "days,"
+
+                                            days_as_minutes = 1440 * int(toks[t_idx])
+
+                                            t_idx += 2
+                                            t = datetime.strptime(toks[t_idx], "%H:%M:%S")
+                                            minutes = int(t.hour * 60 + t.minute) + days_as_minutes
+                                        else:
+                                            toks = line.split()
+
+                                            t_idx = toks.index("-t")
+                                            t_idx += 1
+                                            t = datetime.strptime(toks[t_idx],"%H:%M:%S")
+                                            minutes = int(t.hour * 60 + t.minute)
+                                            break
 
                         #make a copy of the elixer.run as elixer_lines.run so can prepend
                         system_command(cfg,"cp elixer.run elixer_line.run")
