@@ -1139,7 +1139,12 @@ def read_shot_status_file(basepath="./"):
             #use the resume date and combine the status string (if they are not the same)
             date = resume_date
             if status_str != resume_status_str:
-                status_str = status_str + resume_status_str
+                keep_lines = []
+                for line in status_str.split("\n"):
+                    if line not in resume_status_str.split("\n"):
+                        keep_lines.append(line)
+
+                status_str = "\n".join(keep_lines) + resume_status_str
 
             if status != resume_status: #fail, warn or pass, does not matter, they agree
                 status = "warn" #they are not the same, so worst case is a warn and a fail, promote to warn
@@ -1151,7 +1156,10 @@ def read_shot_status_file(basepath="./"):
             date = resume_date
             status_str = resume_status_str
     #else: only original status (normal case)
-    #note: the triming of the status_str happens later, when it is inserted into the table
+
+    if status_str is not None and len(status_str) > 0:
+        dvs = status_str.split(" ")[0] #first token should be the dvs
+        status_str = status_str.replace(f"{dvs} {status}.", "")[0:256]
 
     return date, status, status_str
 
@@ -1300,7 +1308,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 if shot_status_str is not None:
                     dvs = str(new_row['shotid'])
                     dvs = dvs[0:8]+"v"+dvs[-3:]
-                    new_row['reduction_status_ext'] = shot_status_str.replace(f"[{dvs}] {shot_status}.","")[0:256]
+                    new_row['reduction_status_ext'] = shot_status_str #.replace(f"[{dvs}] {shot_status}.","")[0:256]
             except:
                 pass
 
@@ -3003,7 +3011,6 @@ else:
 
 if len(args) > 0:
     print(f"[{datevshot}] Unknown remainting args: {args}")
-
 
 
 wait_to_run(Max_Simultaneous_Shots, datevshot=datevshot,clean_up=False)
