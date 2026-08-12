@@ -1084,11 +1084,18 @@ def read_shot_status_file(basepath="./"):
     date = None
     status = None #unset?
     status_str = None
+
+    resume_date = None
+    resume_status = None #unset?
+    resume_status_str = None
+
     #or "pass" "warn" "fail" "unk" "na"
     try:
         time_fn = None
-        fn_to_check = ["status.fail","status.warn","status.pass",
-                       "status.resume.fail","status.resume.warn","status.resume.pass"]
+        fn_to_check = ["status.fail","status.warn","status.pass"]
+
+        #should we combine an original status with a resume status?
+        #could be a fail or warn on the original, but it timed out and on the resume, the rest was a pass?
 
         for fn in fn_to_check:
             fp = os.path.join(basepath, fn)
@@ -1103,10 +1110,47 @@ def read_shot_status_file(basepath="./"):
         if time_fn is not None:
             time_fn = datetime.fromtimestamp(time_fn)
             date = int(time_fn.year * 1e4 + time_fn.month * 1e2 + time_fn.day)
+
+        #resume statuses
+        time_fn = None
+        fn_to_check = ["status.resume.fail","status.resume.warn","status.resume.pass"]
+
+        for fn in fn_to_check:
+            fp = os.path.join(basepath, fn)
+            if os.path.exists(fp):
+                if time_fn is None or os.path.getmtime(fp) > time_fn:
+                    time_fn = os.path.getmtime(fp) #update the time stamp to this file
+                    with open(fp, "r") as f:
+                        resume_status_str = f.read()
+                        resume_status = fn.split(".")[-1]
+                # else, we keep the previous one
+
+        if time_fn is not None:
+            time_fn = datetime.fromtimestamp(time_fn)
+            resume_date = int(time_fn.year * 1e4 + time_fn.month * 1e2 + time_fn.day)
     except:
         log.minor(f"[{datevshot}] Exception! read_shot_status_file", exc_info=True)
 
     log.debug(f"[{datevshot}] status file read: {status} : {status_str}")
+
+    if resume_status is not None:
+        if status is not None:
+            #both exist
+            #use the resume date and combine the status string
+            date = resume_date
+            status_str = status_str + resume_status_str
+
+            if status != resume_status: #fail, warn or pass, does not matter, they agree
+                status = "warn" #they are not the same, so worst case is a warn and a fail, promote to warn
+                                #   and it takes extra effort on the user to go from fail to warn
+                                #best case a pass and warn, leave at warn
+            #else: #they agree on the status, so just keep it
+        else:
+            status = resume_status
+            date = resume_date
+            status_str = resume_status_str
+    #else: only original status (normal case)
+    #note: the triming of the status_str happens later, when it is inserted into the table
 
     return date, status, status_str
 
