@@ -6205,7 +6205,8 @@ def diagnose(cfg):
             # now select on gmag < 23
             sel = np.array(line_tab['gmag'] > 0.0) & np.array(line_tab['gmag'] <= 23.0)
             line_tab = line_tab[sel]
-            print(f"[{cfg.datevshot}] reduced Diagnose examination to {len(line_tab)} emission line detections.")
+            #redundant comment to one just below this section
+            #print(f"[{cfg.datevshot}] Reduced Diagnose examination to {len(line_tab)} emission line detections.")
 
 
             totN = np.sum(sel)
@@ -6324,7 +6325,7 @@ def diagnose(cfg):
         else:
             cont_h5 = tables.open_file(os.path.join(cfg.cwd, f"{cfg.datevshot}_cont.h5"))
 
-            if 'gmag' not in cont_tab.columns:
+            if cfg.resume or 'gmag' not in cont_tab.columns:
                 #print(f"[{cfg.datevshot}] Computing gmags for Diagnose ...")
                 print(f"[{cfg.datevshot}] Computing {len(cont_tab)} continuum det gmags for Diagnose sub-selection ...")
                 # subselect ... these do not currently have a gmag, so need to make one (since ELiXer has not run yet)
