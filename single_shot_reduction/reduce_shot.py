@@ -327,6 +327,8 @@ class Config:
     amp_stats_problem = -1
     num_bad_amps = -1
     num_all_amps = -1
+    ifu_list = [] #as multiframe
+    ifU_linedet_ct = []
 
     num_line_dets = -1 #unset
     num_cont_dets = -1 #unset
@@ -435,7 +437,8 @@ if "-help" in args:
     --email <str> : if provided will attach to the elixer slurm job so this email address will get notifications
                     
     --force : continue the reduction regardless of select exit conditions
-              + ignore excesive line detections 
+              + ignore excessive line detections 
+              + ignore excessive bad amps
         
     --help : display this help text and exit
         
@@ -5006,6 +5009,140 @@ def check_line_detections(cfg):
     return rc
 
 
+def check_line_detections_by_ifu(cfg):
+    """
+    basic examination of results of line detecetions (rdet_rf1) by IFU
+    (same as check_line_detection) but rather than as the whole shot, is IFU by IFU
+
+    summary --- if there are too many line detections (with adjustments for exposure time, SNR, etc)
+                then either warn and continue or fail and abort
+
+    not worried about too few detections at this time
+
+    :param cfg:
+    :return:
+    """
+
+    #todo: switch to per IFU
+    #      use biweight instead of sum ... so we need to track the dets by IFU to do this
+
+    def approx_snr(x):
+        """
+        a curve that approximates what we expect from a normal SNR (good down to around 4.5 to 4.8 and out to 10.0)
+
+        :param x: (snr array, normalluy 4.8 to 10.0 in steps of 0.1)
+        :return:
+        """
+        return 100. * np.exp(-0.9 * x) #assumes a single IFU gives about 15 for 4.8 <= SNR <= 10.0
+
+    rc = 0
+    min_snr = 4.8
+    max_snr = 10.0
+    step_snr = 0.1
+    warn_thresh = 5.0
+    fail_thresh = 10.0
+    try:
+        #recall, .mc has the 1 line per detction (.spec has the spectra, .list has all the involved fibers)
+        #        colnames = ['wave', 'wave_err','flux','flux_err','linewidth','linewidth_err',
+        #             'continuum','continuum_err','sn','sn_err','chi2','chi2_err','ra','dec',
+        #             'datevshot','noise_ratio','linewidth_fix','chi2_fix', 'chi2fib',
+        #             'src_index','multiname', 'exp','xifu','yifu','xraw','yraw','weight',
+        #             'apcor','sn_cen', 'flux_noise_1sigma', 'sn_3fib', 'sn_3fib_cen','dummy']
+
+        fns = glob.glob(os.path.join(cfg.cwd, "alldet/detect_out/*.mc"))
+
+        #one per IFU
+        num_ifus = len(fns)
+
+        data_ct = [] #one per IFU
+        model_ct = []
+
+
+        for fn in fns:
+            xlw, xcont, xsnr, xchi2, xchi2fib = np.loadtxt(fn, usecols=[4, 6, 8, 10, 18], unpack=True)
+            ifu_name = os.path.basename(fn).split(".")[0].split("_")[1:] #ie. 20240801v002_323_043_040.mc
+            ifu_name = '_'.join(ifu_name)
+            cfg.ifu_list.append(ifu_name)
+            cfg.ifU_linedet_ct.append(-1)
+
+            sel = np.array(xcont > -3) * np.array(xsnr >= 4.8) * np.array(xchi2 < 1.5) * \
+                  np.array(xlw >= 1.5) * np.array(xlw <= 16) * np.array(xchi2fib <= 4.5)
+
+            xsnr = sorted(xsnr[sel])
+
+            if len(xsnr) > 1:
+                data_min_snr = round(np.nanmin(xsnr),1)
+                data_max_snr = round(np.nanmax(xsnr),1)
+
+                bin_min_snr = max(min_snr,data_min_snr)
+                bin_max_snr = min(max_snr, data_max_snr)
+                xbins = np.arange(bin_min_snr,bin_max_snr+step_snr,step_snr)
+
+                #does not really have to be a histogram, but we might want to see this in the future
+                #plus this handles summing just over the desired SNR range
+                binned_snr = np.histogram(xsnr,bins=xbins)
+                data_ct.append(np.sum(binned_snr[0]))
+                cfg.ifU_linedet_ct[-1] = data_ct[-1]
+
+            else:
+                #zero_ifu.append(os.path.basename(fn))
+                data_ct.append(len(xsnr)) #either 0 or 1 here
+                cfg.ifU_linedet_ct[-1] = data_ct[-1]
+                xbins = np.arange(min_snr, max_snr + step_snr, step_snr)
+
+            #build a model, based on the SNR range in the IFU
+            model_snr = int(np.sum(approx_snr(xbins)) * np.sqrt(cfg.total_exp_time / 1080.))
+            model_ct.append(model_snr)
+
+        #now compare data vs model
+        data_ct = np.array(data_ct)
+        model_ct = np.array(model_ct)
+
+        sel = model_ct > 0 #should be all of them
+        data_ct = data_ct[sel]
+        model_ct = model_ct[sel]
+
+        data_over_model = data_ct / model_ct
+        cfg.ratio_line_dets = np.sum(data_ct) / np.sum(model_ct) #total ratio
+
+        fail_ct = np.count_nonzero(data_over_model >= fail_thresh)
+        warn_ct = np.count_nonzero(data_over_model >= warn_thresh) - fail_ct
+        pass_ct = np.count_nonzero(data_over_model < warn_thresh)
+
+        print(f"[{cfg.datevshot}] Excessive Line det counts by IFU: {fail_ct} Fail, {warn_ct} Warn, {pass_ct} Pass")
+
+        #todo: could we flag an IFU as bad for this reason? That its line dets are way too high?
+        # note: amp_stats() have already been built ... could append to it?
+
+        #if most are fails or warns, fail it. Let the fails count twice when combining with warns
+        if (fail_ct / num_ifus >= 0.5) or \
+                ( (fail_ct / num_ifus >= 0.2) and (2 * fail_ct + warn_ct) / num_ifus >= 1.0):
+            if not FORCE_CONTINUE:
+                print(f"[{cfg.datevshot}] Fail! {cfg.ratio_line_dets:0.1f}x nominal maximum total number of expected detections "
+                      f"SNR [{min_snr:0.1f},{max_snr:0.1f}]. Will terminate.")
+                rc = -1
+            else:
+                print(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x nominal maximum total number of expected detections "
+                      f"SNR [{min_snr:0.1f},{max_snr:0.1f}]. "
+                      f"--force flag set, so will continue")
+                rc = 1
+        elif warn_ct / num_ifus >= 0.5: #if half or more are warns
+            print(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x nominal maximum total number of expected detections "
+                  f"SNR [{min_snr:0.1f},{max_snr:0.1f}]")
+            rc = 1
+        else:
+            print(f"[{cfg.datevshot}] (DEBUG) {cfg.ratio_line_dets:0.1f}x nominal maximum total number of expected detections "
+                  f"SNR [{min_snr:0.1f},{max_snr:0.1f}]")
+            rc = 0
+
+    except:
+        print(traceback.format_exc())
+        rc = 0 #cannot make a call here
+
+    return rc
+
+
+
 #continuum detection
 def rgetmax(cfg):
     """
@@ -6974,7 +7111,7 @@ if not cfg.multifits_only and (cfg.total_exp_time is None or cfg.total_exp_time 
 
 
 # print(f"!!! DEBUG !!!")
-# check_line_detections(cfg)
+# check_line_detections_by_ifu(cfg)
 #
 # Quit(cfg, 0, f"DEBUG exit. {cfg.datevshot}",write_status=False)
 
@@ -7323,7 +7460,8 @@ if s05_detection and not dtprog["s05_detection"]:
 
 
     #check the line detections for excesses
-    rc = check_line_detections(cfg)
+    #rc = check_line_detections(cfg)
+    rc = check_line_detections_by_ifu(cfg)
     if rc < 0:
         Quit(cfg, -1, "FATAL. rget_rf1 (line detections) fail.")
 
