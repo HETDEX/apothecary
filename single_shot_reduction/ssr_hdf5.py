@@ -1136,9 +1136,10 @@ def read_shot_status_file(basepath="./"):
     if resume_status is not None:
         if status is not None:
             #both exist
-            #use the resume date and combine the status string
+            #use the resume date and combine the status string (if they are not the same)
             date = resume_date
-            status_str = status_str + resume_status_str
+            if status_str != resume_status_str:
+                status_str = status_str + resume_status_str
 
             if status != resume_status: #fail, warn or pass, does not matter, they agree
                 status = "warn" #they are not the same, so worst case is a warn and a fail, promote to warn
