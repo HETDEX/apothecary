@@ -6152,6 +6152,7 @@ def diagnose(cfg):
                 all_detid = list(line_h5.root.Spectra.read(field="detectid"))
                 all_spec1d = line_h5.root.Spectra.read(field="spec1d")
                 all_spec1d_err = line_h5.root.Spectra.read(field="spec1d_err")
+                all_apcor = line_h5.root.Spectra.read(field="apcor")
                 all_approx_gmag = np.nansum(all_spec1d,axis=1)
 
                 #print(f"[{cfg.datevshot}] DEBUG: all_approx_gmag shape = {np.shape(all_approx_gmag)}")
@@ -6202,8 +6203,9 @@ def diagnose(cfg):
                 print(f"[{cfg.datevshot}] Updated lines table with gmag: {os.getcwd()}/{name}")
 
             # now select on gmag < 23
-            sel = np.array(line_tab['gmag'] > 0.0) & np.array(line_tab['gmag'] < 23.0)
+            sel = np.array(line_tab['gmag'] > 0.0) & np.array(line_tab['gmag'] <= 23.0)
             line_tab = line_tab[sel]
+            print(f"[{cfg.datevshot}] reduced Diagnose examination to {len(line_tab)} emission line detections.")
 
 
             totN = np.sum(sel)
@@ -6227,23 +6229,35 @@ def diagnose(cfg):
             error_2D = []
             apcor = []
 
+            # for i in range(len(line_tab)):
+            #     d = line_tab[i]['detectid']
+            #
+            #     rows = line_h5.root.Spectra.read_where("detectid==d")
+            #     if len(rows) != 1:
+            #         print(f"Diagnose preselection spectra failure for {d}")
+            #         spec_2D.append(np.zeros(1036))
+            #         error_2D.append(np.zeros(1036))
+            #         apcor.append(np.zeros(1036))
+            #         continue
+            #
+            #     row = rows[0]
+            #     #line_tab['spec'][i] = rows['spec1d']
+            #     #line_tab['spec_err'][i] = rows['spec1d_err']
+            #     spec_2D.append(row['spec1d'] * dust_corr)
+            #     error_2D.append(row['spec1d_err'])
+            #     apcor.append(row['apcor'])
+
             for i in range(len(line_tab)):
                 d = line_tab[i]['detectid']
-
-                rows = line_h5.root.Spectra.read_where("detectid==d")
-                if len(rows) != 1:
-                    print(f"Diagnose preselection spectra failure for {d}")
-                    spec_2D.append(np.zeros(1036))
-                    error_2D.append(np.zeros(1036))
-                    apcor.append(np.zeros(1036))
+                try:
+                    j = all_detid.index(d)  # match line_tab detectid to line.h5 detectid
+                except:
+                    print(f"[{cfg.datevshot}] Warning! detectid: {d} not found in *_line.h5 file?")
                     continue
 
-                row = rows[0]
-                #line_tab['spec'][i] = rows['spec1d']
-                #line_tab['spec_err'][i] = rows['spec1d_err']
-                spec_2D.append(row['spec1d'] * dust_corr)
-                error_2D.append(row['spec1d_err'])
-                apcor.append(row['apcor'])
+                spec_2D.append(all_spec1d[j] * dust_corr)
+                error_2D.append(all_spec1d_err[j]* dust_corr)
+                apcor.append(all_apcor[j])
 
             #SPEC = np.array(line_tab['spec'])
             #ERROR = np.array(line_tab['spec_err'])
@@ -6387,22 +6401,35 @@ def diagnose(cfg):
             error_2D = []
             apcor = []
 
+            # for i in range(len(cont_tab)):
+            #     d = cont_tab[i]['detectid']
+            #
+            #     rows = cont_h5.root.Spectra.read_where("detectid==d")
+            #     if len(rows) != 1:
+            #         print(f"[{cfg.datevshot}] Diagnose preselection spectra failure for {d}")
+            #         spec_2D.append(np.zeros(1036))
+            #         error_2D.append(np.zeros(1036))
+            #         apcor.append(np.zeros(1036))
+            #         continue
+            #
+            #     row = rows[0]
+            #
+            #     spec_2D.append(row['spec1d'])
+            #     error_2D.append(row['spec1d_err'])
+            #     apcor.append(row['apcor'])
+
             for i in range(len(cont_tab)):
                 d = cont_tab[i]['detectid']
-
-                rows = cont_h5.root.Spectra.read_where("detectid==d")
-                if len(rows) != 1:
-                    print(f"[{cfg.datevshot}] Diagnose preselection spectra failure for {d}")
-                    spec_2D.append(np.zeros(1036))
-                    error_2D.append(np.zeros(1036))
-                    apcor.append(np.zeros(1036))
+                try:
+                    j = all_detid.index(d)  # match cont_tab detectid to cont.h5 detectid
+                except:
+                    #already checked in previous loop, so this should neverl trigger
+                    print(f"[{cfg.datevshot}] Warning! detectid: {d} not found in *_cont.h5 file?")
                     continue
 
-                row = rows[0]
-
-                spec_2D.append(row['spec1d'])
-                error_2D.append(row['spec1d_err'])
-                apcor.append(row['apcor'])
+                spec_2D.append(all_spec1d[j] * dust_corr)
+                error_2D.append(all_spec1d_err[j] * dust_corr)
+                apcor.append(all_apcor[j])
 
             SPEC = np.array(spec_2D)
             ERROR = np.array(error_2D)
