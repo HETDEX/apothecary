@@ -1087,10 +1087,11 @@ def read_shot_status_file(basepath="./"):
     #or "pass" "warn" "fail" "unk" "na"
     try:
         time_fn = None
-        fn_to_check = ["status.fail","status.warn","status.pass"]
+        fn_to_check = ["status.fail","status.warn","status.pass",
+                       "status.resume.fail","status.resume.warn","status.resume.pass"]
 
         for fn in fn_to_check:
-            fp = os.path.join(basepath, "status.warn")
+            fp = os.path.join(basepath, fn)
             if os.path.exists(fp):
                 if time_fn is None or os.path.getmtime(fp) > time_fn:
                     time_fn = os.path.getmtime(fp) #update the time stamp to this file
