@@ -87,6 +87,7 @@ matplotlib.use('agg')
 
 from matplotlib.colors import TwoSlopeNorm
 import matplotlib.pyplot as plt
+#from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 plt.style.use('default')
 
 ########################################################################
@@ -329,6 +330,7 @@ class Config:
     num_all_amps = -1
     ifu_list = [] #as multiframe
     ifU_linedet_ct = []
+    mf_clean_image_avg_row = None
 
     num_line_dets = -1 #unset
     num_cont_dets = -1 #unset
@@ -5065,6 +5067,11 @@ def check_line_detections_by_ifu(cfg):
             cfg.ifu_list.append(ifu_name)
             cfg.ifU_linedet_ct.append(-1)
 
+            #this is a basic sanity sub-selection ... it may be different than what is applied
+            #for the input to ELiXer, but, this is a way to semi-calibrate these data
+            #to what is rouhgly, normally expected to see if we are way off
+            # (i.e. we would normally expecte something like 5-20 line detects per IFU to survive this
+            #       down-selection for a 3-Dither, 1100s observation)
             sel = np.array(xcont > -3) * np.array(xsnr >= 4.8) * np.array(xchi2 < 1.5) * \
                   np.array(xlw >= 1.5) * np.array(xlw <= 16) * np.array(xchi2fib <= 4.5)
 
@@ -5690,7 +5697,100 @@ def add_fiber_mask(cfg,shot_h5_fqfn=None):
 
     return rc
 
-def shot_analyisis(cfg):
+
+def make_avg_mf_row(cfg):
+    """
+
+    make an "Average" row for an amp multiframe
+
+    take median down each column for each ifu+amp+exp
+    then take the mean of those medians
+
+    result is a 1032 array of floats as an "average" row
+
+    :param cfg:
+    :return:
+    """
+
+    img = "clean_image"
+    row_list = []
+    avg_row = None
+
+    use_shot_h5 = False
+    shot_h5_fqfn = os.path.join(cfg.cwd, f"{cfg.datevshot}.h5")
+
+    #for debug
+    if not os.path.exists(shot_h5_fqfn):
+        shot_h5_fqfn = os.path.join(cfg.cwd, f"sci{cfg.datevshot}/{cfg.datevshot}.h5")
+
+    if os.path.exists(shot_h5_fqfn):
+        try:
+            h5 = tables.open_file(shot_h5_fqfn)
+            data_array = h5.root.Data.Images.read(field=img)
+            # there can be duplicates
+            data_mf = h5.root.Data.Images.read(field="multiframe")
+            data_exp = h5.root.Data.Images.read(field="expnum")
+
+            data_mfe = [m.decode() + "_" + str(e) for m, e in zip(data_mf, data_exp)]
+
+            umf, imf, cmf = np.unique(data_mfe, return_index=True,return_counts=True)
+            data_array = data_array[imf]
+
+            for data in data_array:
+                row_list.append(np.nanmedian(data, axis=0))  # median "down" each column to make an average row
+
+            h5.close()
+            use_shot_h5 = True
+        except:
+            use_shot_h5 = False
+            try:
+                h5.close()
+            except:
+                pass
+
+
+    if not use_shot_h5:
+
+        # get all the reduction paths
+        date = cfg.datevshot[0:8]
+        virus_shot = "virus0000" + cfg.datevshot[-3:]
+        if red1path is not None:
+            datadir = os.path.join(red1path, f"{date}/virus/{virus_shot}")  # /{exp}/virus")
+        else:
+            datadir = os.path.join(cfg.cwd_orig, f"reductions/{date}/virus/{virus_shot}")  # /{exp}/virus")
+
+        exps = sorted(glob.glob(f"{datadir}/exp*"))
+        expdirs = [d + "/virus" for d in exps]
+
+        mfs_in_exp = []
+        for expdir in expdirs:
+            mfs_in_exp += list(sorted(glob.glob(f"{expdir}/multi_*.fits")))
+
+
+        row_list = []
+        avg_row = None
+        for mf_fn in mfs_in_exp:
+            try:
+                with fits.open(mf_fn) as hdu:
+                    data = hdu[img].data
+                    row_list.append(np.nanmedian(data,axis=0)) #median "down" each column to make an average row
+            except:
+                pass
+
+
+    #now take the mean of those rows
+    if len(row_list) > 30: #should normally be 312 per exposure, but early data might have only 9 IFUS or 36 amps
+        avg_row = np.nanmean(row_list,axis=0)
+
+    #for safety:
+    avg_row[avg_row == 0] = 1e-6 #small, nonzero count
+
+    return avg_row
+
+
+
+
+def shot_analyisis(cfg,ratio=False):
     """
 
     this needs the shot h5 file to have been completed to work
@@ -5700,6 +5800,20 @@ def shot_analyisis(cfg):
 
     try:
         print(f"[{cfg.datevshot}] Making basic IFU analysis images ...")
+
+        # mf_avg_row = None
+        # if residual:
+        #     if cfg.mf_clean_image_avg_row is None:
+        #         cfg.mf_clean_image_avg_row = make_avg_mf_row(cfg)
+        #     mf_avg_row = cfg.mf_clean_image_avg_row
+        # else:
+        #     mf_avg_row = None
+
+        if ratio:
+            print(f"[{cfg.datevshot}] NOTICE: shot_analysis with ratio = True, not corrently supported. "
+                  f"'processed' image not available in shot h5 file.")
+            ratio = False
+
         rc = 0
         shot_h5_fqfn = os.path.join(cfg.cwd, f"{cfg.datevshot}.h5")
         h5 = tables.open_file(shot_h5_fqfn)
@@ -5782,41 +5896,65 @@ def shot_analyisis(cfg):
             #   we still get negative values, so, maybe we do nothing??
             # NOTICE: the negative end does not really move, only the positive end (vmax)
 
-            try:
-                #vmax_scale = min(1.0,np.sqrt(cfg.total_exp_time / (360. * cfg.numexp)))
-                #no ... more linear with time, rather than sqrt, but the avg sky seems to plays a part too (stretching
-                # out more than just the time) ... maybe linear time stretch + avg_sky stretch??
-                # the "zero" (average peak) seems consistently just about 0 cts, regardless, with a positive skew
-                #  as you would expect
-                #sky_stretch = cfg.avg_sky / 300.0 #where 300 is a typical-ish HETDEX sky
-                vmax_scale = min(1.0, cfg.total_exp_time / 360.0 /cfg.numexp)
-            except:
+            applied_vmin = int(DIAG_AMP_IMG_VMIN_VMAX[0])
+            applied_vmax = int(DIAG_AMP_IMG_VMIN_VMAX[1])
+            if ratio is False:
+                try:
+                    #vmax_scale = min(1.0,np.sqrt(cfg.total_exp_time / (360. * cfg.numexp)))
+                    #no ... more linear with time, rather than sqrt, but the avg sky seems to plays a part too (stretching
+                    # out more than just the time) ... maybe linear time stretch + avg_sky stretch??
+                    # the "zero" (average peak) seems consistently just about 0 cts, regardless, with a positive skew
+                    #  as you would expect
+                    #sky_stretch = cfg.avg_sky / 300.0 #where 300 is a typical-ish HETDEX sky
+                    vmax_scale = min(1.0, cfg.total_exp_time / 360.0 /cfg.numexp)
+                    if vmax_scale == 0:
+                        vmax_scale = 1.0
+                except:
+                    vmax_scale = 1.0
+
+                #vmin_vmax_shift = 0.0 #we do not want to shift ... only scale (stretch) the vmax (positive) side
+                #not sure we want to shift ... maybe just scale with time
+
+
+                #print(f"[{cfg.datevshot}] Shifting IFU diagnostic plot scaling by +{vmax_scale:0.1f}")
+                applied_vmin = int(DIAG_AMP_IMG_VMIN_VMAX[0])
+                applied_vmax = int(DIAG_AMP_IMG_VMIN_VMAX[1] * vmax_scale)
+                cmap_norm = TwoSlopeNorm(vmin=applied_vmin, vcenter=0, vmax=applied_vmax)
+            else:
                 vmax_scale = 1.0
+                applied_vmin = -1
+                applied_vmax = 1
+                cmap_norm = TwoSlopeNorm(vmin=applied_vmin, vcenter=0, vmax=applied_vmax)
 
-            #vmin_vmax_shift = 0.0 #we do not want to shift ... only scale (stretch) the vmax (positive) side
-            #not sure we want to shift ... maybe just scale with time
-
-
-            #print(f"[{cfg.datevshot}] Shifting IFU diagnostic plot scaling by +{vmax_scale:0.1f}")
-            cmap_norm = TwoSlopeNorm(vmin=int(DIAG_AMP_IMG_VMIN_VMAX[0]), vcenter=0,
-                                     vmax=int(DIAG_AMP_IMG_VMIN_VMAX[1]*vmax_scale) )
 
             #just assume 3 dithers ... if they do not exist, they will be blank
             #there are a few that have 4 or more exposures and we will just ignore that
             for ii, mf_base in enumerate(ifus_in_shot):
-                print(f"[{cfg.datevshot}] Making basic IFU analysis images: {mf_base.decode()}")
+                if ratio:
+                    print(f"[{cfg.datevshot}] Making ratio IFU analysis images: {mf_base.decode()}")
+                else:
+                    print(f"[{cfg.datevshot}] Making basic IFU analysis images: {mf_base.decode()}")
+
                 plt.close('all')
                 fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(9, 12))
                 #plot_config = list(np.arange(431, 443, 1))
-                fig.suptitle(f"{cfg.datevshot} {mf_base.decode()} cmap scale: "
-                             f"({int(DIAG_AMP_IMG_VMIN_VMAX[0])}),"
-                             f" {int(DIAG_AMP_IMG_VMIN_VMAX[1]*vmax_scale)})")
+                if ratio is False:
+                    fig.suptitle(f"{cfg.datevshot} {mf_base} {img} counts, cmap scale: "
+                                 f"({applied_vmin},"
+                                 f" {applied_vmax})")
+                else:
+                    fig.suptitle(f"{cfg.datevshot} {mf_base} {img}/processed, cmap scale: "
+                                 f"({applied_vmin},"
+                                 f" {applied_vmax})")
 
                 for ai, amp in enumerate([b'_RU', b'_RL', b'_LL', b'_LU']):
                     ei = 0  # exposure index
                     # print(ai,ei,amp)
                     mf = mf_base + amp
                     data = h5.root.Data.Images.read_where("multiframe==mf", field=img)
+                    if ratio:
+                        proc = h5.root.Data.Images.read_where("multiframe==mf", field="processed")
+                        data = data / proc
                     exp = h5.root.Data.Images.read_where("multiframe==mf", field='expnum')
 
                     # ax = plt.subplot(plot_config[ci])
@@ -5912,7 +6050,13 @@ def shot_analyisis(cfg):
                               traceback.format_exc())
 
                 plt.tight_layout()
-                plt.savefig(f"i{mf_base.decode()[10:13]}_{cfg.datevshot}_{mf_base.decode()}.png", dpi=DIAG_AMP_IMG_DPI)
+                if ratio is False:
+                    plt.savefig(f"i{mf_base.decode()[10:13]}_{cfg.datevshot}_{mf_base.decode()}.png",
+                                dpi=DIAG_AMP_IMG_DPI)
+                else:
+                    plt.savefig(f"i{mf_base.decode()[10:13]}_{cfg.datevshot}_{mf_base.decode()}_ratio.png",
+                                dpi=DIAG_AMP_IMG_DPI)
+
                 cfg.made_amp_images = True
     except:
         #print(traceback.format_exc())
@@ -5926,17 +6070,27 @@ def shot_analyisis(cfg):
 
     return rc
 
-def make_amp_images(cfg):
+def make_amp_images(cfg,ratio=False):
     """
 
     originally shot_analysis ... and is based on that but intended only for the
     color-coded amp images and to be run at the end of step1
     :param cfg:
+    :param residual:
     :return:
     """
 
     try:
         print(f"[{cfg.datevshot}] Making color-coded IFU+amp images ...")
+
+        # mf_avg_row = None
+        # if residual:
+        #     if cfg.mf_clean_image_avg_row is None:
+        #         cfg.mf_clean_image_avg_row = make_avg_mf_row(cfg)
+        #     mf_avg_row = cfg.mf_clean_image_avg_row
+        # else:
+        #     mf_avg_row = None
+
         rc = 0
 
         #make the output location
@@ -5991,35 +6145,61 @@ def make_amp_images(cfg):
         # NOTICE: the negative end does not really move, only the positive end (vmax)
 
         #!!! NOTICE ... see also shot_analysis() for the almost identical code which can be called instead !!!!!
+        applied_vmin = int(DIAG_AMP_IMG_VMIN_VMAX[0])
+        applied_vmax = int(DIAG_AMP_IMG_VMIN_VMAX[1])
+        if ratio is False:
+            try:
+                # vmax_scale = min(1.0,np.sqrt(cfg.total_exp_time / (360. * cfg.numexp)))
+                # no ... more linear with time, rather than sqrt, but the avg sky seems to plays a part too (stretching
+                # out more than just the time) ... maybe linear time stretch + avg_sky stretch??
+                # the "zero" (average peak) seems consistently just about 0 cts, regardless, with a positive skew
+                #  as you would expect
+                # sky_stretch = cfg.avg_sky / 300.0 #where 300 is a typical-ish HETDEX sky
+                vmax_scale = min(1.0, cfg.total_exp_time / 360.0 / cfg.numexp)
+                if vmax_scale == 0:
+                    vmax_scale = 1.0
+            except:
+                vmax_scale = 1.0
 
-        try:
-            # vmax_scale = min(1.0,np.sqrt(cfg.total_exp_time / (360. * cfg.numexp)))
-            # no ... more linear with time, rather than sqrt, but the avg sky seems to plays a part too (stretching
-            # out more than just the time) ... maybe linear time stretch + avg_sky stretch??
-            # the "zero" (average peak) seems consistently just about 0 cts, regardless, with a positive skew
-            #  as you would expect
-            # sky_stretch = cfg.avg_sky / 300.0 #where 300 is a typical-ish HETDEX sky
-            vmax_scale = min(1.0, cfg.total_exp_time / 360.0 / cfg.numexp)
-        except:
+            # vmin_vmax_shift = 0.0 #we do not want to shift ... only scale (stretch) the vmax (positive) side
+            # not sure we want to shift ... maybe just scale with time
+
+            # print(f"[{cfg.datevshot}] Shifting IFU diagnostic plot scaling by +{vmax_scale:0.1f}")
+            # print(f"*** DEBUG *** vmin = {int(DIAG_AMP_IMG_VMIN_VMAX[0])}, "
+            #       f"vmax = {int(DIAG_AMP_IMG_VMIN_VMAX[1] * vmax_scale)}, vmax_scale = {vmax_scale}, "
+            #       f"exptime = {cfg.total_exp_time}, expnum = {cfg.numexp}")
+            applied_vmin = int(DIAG_AMP_IMG_VMIN_VMAX[0])
+            applied_vmax = int(DIAG_AMP_IMG_VMIN_VMAX[1] * vmax_scale)
+            cmap_norm = TwoSlopeNorm(vmin=applied_vmin, vcenter=0,vmax=applied_vmax)
+        else:
             vmax_scale = 1.0
-
-        # vmin_vmax_shift = 0.0 #we do not want to shift ... only scale (stretch) the vmax (positive) side
-        # not sure we want to shift ... maybe just scale with time
-
-        # print(f"[{cfg.datevshot}] Shifting IFU diagnostic plot scaling by +{vmax_scale:0.1f}")
-        cmap_norm = TwoSlopeNorm(vmin=int(DIAG_AMP_IMG_VMIN_VMAX[0]), vcenter=0,
-                                 vmax=int(DIAG_AMP_IMG_VMIN_VMAX[1] * vmax_scale))
+            applied_vmin = -1
+            applied_vmax = 1
+            cmap_norm = TwoSlopeNorm(vmin=applied_vmin, vcenter=0,vmax=applied_vmax)
 
         #just assume 3 dithers ... if they do not exist, they will be blank
         #there are a few that have 4 or more exposures and we will just ignore that
         for ii, mf_base in enumerate(ifus_in_exp):
-            print(f"[{cfg.datevshot}] Making basic IFU analysis images: {mf_base}")
+
+            handy_im = None
+            handy_ax = None
+
+            if ratio:
+                print(f"[{cfg.datevshot}] Making ratio IFU analysis images: {mf_base}")
+            else:
+                print(f"[{cfg.datevshot}] Making basic IFU analysis images: {mf_base}")
             plt.close('all')
             fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(9, 12))
            # plot_config = list(np.arange(431, 443, 1))
-            fig.suptitle(f"{cfg.datevshot} {mf_base} cmap scale: "
-                         f"({int(DIAG_AMP_IMG_VMIN_VMAX[0])}),"
-                         f" {int(DIAG_AMP_IMG_VMIN_VMAX[1] * vmax_scale)})")
+            if ratio:
+                fig.suptitle(f"{cfg.datevshot} {mf_base} {img}/proc, cmap scale: "
+                             f"({applied_vmin},"
+                             f" {applied_vmax})\n\n")
+            else:
+                fig.suptitle(f"{cfg.datevshot} {mf_base} {img} counts, cmap scale: "
+                             f"({applied_vmin},"
+                             f" {applied_vmax})\n\n")
+
 
             for ei, expdir in enumerate(expdirs):
 
@@ -6045,6 +6225,11 @@ def make_amp_images(cfg):
                     try:
                         with fits.open(os.path.join(expdir,mf_fn)) as hdu:
                             data = hdu[img].data
+                            if ratio:
+                                #data = (data - mf_avg_row) / mf_avg_row
+                                proc = hdu["processed"].data
+                                #proc[proc==0] = np.inf
+                                data = data / proc
                             ax = axes[ai, ei]
 
                             try:
@@ -6064,7 +6249,8 @@ def make_amp_images(cfg):
                                     ax.set_yticks([])
                                 # !!! Must use EITHER norm or vmin, vmax ... cannot do both
                                 #ax.imshow(data[sel][0], cmap=cmap, vmin=vmin, vmax=vmax,origin="lower")
-                                ax.imshow(data, cmap=cmap, norm=cmap_norm, origin="lower")
+                                handy_im = ax.imshow(data, cmap=cmap, norm=cmap_norm, origin="lower")
+                                handy_ax = ax
 
                             except:
                                 ax.set_xticks([])
@@ -6096,13 +6282,36 @@ def make_amp_images(cfg):
                             except:
                                 pass
 
+
+            #fig.colorbar(handy_im, ax=axes, location='bottom', cmap=cmap, norm=cmap_norm, pad=-0.45)#,
+            # axins = inset_axes(
+            #     axes,
+            #     height="5%",  # Width of the colorbar (relative to the bbox)
+            #     width="100%",  # Height of the colorbar (relative to the bbox)
+            #     loc="lower left",  # Alignment point inside the bbox
+            #     bbox_to_anchor=(1.05, 0., 1, 1),  # (x, y, width, height) relative to transAxes
+            #     bbox_transform=handy_ax.transAxes,  # Use normalized axes coordinates (0 to 1)
+            #     borderpad=0  # Remove padding around the inset axes
+            # )
+            #
+            # fig.colorbar(handy_im, cax=axins, location='bottom', anchor=(0.5,1.0),panchor=(0.5,1.0),
+            #              fraction=0.1, cmap=cmap, norm=cmap_norm,pad=0.15)
+
+            cax = fig.add_axes([0.15, 0.95, 0.7, 0.015])
+            fig.colorbar(handy_im, cax=cax, orientation='horizontal',cmap=cmap, norm=cmap_norm, pad=0.0)
+
+            #anchor=(0.0,0.0),, pad=0.15)  # ,
+
             plt.tight_layout()
-            plt.savefig(f"i{mf_base[10:13]}_{cfg.datevshot}_{mf_base}.png", dpi=DIAG_AMP_IMG_DPI)
+            if ratio:
+                plt.savefig(f"i{mf_base[10:13]}_{cfg.datevshot}_{mf_base}_ratio.png", dpi=DIAG_AMP_IMG_DPI)
+            else:
+                plt.savefig(f"i{mf_base[10:13]}_{cfg.datevshot}_{mf_base}.png", dpi=DIAG_AMP_IMG_DPI)
 
     except:
         #print(traceback.format_exc())
         rc = -1
-        print(f"[{cfg.datevshot}] Could complete amp images.",traceback.format_exc())
+        print(f"[{cfg.datevshot}] Could not complete amp images.",traceback.format_exc())
 
 
     if rc >= 0:
@@ -7178,14 +7387,18 @@ if s01b_amp_images and not dtprog["s01b_amp_images"]:
     if make_amp_images(cfg) < 0: #this is non-fatal if it fails
         print(f"[{cfg.datevshot}] creation of IFU+amp diagnostic images failed. Non-fatal. Will continue.")
     else:
-        progress_update(cfg,dtprog,"s01b_amp_images")
+        if make_amp_images(cfg,ratio=True) < 0:  # this is non-fatal if it fails
+            print(f"[{cfg.datevshot}] creation of IFU+amp diagnostic RATIO images failed. Non-fatal. Will continue.")
+        else:
+            progress_update(cfg,dtprog,"s01b_amp_images")
+
 else:
     print(f"[{cfg.datevshot}] Skipping s01b_amp_images")
 
 if cfg.multifits_only:
     print(f"[{cfg.datevshot}] multi*fits files generated. "
           f"Check paths under ./reductions/{cfg.datevshot[0:8]}/virus/virus*{cfg.datevshot[-3]}/")
-    print(f"[{cfg.datevshot}] Also look for iagnostic IFU+amp images under sci{cfg.datevshot}/analysis/ifus")
+    print(f"[{cfg.datevshot}] Also look for diagnostic IFU+amp images under sci{cfg.datevshot}/analysis/ifus")
     Quit(cfg, 0, f"Done. Enforcing --multifits_only switch. {cfg.datevshot}", write_status=False)
 
 
