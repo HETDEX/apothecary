@@ -289,6 +289,7 @@ class Config:
     email: str = ""
     numexp: int = 0 #number of exposures in the shot
     total_exp_time : float = 0.0 #in seconds
+    dither_exp_times = []
     cwd_orig: str = os.getcwd()
     cwd: str = os.getcwd()
     virus_tar_path : str = None
@@ -305,6 +306,7 @@ class Config:
 
     guider_fwhm = None
 
+    shot_obj = None #a name of sorts
     special = 0 #do some special, direct edit code stuff
     hetdex_original = False #set to True if this shot is in the original hetdex data
                             ## (vs the 'hetdex' member which is true if --hetdex is specified to allow this)
@@ -320,6 +322,8 @@ class Config:
     code_fn_to_copy = None
     set_warn = False
     dither_configuration = None #-1 is bad, 0 = non-standard (maybe not dithered), 1 = standard hetdex
+    dither_norms = []
+    dither_positions = []
     linedet_filter = 0 #default, normal filtering
     linedet_parms = (1, 0.0) #old HETDEX style = (3, 0.5) #must be (<int>,<float>)
 
@@ -1041,8 +1045,10 @@ def hetdex_dither(cfg):
 
         try:
             logstr = f"[{cfg.datevshot}] dithers: ["
+            cfg.dither_positions = []
             for xx,yy in zip(x,y):
                 logstr += f" ({xx},{yy})"
+                cfg.dither_positions.append((xx,yy))
             logstr += " ]"
             print(logstr)
         except:
@@ -1505,6 +1511,11 @@ def write_summary(cfg):
     orig_dir = os.getcwd()
     try:
         os.chdir(cfg.cwd)
+        if not os.path.exists(f"{cfg.datevshot}.h5"):
+            write_limited_summary(cfg)
+            os.chdir(orig_dir)
+            return
+
         h5 = tables.open_file(f"{cfg.datevshot}.h5",mode="r")
 
         cfg.set_warn = False
@@ -1518,7 +1529,7 @@ def write_summary(cfg):
 
         with open("summary.txt","w") as f:
             f.write(f"shot:\t\t{cfg.datevshot}\n")
-            f.write(f"field:\t\t{h5.root.Shot.read(field='field')[0]}\n")
+            f.write(f"field:\t\t{h5.root.Shot.read(field='field')[0]} - {cfg.shot_obj}\n")
             f.write(f"RA,Dec:\t\t{ra}, {dec}\n")
             f.write(f"exptimes:\t{h5.root.Shot.read(field='exptime')[0]}\n")
             dit_norms = h5.root.Shot.read(field="relflux_virus")[0]
@@ -1635,6 +1646,165 @@ def write_summary(cfg):
     os.chdir(orig_dir)
 
 
+def write_limited_summary(cfg):
+    """
+    like write summary, but with whatever we have
+    normally if this fails to get to the .h5 file creation
+
+    :param cfg:
+    :return:
+    """
+    orig_dir = os.getcwd()
+    try:
+        os.chdir(cfg.cwd)
+
+        cfg.set_warn = False
+
+        #pre-check ... the summary might already exist and be populated
+        #  and if this is an aborted or limited run, do not overwrite that
+        #  we'll use reflux_virus as a good indicator that the summary has real data in it
+        #    and data that this limited write would not be able to update
+        overwrite = True
+        if os.path.exists("summary.txt"):
+            overwrite = False
+            with open("summary.txt","r") as f:
+                for line in f:
+                    if "relflux_virus" in line and "[]" in line:
+                        #this is not populated
+                        overwrite = True
+                        break
+
+        if not overwrite:
+            print(f"[{cfg.datevshot}] existing, populated summary.txt file found. Will not overwrite.")
+            return
+
+        if cfg.shot_ra == -999.9:
+            get_local_ra_dec(cfg)
+
+        try:
+            ra = cfg.shot_ra
+            dec = cfg.shot_dec
+        except:
+            ra = -999.9
+            dec = -999.9
+
+        # if ra == -999.9: #there is probably nothing available to write
+        #     os.chdir(orig_dir)
+        #     return
+
+        with open("summary.txt","w") as f:
+            f.write(f"shot:\t\t{cfg.datevshot}\n")
+            f.write(f"field:\t\t{cfg.shot_obj}\n")
+            f.write(f"RA,Dec:\t\t{ra:0.6f}, {dec:0.6f}\n")
+            f.write(f"exptimes:\t{cfg.total_exp_time:0.1f}s total\n")
+            dit_norms = cfg.dither_norms
+            f.write(f"relflux_virus:\t{dit_norms}\n")
+            try:
+                max_ditnorm = np.max(dit_norms) / np.min(dit_norms)
+                f.write(f"dither norm:\t{max_ditnorm:0.4f}\n")
+            except:
+                cfg.set_warn = True
+
+            # try:
+            #     waves = h5.root.Calibration.Throughput.throughput.read(field="wavelength")
+            #     tp = h5.root.Calibration.Throughput.throughput.read(field="throughput")
+            #     tp_at_w = np.interp(4600.0, waves, tp)
+            # except:
+            #     tp_at_w = -999.9
+            #     cfg.set_warn = True
+
+            try:
+                if ra > -999:
+                    coord = SkyCoord(ra=ra * u.deg, dec=dec * u.deg)
+                    dust_corr = deredden_spectra([4540.], coord)[0]
+                    f.write(f"dust_corr@4540:\t{dust_corr:0.2f}x\n")
+                else:
+                    f.write(f"dust_corr@4540:\t???\n")
+            except:
+                print(f"[{cfg}] Error computing dust correction for shot.", traceback.format_exc())
+                f.write(f"dust_corr@4540:\t???\n")
+
+            try:
+                f.write(f"response_4540:\t???\n")
+            except:
+                f.write(f"response_4540:\t???\n")
+                cfg.set_warn = True
+
+            try:
+                f.write(f"interp  @4600:\t???\n")
+            except:
+                f.write(f"interp  @4600:\t???\n")
+                cfg.set_warn = True
+
+            try:
+                f.write(f"fwhm_virus:\t???\n")
+            except:
+                f.write(f"fwhm_virus:\t???\n")
+                cfg.set_warn = True
+
+            try:
+                f.write(f"Dithers: \t({cfg.dither_positions})\n")
+            except:
+                f.write(f"Dithers: \t???\n")
+                cfg.set_warn = True
+
+
+            if cfg.avg_sky is None: #this is true on a resume
+                cfg.avg_sky = get_avg_sky(cfg)
+
+            if cfg.avg_sky is not None:
+                f.write(f"Avg sky: \t{cfg.avg_sky}\n")
+            else:
+                f.write(f"Avg sky: \t???\n")
+                cfg.set_warn = True
+
+            try:
+                total = 0
+                with open(f"{cfg.cwd}/elixer/line.dets", "r") as f2:
+                    total = len(f2.readlines())
+
+                #outer file:
+                f.write(f"Line Dets:\t{total}\n")
+
+            except:
+                f.write(f"Line Dets:\t???\n")
+
+            try:
+                total = 0
+                with open(f"{cfg.cwd}/elixer/cont.dets", "r") as f2:
+                    total = len(f2.readlines())
+
+                # outer file:
+                f.write(f"Cont Dets:\t{total}\n")
+
+            except:
+                f.write(f"Cont Dets:\t???\n")
+
+            try:
+                # outer file:
+
+                if cfg.num_bad_amps < 0:
+                    _ = count_amps(cfg)
+
+                f.write(f"Bad Amps:\t{cfg.num_bad_amps}/{cfg.num_all_amps}\n")
+                if cfg.amp_stats_problem > 0:
+                    f.write(f"Amp Stats:\tFail ({cfg.amp_stats_problem})\n")
+                    cfg.set_warn = True
+                elif cfg.amp_stats_problem < 0:
+                    f.write(f"Amp Stats:\tUnspecified\n")
+                else:
+                    f.write(f"Amp Stats:\tPass\n")
+            except:
+                f.write(f"Bad Amps:\t???\n")
+                f.write(f"Amp Stats:\t???\n")
+
+    except:
+        print(f"[{cfg.datevshot}] Exception! trying to write limited summary file", traceback.format_exc())
+
+
+    os.chdir(orig_dir)
+
+
 def Quit(cfg,rc,msg=None,write_status=True,do_post_clean=True):
     """
 
@@ -1650,8 +1820,10 @@ def Quit(cfg,rc,msg=None,write_status=True,do_post_clean=True):
         print(f"[{cfg.datevshot}] ({rc})")
 
 
-    if rc >=0 and not cfg.multifits_only:
-        write_summary(cfg)
+    #?always write the summary??
+    write_summary(cfg)
+    #if rc >=0 and not cfg.multifits_only:
+    #    write_summary(cfg)
 
    # if cfg.orig_stdout:
    #     sys.stdout = cfg.orig_stdout
@@ -1887,6 +2059,7 @@ def get_exposure_times(cfg):
             cfg.total_exp_time = 0.0
         else:
             cfg.total_exp_time = np.nansum(exposure_times)
+            cfg.dither_exp_times = exposure_times
             print(f"[{cfg.datevshot}] Total exposure time: {cfg.total_exp_time}")
 
     except:
@@ -2039,6 +2212,7 @@ def get_guider_fwhm(cfg):
             return None
         else:
             cfg.total_exp_time = np.nansum(exposure_times)
+            cfg.dither_exp_times = exposure_times
             print(f"[{cfg.datevshot}] Total exposure time: {cfg.total_exp_time}")
 
         #try gc1
@@ -3703,6 +3877,80 @@ def num_exposures_in_shot(shotid):
 
 
 
+def get_local_ra_dec(cfg):
+    """
+    basically, read from the tar file and return the IFU average RA, Dec and track
+
+    :param cfg:
+    :return:
+    """
+
+    try:
+        # since we need other info from the HDU that we do not save, may as well keep
+        # it simple and just regenerate the file on a --resume
+        # outfile = os.path.join(cfg.cwd, f"{cfg.datevshot}.local_gettar")
+        # try:
+        #     if os.path.exists(outfile):
+        #         print(f"[{cfg.datevshot}] Using existing local gettar file {outfile}")
+        #         all_exp = np.loadtxt(outfile,dtype=str,usecols=3,unpack=True)
+        #         return len(np.unique(all_exp)) , outfile
+        # except:
+        #     print(f"[{cfg.datevshot}] Exception using existing local gettar file {outfile}. Will rebuild.",traceback.format_exc())
+
+        #print(f"[{cfg.datevshot}] Building local gettar file for run1s and run2s ... ")
+
+        if cfg.local_het_raw_path is None:
+            return
+
+        tarfile_path = os.path.join(cfg.local_het_raw_path,
+                                    f"{cfg.datevshot[:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar")
+
+        tf = tar.open(tarfile_path)
+        tarpaths = np.array(tf.getnames())
+
+
+        #just need one
+        subtar_fits = tarpaths[0]
+        fileh = tf.extractfile(subtar_fits)  # open the fits
+        with fits.open(fileh) as hdu:
+            # get the cards
+            #exp = subtar_fits.split("/")[1]
+            #all_exp.append(exp)
+            # specid = str(int(hdu[0].header['IFUSLOT'])).zfill(3)
+            # ifuslot = str(int(hdu[0].header['SPECID'])).zfill(3)
+            # remember this is TRAJRA in decimal hours and we normally want degrees
+            if cfg.shot_ra is None or cfg.shot_ra <= -999:
+                cfg.shot_ra = float(hdu[0].header['TRAJRA']) * 15.0 # these should acutally all be the same (also note decimal hours)
+                cfg.shot_dec = float(hdu[0].header['TRAJDEC'])
+
+            if float(hdu[0].header['STRUCTAZ']) <= 180.0:
+                cfg.shot_track = 0 #east
+            else:
+                cfg.shot_track = 1 #west
+
+            if cfg.total_exp_time is None or cfg.total_exp_time <= 0:
+                cfg.total_exp_time = float(hdu[0].header['PEXPTIME']) - 8.0
+
+            try:
+                cfg.shot_obj = hdu[0].header['OBJECT'] + " : " + hdu[0].header['QOBJECT'] + \
+                           " (" + hdu[0].header['QPROG'] + ")"
+            except:
+                pass
+
+        fileh.close()
+
+
+        print(
+            f"[{cfg.datevshot}] Set shot RA, Dec to ({cfg.shot_ra:0.6f},{cfg.shot_dec:0.6f}) or (hours) ({cfg.shot_ra / 15.0:0.6f},{cfg.shot_dec:0.6f})")
+
+        tf.close()
+
+    except:
+        print(f"[{cfg.datevshot}] Exception! in get_local_ra_dec()", traceback.format_exc())
+
+    return cfg.shot_ra, cfg.shot_dec, cfg.shot_track
+
+
 def make_local_gettar_file(cfg):
     """
     if we don't have a file from Karl's maveverick/gettar, then just make our own
@@ -3901,6 +4149,7 @@ def vdrp_check_norms(cfg):
             fns = sorted(fns)
             for fn in fns:
                 norms = np.loadtxt(os.path.join(fn, "norm.dat"))  # one line, 3 values
+                cfg.dither_norms = norms
                 if np.count_nonzero(abs(1 - norms) > 0.5) > 0 or np.any(np.isnan(norms)):
                     print("Possible bad dither norm:", os.path.basename(fn), norms)
                     rc = -1
@@ -5487,12 +5736,15 @@ def count_amps(cfg):
     bad_amps_list = []
     amps_list = []
     try:
-        h5 = tables.open_file(os.path.join(cfg.cwd,f"{cfg.datevshot}.h5"), mode='r')
-        amps_list = list(h5.root.AmpStats.read(field="multiframe").astype(str))
-        bad_amps_list = list(h5.root.AmpStats.read_where("flag==0", field="multiframe").astype(str))
-        cfg.num_bad_amps = len(bad_amps_list)
-        cfg.num_all_amps = len(amps_list)
-        h5.close()
+        if os.path.exists(os.path.join(cfg.cwd,f"{cfg.datevshot}.h5")):
+            h5 = tables.open_file(os.path.join(cfg.cwd,f"{cfg.datevshot}.h5"), mode='r')
+            amps_list = list(h5.root.AmpStats.read(field="multiframe").astype(str))
+            bad_amps_list = list(h5.root.AmpStats.read_where("flag==0", field="multiframe").astype(str))
+            cfg.num_bad_amps = len(bad_amps_list)
+            cfg.num_all_amps = len(amps_list)
+            h5.close()
+        else:
+            print(f"[{cfg.datevshot}] Could not load amps_list. shot h5 file not found.")
     except:
         print(f"[{cfg.datevshot}] Could not load amps_list",traceback.format_exc())
 
@@ -7243,11 +7495,14 @@ if cfg.numexp <= 0: # and not cfg.multifits_only:
     do_initial_setup = False
     if rc < 0:
         Quit(cfg, rc, "Could not complete initial setup.", write_status=False)
+    get_local_ra_dec(cfg)  # base info, but most will be overwritten as we go
     #now we need to build the local gettar
     cfg.numexp, cfg.gettar_fn = make_local_gettar_file(cfg)
     if cfg.gettar_fn is None:
         #now this is fatal
         Quit(cfg, -1, f"FATAL! Could not find shot {cfg.datevshot}", write_status=False)
+
+
 
 # if cfg.simul == 1:
 #     NumProcs_mp_rcal = 10
@@ -7289,6 +7544,8 @@ if do_initial_setup:
 
     if rc < 0:
         Quit(cfg,rc,"Could not complete initial setup.",write_status=False)
+
+    get_local_ra_dec(cfg) #base info, but most will be overwritten as we go
 
 
 
