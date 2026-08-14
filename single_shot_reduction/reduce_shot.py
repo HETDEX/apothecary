@@ -6206,7 +6206,7 @@ def shot_analyisis(cfg,ratio=False):
                     data = h5.root.Data.Images.read_where("multiframe==mf", field=img)
                     if ratio:
                         proc = h5.root.Data.Images.read_where("multiframe==mf", field="processed")
-                        data = data / proc
+                        data = data / (proc-data)
                     exp = h5.root.Data.Images.read_where("multiframe==mf", field='expnum')
 
                     # ax = plt.subplot(plot_config[ci])
@@ -6444,7 +6444,7 @@ def make_amp_images(cfg,ratio=False):
             fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(9, 12))
            # plot_config = list(np.arange(431, 443, 1))
             if ratio:
-                fig.suptitle(f"{cfg.datevshot} {mf_base} {img}/proc, cmap scale: "
+                fig.suptitle(f"{cfg.datevshot} {mf_base} {img}/(processed-{img}), cmap scale: "
                              f"({applied_vmin},"
                              f" {applied_vmax})\n\n")
             else:
@@ -6481,7 +6481,7 @@ def make_amp_images(cfg,ratio=False):
                                 #data = (data - mf_avg_row) / mf_avg_row
                                 proc = hdu["processed"].data
                                 #proc[proc==0] = np.inf
-                                data = data / proc
+                                data = data / (proc-data)
                             ax = axes[ai, ei]
 
                             try:
