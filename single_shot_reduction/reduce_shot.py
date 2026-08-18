@@ -32,8 +32,9 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # 1.0.10 fix issue with --hetdex tar copy sticking on the directory instead of the tar file; check lib_calib before reducing
 # 1.0.11 extra status.warn conditions, IFU analysis adjustments based on exptime
 # 1.0.12 add options for --linedet_parms and --force
+# 1.0.13 updates to reload warn and fail conditions after a late --resume
 
-__version__ = '1.0.11'
+__version__ = '1.0.13'
 
 import numpy as np
 import sys
@@ -82,6 +83,7 @@ import importlib.util
 import traceback
 import psutil
 import time
+import copy
 import matplotlib
 matplotlib.use('agg')
 
@@ -311,6 +313,7 @@ class Config:
     hetdex_original = False #set to True if this shot is in the original hetdex data
                             ## (vs the 'hetdex' member which is true if --hetdex is specified to allow this)
     multifits_only = False  #stop once the mutli*fits files have been generated
+    mf_file_status = {}
     sub_shot = None #special case useage, use this shotnum instead of that from the datevshoot for some IFU lookups
     ifuslot = None
     build_rta = False #set to true if we need an rta file before calling into vdrp
@@ -1586,7 +1589,7 @@ def write_summary(cfg):
                 cfg.set_warn = True
 
 
-            if cfg.avg_sky is None: #this is true on a resume
+            if cfg.avg_sky is None and cfg.resume: #this is true on a resume
                 cfg.avg_sky = get_avg_sky(cfg)
 
             if cfg.avg_sky is not None:
@@ -1749,7 +1752,7 @@ def write_limited_summary(cfg):
                 cfg.set_warn = True
 
 
-            if cfg.avg_sky is None: #this is true on a resume
+            if cfg.avg_sky is None and cfg.resume: #this is true on a resume
                 cfg.avg_sky = get_avg_sky(cfg)
 
             if cfg.avg_sky is not None:
@@ -1805,7 +1808,7 @@ def write_limited_summary(cfg):
     os.chdir(orig_dir)
 
 
-def Quit(cfg,rc,msg=None,write_status=True,do_post_clean=True):
+def Quit(cfg,rc,msg=None,do_write_status=True,do_post_clean=True,do_write_summary=True):
     """
 
     :param cfg:
@@ -1820,8 +1823,36 @@ def Quit(cfg,rc,msg=None,write_status=True,do_post_clean=True):
         print(f"[{cfg.datevshot}] ({rc})")
 
 
+    #on a resume, make sure we have loaded the warn triggers
+    if cfg.resume and (do_write_status or do_write_summary):
+        if cfg.amp_stats_problem < 0 and dtprog["s04e_amp_stats"]:
+            #this is a resume, we have not set amp_stats_problem AND at some point in the last run, amp_stats were computed
+            #so we probably skipped it this time and need to know this information for below
+            #this will set amp_stats_problem, num_bad_amps, bnum_all_amps, etc
+            amp_stats(cfg,update=False)
+
+        #rfft needs to have already run
+        if cfg.avg_sky is None and dtprog["s04b_rfft"]:
+            avg_sky = get_avg_sky(cfg)
+            if avg_sky is not None:
+                cfg.avg_sky = avg_sky
+                if avg_sky > MAX_SAFE_AVG_SKY:
+                    if avg_sky >= FAIL_AVG_SKY:
+                        print(
+                            f"[{cfg.datevshot}] Average Sky is catastrophically large and/or unable to be fit: {avg_sky:0.1f}.")
+                        rc = -1  # fatal
+                    else:
+                        # not fatal, but still a warning
+                        print(f"[{cfg.datevshot}] Average Sky is problematically large: {avg_sky:0.1f}. Non-fatal.")
+
+        if (cfg.num_cont_dets < 0 or cfg.num_line_dets < 0) and dtprog["s06b_fof"]:
+            get_detection_counts(cfg)
+
+
     #?always write the summary??
-    write_summary(cfg)
+    if do_write_summary:
+        write_summary(cfg)
+
     #if rc >=0 and not cfg.multifits_only:
     #    write_summary(cfg)
 
@@ -1848,7 +1879,7 @@ def Quit(cfg,rc,msg=None,write_status=True,do_post_clean=True):
         pass
 
     try:
-        if write_status and safe_cd(cfg.cwd):
+        if do_write_status and safe_cd(cfg.cwd):
             status_str = "status"
 
             #
@@ -3672,6 +3703,37 @@ def get_avg_sky(cfg):
 
     return avg_sky
 
+def get_detection_counts(cfg):
+    """
+
+    :param cfg:
+    :return:
+    """
+
+    try:
+        fn = os.path.join(cfg.cwd_orig,f"sci{cfg.datevshot}/{cfg.datevshot}_line_sourcecat.tab")
+        if os.path.exists(fn):
+            t = Table.read(fn,format="ascii")
+            if t is not None:
+                cfg.num_line_dets = len(t)
+                del t
+        else:
+            print(f"[{cfg.datevshot}] Warning! Could not load number of line detections. Not found: {fn}")
+
+        fn = os.path.join(cfg.cwd_orig, f"sci{cfg.datevshot}/{cfg.datevshot}_cont_sourcecat.tab")
+        if os.path.exists(fn):
+            t = Table.read(fn,format="ascii")
+            if t is not None:
+                cfg.num_cont_dets = len(t)
+                del t
+        else:
+            print(f"[{cfg.datevshot}] Warning! Could not load number of cont detections. Not found: {fn}")
+    except:
+        print(f"[{cfg.datevshot}] Warning! Could not load number of detections.",traceback.format_exc())
+
+
+
+
 def update_vdrp_config_limits(cfg):
     """
     update the vmin/vmax stretch on the collapsed imaging and the faint maglimit for calibration stars
@@ -5140,6 +5202,38 @@ def rdet_rf1(cfg):
 
     return rc
 
+def approx_snr(snr_array):
+        """
+        a curve that approximates what we expect from a normal SNR (good down to around 4.5 to 4.8 and out to 10.0)
+
+        :param snr_array: (snr array, normally 4.8 to 10.0 in steps of 0.1)
+        :return: counts expected per IFU (under normal 3-dither, 360second exposures)
+        """
+
+        return 425. * np.exp(-0.9 * snr_array) #per IFUs though, down to snr 4.8 with limited validation
+
+
+def approx_count_at_snr(snr_array, total_exp_time, num_dithers):
+        """
+
+        :param snr_array:
+        :param total_exp_time:
+        :param num_dithers:
+        :return: adjusted SNRs and counts expected per IFU
+        """
+
+        #adjust the SNR based on approximate proportionality of sqrt(time)
+        #e.g. adjust the depth in a way, based off the empirical model and the standard HETDEX 360 second exposure
+        # since we are using the TOTAL time here, need to set that as per exposure
+        # AND we assume, if multiple exposuress that they are dithered and do not overlap
+        per_exp_time_mux = np.sqrt(total_exp_time / num_dithers / 360.0)
+
+        # adjusts the area covered
+        vol_mux = num_dithers / 3
+
+        #shift the SNR array by 1/srt(time) and multiply by volume change
+        return approx_snr(snr_array/per_exp_time_mux) * vol_mux
+
 
 def check_line_detections(cfg):
     """
@@ -5157,16 +5251,7 @@ def check_line_detections(cfg):
     #todo: switch to per IFU
     #      use biweight instead of sum ... so we need to track the dets by IFU to do this
 
-    def approx_snr(x):
-        """
-        a curve that approximates what we expect from a normal SNR (good down to around 4.5 to 4.8 and out to 10.0)
 
-        :param x: (snr array, normalluy 4.8 to 10.0 in steps of 0.1)
-        :return:
-        """
-        #todo: this is way too high ?
-        #return 30000.0 * np.exp(-0.75 * x)
-        return 33000. * np.exp(-0.9 * x) #assumes full 78 IFUs though, down to snr 4.8 with limited validation
 
     rc = 0
     min_snr = 4.8
@@ -5225,7 +5310,9 @@ def check_line_detections(cfg):
             binned_snr = np.histogram(all_snr,bins=xbins)
             data_snr = np.sum(binned_snr[0])
 
-            model_snr = int(np.sum(approx_snr(xbins)) * np.sqrt(cfg.total_exp_time / 1080.) * num_ifus / 78)
+            #model_snr = int(np.sum(approx_snr(xbins)) * np.sqrt(cfg.total_exp_time / 1080.) * num_ifus / 78)
+
+            model_snr = int(np.sum(approx_count_at_snr(xbins,cfg.total_exp_time,cfg.numexp))) * num_ifus
 
             print(f"[{cfg.datevshot}] Line dets for SNR [{min_snr:0.1f},{max_snr:0.1f}]. Data / Model {data_snr} / {model_snr} ")
 
@@ -5277,14 +5364,14 @@ def check_line_detections_by_ifu(cfg):
     #todo: switch to per IFU
     #      use biweight instead of sum ... so we need to track the dets by IFU to do this
 
-    def approx_snr(x):
-        """
-        a curve that approximates what we expect from a normal SNR (good down to around 4.5 to 4.8 and out to 10.0)
-
-        :param x: (snr array, normalluy 4.8 to 10.0 in steps of 0.1)
-        :return:
-        """
-        return 100. * np.exp(-0.9 * x) #assumes a single IFU gives about 15 for 4.8 <= SNR <= 10.0
+    # def approx_snr(x):
+    #     """
+    #     a curve that approximates what we expect from a normal SNR (good down to around 4.5 to 4.8 and out to 10.0)
+    #
+    #     :param x: (snr array, normalluy 4.8 to 10.0 in steps of 0.1)
+    #     :return:
+    #     """
+    #     return 100. * np.exp(-0.9 * x) #assumes a single IFU gives about 15 for 4.8 <= SNR <= 10.0
 
     rc = 0
     min_snr = 4.8
@@ -5347,7 +5434,8 @@ def check_line_detections_by_ifu(cfg):
                 xbins = np.arange(min_snr, max_snr + step_snr, step_snr)
 
             #build a model, based on the SNR range in the IFU
-            model_snr = int(np.sum(approx_snr(xbins)) * np.sqrt(cfg.total_exp_time / 1080.))
+            #model_snr = int(np.sum(approx_snr(xbins)) * np.sqrt(cfg.total_exp_time / 1080.))
+            model_snr = int(np.sum(approx_count_at_snr(xbins, cfg.total_exp_time, cfg.numexp))) * num_ifus
             model_ct.append(model_snr)
 
         #now compare data vs model
@@ -5750,16 +5838,25 @@ def count_amps(cfg):
 
     return amps_list,bad_amps_list
 
-def amp_stats(cfg,shot_h5_fqfn=None):
+def amp_stats(cfg,shot_h5_fqfn=None,update=True):
     """
 
     this needs the shot h5 file to have been completed to work
     :param cfg:
+    :param shot_h5_fqfn
+    :param update: if True (default) write out amp stats table. If false, recompute for internal use, but do not
+                   overwrite or update existing tables
     :return:
     """
 
+    if not update:
+        print(f"[{cfg.datevshot}] Recomputing Amp Stats for internal use only. Will not update recorded tables.")
+
     if cfg.amp_stats_problem < 0:
         cfg.amp_stats_problem = 0
+
+    if cfg.mf_file_status is None or len(cfg.mf_file_status.keys()) == 0:
+        get_multifits_file_status(cfg)
 
     try:
         rc = 0
@@ -5786,8 +5883,30 @@ def amp_stats(cfg,shot_h5_fqfn=None):
             t = t[sel_t]
 
             num_amp_stats = len(t)
-            num_failed_amp_stats = np.count_nonzero(t['n_lo'] < 0)
+            sel_failed_amp_stats = t['n_lo'] < 0
+            num_failed_amp_stats = np.count_nonzero(sel_failed_amp_stats)
+            unexplained_failed_amp_stats = num_failed_amp_stats
             print(f"[{cfg.datevshot}] Amp status computed for {num_amp_stats} amps, {num_failed_amp_stats} failed.")
+
+            #are they failed amp stats okay? that is, is the multifits actually missing?
+            if num_failed_amp_stats > 0:
+                if cfg.mf_file_status is not None and len(cfg.mf_file_status.keys()) > 0:
+                    #multiframe (s20) expnum(int64)
+                    for row in t[sel_failed_amp_stats]:
+                        try:
+                            q_slot = row['multiframe'][10:13]
+                            q_amp = row['multiframe'][18:20]
+                            q_exp = row['expnum']
+                            if cfg.mf_file_status[q_slot][q_exp][q_amp] != -1:
+                                #the file DOES exist, so this should have generated an amp status
+                                print(f"[{cfg.datevshot}] WARNING! No Amp Status, but file does exist for "
+                                      f"{row['multiframe']} ({row['expnum']})")
+                            else:
+                                unexplained_failed_amp_stats -= 1 #makes sense, the multifits is missing
+                        except:
+                            print(f"[{cfg.datevshot}] WARNING! Failed mf status check for {row['multiframe']} ({row['expnum']})")
+                else:
+                    print(f"[{cfg.datevshot}] WARNING! Cannot confirm missing multifits for failed amp status")
 
 
             # expectation is, generally, 78 IFUs x 4 amps x # exposures = 936 for full array, 3 exposures
@@ -5799,6 +5918,12 @@ def amp_stats(cfg,shot_h5_fqfn=None):
             if num_failed_amp_stats > 2 * len(stat_exps): #allow up to 2 (* number of exposures)
                 # may be a problem
                 print(f"[{cfg.datevshot}] WARNING! {num_failed_amp_stats} failures to build amp stats."
+                      f" This may indicate a problem with the shot.")
+                cfg.amp_stats_problem = 1
+
+            if unexplained_failed_amp_stats != 0:
+                # may be a problem
+                print(f"[{cfg.datevshot}] WARNING! {unexplained_failed_amp_stats} unexplained failures to build amp stats."
                       f" This may indicate a problem with the shot.")
                 cfg.amp_stats_problem = 1
 
@@ -5817,33 +5942,34 @@ def amp_stats(cfg,shot_h5_fqfn=None):
                       f" to compute stats.")
 
 
-            t.write(f"{cfg.datevshot}_ampstats.fits",format="fits",overwrite=True)
-            t.write(f"{cfg.datevshot}_ampstats.tab", format="ascii",overwrite=True)
+            if update:
+                t.write(f"{cfg.datevshot}_ampstats.fits",format="fits",overwrite=True)
+                t.write(f"{cfg.datevshot}_ampstats.tab", format="ascii",overwrite=True)
 
-            #always creat the bad amps file, even if none trigger
-            with open(f"{cfg.datevshot}_badamps.txt","w") as f:
-                for row in t[t['flag']!=1]: #1 == Good, 0 = Bad
-                    f.write(f"{row['multiframe']} exp{str(row['expnum']).zfill(2)} \n")
+                #always creat the bad amps file, even if none trigger
+                with open(f"{cfg.datevshot}_badamps.txt","w") as f:
+                    for row in t[t['flag']!=1]: #1 == Good, 0 = Bad
+                        f.write(f"{row['multiframe']} exp{str(row['expnum']).zfill(2)} \n")
 
             cfg.num_bad_amps = np.count_nonzero(t['flag']!=1)
             cfg.num_all_amps = len(t)
-
 
             #assuming these are post-HETDEX, go ahead and put this in the shot.h5 file
             #NOTICE: this is not done for the original HETDEX shots
             #needs the actual h5 file
 
             #NOTICE: the "flag" key DOES NOT EXIST here ... it is added to table t above, but not to the shot_dict
-            print(f"[{cfg.datevshot}] Adding AmpStats table to  {shot_h5_fqfn} ...")
-            h5 = tables.open_file(shot_h5_fqfn,mode="a")
+            if update:
+                print(f"[{cfg.datevshot}] Adding AmpStats table to  {shot_h5_fqfn} ...")
+                h5 = tables.open_file(shot_h5_fqfn,mode="a")
 
-            try:
-                #need to update the shot_dict with the results from stats_qc
-                AmpStats.stats_update_shot(h5,shot_dict=None,shot_dict_tab=t)
-            except:
-                print(f"Unable to update amp stats. Exception:",traceback.format_exc())
+                try:
+                    #need to update the shot_dict with the results from stats_qc
+                    AmpStats.stats_update_shot(h5,shot_dict=None,shot_dict_tab=t)
+                except:
+                    print(f"Unable to update amp stats. Exception:",traceback.format_exc())
 
-            h5.close()
+                h5.close()
 
             del t
 
@@ -6321,6 +6447,162 @@ def shot_analyisis(cfg,ratio=False):
         pass
 
     return rc
+
+def get_multifits_file_status(cfg):
+    """
+    check the reduction diretory and make a dictionary with key = multifits name
+    and value = -1 (missing) 0 = okay, 1 = damaged/warning
+    for the multifits file under the reductions directory
+
+    :param cfg:
+    :return:
+    """
+    d = {}
+    try:
+        print(f"[{cfg.datevshot}] Getting multi*fits file status ...")
+
+        #slotids, show 010 to 109, noting only 78 of them actually exist
+        dkeys = {
+           # '010',
+           # '011',
+           # '012',
+            '013',
+            '014',
+            '015',
+            '016',
+            #'017',
+            #'018',
+            #'019',
+
+            #'020',
+            '021',
+            '022',
+            '023',
+            '024',
+            '025',
+            '026',
+            '027',
+            '028',
+            #'029',
+
+            '030',
+            '031',
+            '032',
+            '033',
+            '034',
+            '035',
+            '036',
+            '037',
+            '038',
+            '039',
+
+            '040',
+            '041',
+            '042',
+            '043',
+            '044',
+            '045',
+            '046',
+            '047',
+            '048',
+            '049',
+
+            '050',
+            '051',
+            '052',
+            '053',
+            #'054',
+            #'055',
+            #'056',
+            '057',
+            '058',
+            '059',
+
+            '060',
+            '061',
+            '062',
+            '063',
+            #'064',
+            #'065',
+            #'066',
+            '067',
+            '068',
+            '069',
+
+            '070',
+            '071',
+            '072',
+            '073',
+            '074',
+            '075',
+            '076',
+            '077',
+            '078',
+            '079',
+
+            '080',
+            '081',
+            '082',
+            '083',
+            '084',
+            '085',
+            '086',
+            '087',
+            '088',
+            '089',
+
+            #'090',
+            '091',
+            '092',
+            '093',
+            '094',
+            '095',
+            '096',
+            '097',
+            '098',
+            #'099',
+
+            # '100',
+            # '101',
+            # '102',
+            '103',
+            '104',
+            '105',
+            '106',
+            # '107',
+            # '108',
+            # '109',
+        }
+
+        #get all the reduction paths
+        date = cfg.datevshot[0:8]
+        virus_shot = "virus0000" + cfg.datevshot[-3:]
+        if red1path is not None:
+            datadir = os.path.join(red1path, f"{date}/virus/{virus_shot}") #/{exp}/virus")
+        else:
+            datadir = os.path.join(cfg.cwd_orig, f"reductions/{date}/virus/{virus_shot}") #/{exp}/virus")
+
+        exps = sorted(glob.glob(f"{datadir}/exp*"))
+        expdirs = [d + "/virus" for d in exps]
+        exps = [int(os.path.basename(d)[-2:]) for d in exps] #now an integer 1, 2, 3 ...
+
+        d = {key: {} for key in dkeys}
+        for exp, expdir in zip(exps,expdirs):
+            for k in dkeys:
+                d[k][exp]={'LL':-1,'LU':-1,'RL':-1,'RU':-1} #initialize to missing (-1)
+
+            mfs_in_exp = [os.path.basename(x) for x in glob.glob(f"{expdir}/multi_*.fits")]
+            for mf in mfs_in_exp: #i.e. multi_421_069_006_LU.fits
+                slot = mf[10:13]
+                amp = mf[18:20]
+                d[slot][exp][amp] = 0
+
+        #any remaing -1 are missing
+        cfg.mf_file_status = d
+    except:
+        print(f"[{cfg.datevshot}] Could not get multi*fits file status",traceback.format_exc())
+
+    return d
 
 def make_amp_images(cfg,ratio=False):
     """
@@ -7476,11 +7758,11 @@ if prep_compress > -1:
 if cfg.clean_only:
     print(f"[{cfg.datevshot}] Performing only the CLEAN, level : {cfg.clean} ...")
     post_clean(cfg)
-    Quit(cfg,0,"Clean complete. Exiting",write_status=False,do_post_clean=False) #just ran post_clean, don't need it twice
+    Quit(cfg,0,"Clean complete. Exiting",do_write_status=False,do_post_clean=False,do_write_summary=False) #just ran post_clean, don't need it twice
 
 rc = precheck(cfg)
 if rc < 0:
-    Quit(cfg,rc,"FATAL! Precheck failed. Reduction cannot run.",write_status=False,do_post_clean=False)
+    Quit(cfg,rc,"FATAL! Precheck failed. Reduction cannot run.",do_write_status=False,do_post_clean=False,do_write_summary=False)
 
 #if not cfg.multifits_only:
 cfg.numexp, cfg.gettar_fn = num_exposures_in_shot(cfg.shotid)
@@ -7488,19 +7770,19 @@ cfg.numexp, cfg.gettar_fn = num_exposures_in_shot(cfg.shotid)
 do_initial_setup = True
 if cfg.numexp <= 0: # and not cfg.multifits_only:
     # might not be fatal ... could be a newer observation that is not in the gettars yet, but is still accessible
-    #Quit(cfg, -1, f"FATAL! Could not find shot {cfg.datevshot}",write_status=False)
+    #Quit(cfg, -1, f"FATAL! Could not find shot {cfg.datevshot}",do_write_status=False)
     print(f"[{cfg.datevshot}] Did not find shot in standard gettar location. Not necessarily fatal. Will attempt to proceed ...")
     #try the initial setup anyway
     rc = initial_setup(cfg)
     do_initial_setup = False
     if rc < 0:
-        Quit(cfg, rc, "Could not complete initial setup.", write_status=False)
+        Quit(cfg, rc, "Could not complete initial setup.", do_write_status=False, do_write_summary=False)
     get_local_ra_dec(cfg)  # base info, but most will be overwritten as we go
     #now we need to build the local gettar
     cfg.numexp, cfg.gettar_fn = make_local_gettar_file(cfg)
     if cfg.gettar_fn is None:
         #now this is fatal
-        Quit(cfg, -1, f"FATAL! Could not find shot {cfg.datevshot}", write_status=False)
+        Quit(cfg, -1, f"FATAL! Could not find shot {cfg.datevshot}", do_write_status=False, do_write_summary=False)
 
 
 
@@ -7537,20 +7819,22 @@ else:
             if cfg.numexp == 0:
                 cfg.numexp = cfg.exp
         else:
-            Quit(cfg, -1, f"Invalid exposure. Requesting exp #{cfg.exp} but {cfg.datevshot} has only {cfg.numexp}",write_status=False)
+            Quit(cfg, -1, f"Invalid exposure. Requesting exp #{cfg.exp} but {cfg.datevshot} has only {cfg.numexp}",
+                 do_write_status=False,do_write_summary=False)
 
 if do_initial_setup:
     rc = initial_setup(cfg)
 
     if rc < 0:
-        Quit(cfg,rc,"Could not complete initial setup.",write_status=False)
+        Quit(cfg,rc,"Could not complete initial setup.",do_write_status=False,do_write_summary=False)
 
     get_local_ra_dec(cfg) #base info, but most will be overwritten as we go
 
-
+# *** DEBUG HERE ***
+#get_multifits_file_status(cfg)
 
 #print("Temporary ... make summary.txt ONLY")
-#Quit(cfg,rc=0,msg="Temporary ... make summary.txt ONLY",write_status=True)
+#Quit(cfg,rc=0,msg="Temporary ... make summary.txt ONLY",do_write_status=True)
 
 
 rc = node_setup(cfg)
@@ -7558,7 +7842,7 @@ rc = node_setup(cfg)
 if cfg.special == 1:
     print("*** SPECIAL (1) *** forcing guider fwhm then terminating")
     cfg.guider_fwhm = get_guider_fwhm(cfg)
-    Quit(cfg, 0, f"Done with special handling. {cfg.datevshot}",write_status=False)
+    Quit(cfg, 0, f"Done with special handling. {cfg.datevshot}",do_write_status=False,do_write_summary=False)
 
 
 if not cfg.multifits_only and (cfg.numexp < 3 or not cfg.hetdex_original):
@@ -7579,7 +7863,7 @@ if not cfg.multifits_only and (cfg.total_exp_time is None or cfg.total_exp_time 
 # print(f"!!! DEBUG !!!")
 # check_line_detections_by_ifu(cfg)
 #
-# Quit(cfg, 0, f"DEBUG exit. {cfg.datevshot}",write_status=False)
+# Quit(cfg, 0, f"DEBUG exit. {cfg.datevshot}",do_write_status=False)
 
 #########
 # after the initial setup, move stdout and stderr to a log file
@@ -7656,7 +7940,11 @@ if cfg.multifits_only:
     print(f"[{cfg.datevshot}] multi*fits files generated. "
           f"Check paths under ./reductions/{cfg.datevshot[0:8]}/virus/virus*{cfg.datevshot[-3]}/")
     print(f"[{cfg.datevshot}] Also look for diagnostic IFU+amp images under sci{cfg.datevshot}/analysis/ifus")
-    Quit(cfg, 0, f"Done. Enforcing --multifits_only switch. {cfg.datevshot}", write_status=False)
+    Quit(cfg, 0, f"Done. Enforcing --multifits_only switch. {cfg.datevshot}", do_write_status=False)
+
+
+#quick assignment ... may need these later
+get_multifits_file_status(cfg)
 
 
 ###########
@@ -8017,6 +8305,7 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
                     print(f"[{cfg.datevshot}] Limited extra restriction on line detections.")
 
             if norm_obs_ew is not None:
+                #from a bit above, try to limit the many false lines found on top of positive continuum
                 try:
                     reject_obs_ew = np.array(norm_obs_ew < 0.5) * np.array(line_tab['continuum'] > 0.35)
                     esel = esel * ~reject_obs_ew
@@ -8221,6 +8510,8 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
     #s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
     if dtprog["s06b_fof"] and dtprog["s06c_diagnose"] and dtprog["s06d_elixer"]:
         progress_update(cfg,dtprog, "s06_catalogs")
+
+
 
 
 ##########
