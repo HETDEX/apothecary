@@ -336,7 +336,8 @@ class Config:
     num_bad_amps = -1
     num_all_amps = -1
     ifu_list = [] #as multiframe
-    ifU_linedet_ct = []
+    ifu_linedet_ct = [] #actual count of line dets in the requested selection
+    ifu_linedet_ratio = [] #ratio to what was maximally expected
     mf_clean_image_avg_row = None
 
     num_line_dets = -1 #unset
@@ -346,6 +347,7 @@ class Config:
     # for cleanup at the end
     copy_lock_file = None
     node_clean_done = False
+    dtprog = None
 
 ########################################################################
 # Basic user input
@@ -1425,57 +1427,58 @@ def progress_update(cfg,progress_dict,key=None,status=True):
     except:
         print(f"Exception in progress_update(). {traceback.format_exc()}")
 
-def progress_init(cfg):
+def progress_init(cfg,initialize_only=False):
     """
     read/initialize progress dict
     :param cfg:
     :return:
     """
     dtprog = None
-    try:
-        fn = os.path.join(cfg.cwd,"progress.dat")
-        if os.path.exists(fn):
-            with open(fn, 'r') as f:
-                dtprog = json.load(f)
+    if not initialize_only:
+        try:
+            fn = os.path.join(cfg.cwd,"progress.dat")
+            if os.path.exists(fn):
+                with open(fn, 'r') as f:
+                    dtprog = json.load(f)
 
-            #assume this was successful, but also check --resume
-            if cfg.resume is False:
-                print("********** NOTICE **********")
-                print("Call did NOT specfiy --resume, but this reduction appears to be at least partially complete.")
-                print("Will attempt to resume (implied) at the last incomplete step ...")
-                print("****************************")
-                cfg.resume = True
+                #assume this was successful, but also check --resume
+                if cfg.resume is False:
+                    print("********** NOTICE **********")
+                    print("Call did NOT specfiy --resume, but this reduction appears to be at least partially complete.")
+                    print("Will attempt to resume (implied) at the last incomplete step ...")
+                    print("****************************")
+                    cfg.resume = True
 
-            if "s01b_amp_images" not in dtprog.keys():
-                dtprog["s01b_amp_images"] = False
-
-
-            if "s04f_analysis" not in dtprog.keys():
-                dtprog["s04f_analysis"] = False
-
-                #consistency check / force (if ANY under a step are False, then the top of the step becomes False (incomplete))
-            if "s04_make_shot" in dtprog.keys():
-                dtprog["s04_make_shot"] = dtprog["s04_make_shot"] and dtprog["s04a_get_ifucens"] and \
-                                                dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] and \
-                                                dtprog["s04e_amp_stats"] and dtprog["s04f_analysis"]
-            else:
-                dtprog["s04_make_shot"] = dtprog["s04_sky_subtraction"] and dtprog["s04a_get_ifucens"] and \
-                                                dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] and \
-                                                dtprog["s04e_amp_stats"] and dtprog["s04f_analysis"]
-                dtprog.pop("s04_sky_subtraction") #remove the old name
-                #ordering is now wrong, but, programatically, it does not matter
-                #should be rare as we move forward, so just noting that the progress.dat for this will be
-                #out of order and move on
+                if "s01b_amp_images" not in dtprog.keys():
+                    dtprog["s01b_amp_images"] = False
 
 
+                if "s04f_analysis" not in dtprog.keys():
+                    dtprog["s04f_analysis"] = False
 
-            dtprog["s05_detection"] = dtprog["s05_detection"] and dtprog["s05b_rdet_rf1"] and \
-                                            dtprog["s05c_rgetmax"] and dtprog["s05e_detection_hdf5"]
+                    #consistency check / force (if ANY under a step are False, then the top of the step becomes False (incomplete))
+                if "s04_make_shot" in dtprog.keys():
+                    dtprog["s04_make_shot"] = dtprog["s04_make_shot"] and dtprog["s04a_get_ifucens"] and \
+                                                    dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] and \
+                                                    dtprog["s04e_amp_stats"] and dtprog["s04f_analysis"]
+                else:
+                    dtprog["s04_make_shot"] = dtprog["s04_sky_subtraction"] and dtprog["s04a_get_ifucens"] and \
+                                                    dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] and \
+                                                    dtprog["s04e_amp_stats"] and dtprog["s04f_analysis"]
+                    dtprog.pop("s04_sky_subtraction") #remove the old name
+                    #ordering is now wrong, but, programatically, it does not matter
+                    #should be rare as we move forward, so just noting that the progress.dat for this will be
+                    #out of order and move on
 
-            dtprog["s06_catalogs"] = dtprog["s06_catalogs"] and dtprog["s06b_fof"] and \
-                                            dtprog["s06c_diagnose"] and dtprog["s06d_elixer"] and dtprog["s06e_source_cat"]
-    except:
-        print(f"Exception in progress_init(). {traceback.format_exc()}")
+
+
+                dtprog["s05_detection"] = dtprog["s05_detection"] and dtprog["s05b_rdet_rf1"] and \
+                                                dtprog["s05c_rgetmax"] and dtprog["s05e_detection_hdf5"]
+
+                dtprog["s06_catalogs"] = dtprog["s06_catalogs"] and dtprog["s06b_fof"] and \
+                                                dtprog["s06c_diagnose"] and dtprog["s06d_elixer"] and dtprog["s06e_source_cat"]
+        except:
+            print(f"Exception in progress_init(). {traceback.format_exc()}")
 
     if dtprog is None:
         dtprog = {"s01_run1s": False,
@@ -1501,6 +1504,7 @@ def progress_init(cfg):
 
         progress_update(cfg,dtprog) #write out the file, no updates yet
 
+        cfg.dtprog = dtprog
     return dtprog
 
 
@@ -1638,6 +1642,7 @@ def write_summary(cfg):
                 f.write(f"Bad Amps:\t???\n")
                 f.write(f"Amp Stats:\t???\n")
 
+            f.write("") #always end with a blank line, so can read easier with cat
     except:
         print(f"[{cfg.datevshot}] Exception! trying to write summary file", traceback.format_exc())
 
@@ -1822,6 +1827,9 @@ def Quit(cfg,rc,msg=None,do_write_status=True,do_post_clean=True,do_write_summar
     else:
         print(f"[{cfg.datevshot}] ({rc})")
 
+    dtprog = cfg.dtprog
+    if dtprog is None:
+        dtprog = progress_init(cfg,initialize_only=True)
 
     #on a resume, make sure we have loaded the warn triggers
     if cfg.resume and (do_write_status or do_write_summary):
@@ -3970,40 +3978,56 @@ def get_local_ra_dec(cfg):
         tf = tar.open(tarfile_path)
         tarpaths = np.array(tf.getnames())
 
+        u_exp, u_exp_idx = np.unique([x.split("/")[1] for x in tarpaths],return_index=True)
 
-        #just need one
-        subtar_fits = tarpaths[0]
-        fileh = tf.extractfile(subtar_fits)  # open the fits
-        with fits.open(fileh) as hdu:
-            # get the cards
-            #exp = subtar_fits.split("/")[1]
-            #all_exp.append(exp)
-            # specid = str(int(hdu[0].header['IFUSLOT'])).zfill(3)
-            # ifuslot = str(int(hdu[0].header['SPECID'])).zfill(3)
-            # remember this is TRAJRA in decimal hours and we normally want degrees
-            if cfg.shot_ra is None or cfg.shot_ra <= -999:
-                cfg.shot_ra = float(hdu[0].header['TRAJRA']) * 15.0 # these should acutally all be the same (also note decimal hours)
-                cfg.shot_dec = float(hdu[0].header['TRAJDEC'])
+        all_ra = []
+        all_dec = []
+        all_time = []
+        track_str = None
 
-            if float(hdu[0].header['STRUCTAZ']) <= 180.0:
-                cfg.shot_track = 0 #east
-            else:
-                cfg.shot_track = 1 #west
+        for i in u_exp_idx:
+            #just need one for RA, Dec  BUT for time, need one in each exposure
+            subtar_fits = tarpaths[i]
+            fileh = tf.extractfile(subtar_fits)  # open the fits
+            with fits.open(fileh) as hdu:
+                # get the cards
+                #exp = subtar_fits.split("/")[1]
+                #all_exp.append(exp)
+                # specid = str(int(hdu[0].header['IFUSLOT'])).zfill(3)
+                # ifuslot = str(int(hdu[0].header['SPECID'])).zfill(3)
+                # remember this is TRAJRA in decimal hours and we normally want degrees
 
-            if cfg.total_exp_time is None or cfg.total_exp_time <= 0:
-                cfg.total_exp_time = float(hdu[0].header['PEXPTIME']) - 8.0
+                all_ra.append(float(hdu[0].header['TRAJRA']) * 15.0) # these should acutally all be the same (also note decimal hours)
+                all_dec.append(float(hdu[0].header['TRAJDEC']))
 
-            try:
-                cfg.shot_obj = hdu[0].header['OBJECT'] + " : " + hdu[0].header['QOBJECT'] + \
-                           " (" + hdu[0].header['QPROG'] + ")"
-            except:
-                pass
+                if float(hdu[0].header['STRUCTAZ']) <= 180.0: #these don't change over exposures
+                    cfg.shot_track = 0 #east
+                    track_str = 'East'
+                else:
+                    cfg.shot_track = 1 #west
+                    track_str = 'West'
 
-        fileh.close()
+                all_time.append(float(hdu[0].header['PEXPTIME']) - 8.0)
 
+                try: #this does not change per exposures
+                    cfg.shot_obj = hdu[0].header['OBJECT'] + " : " + hdu[0].header['QOBJECT'] + \
+                               " (" + hdu[0].header['QPROG'] + ")"
+                except:
+                    pass
 
-        print(
-            f"[{cfg.datevshot}] Set shot RA, Dec to ({cfg.shot_ra:0.6f},{cfg.shot_dec:0.6f}) or (hours) ({cfg.shot_ra / 15.0:0.6f},{cfg.shot_dec:0.6f})")
+            fileh.close()
+
+        if cfg.shot_ra is None or cfg.shot_ra <= -999:
+            cfg.shot_ra = np.mean(all_ra)
+            cfg.shot_dec = np.mean(all_dec)
+
+        if cfg.total_exp_time is None or cfg.total_exp_time <= 0:
+            cfg.total_exp_time = np.sum(all_time)
+
+        print(f"[{cfg.datevshot}] Set shot RA, Dec to ({cfg.shot_ra:0.6f},{cfg.shot_dec:0.6f}) or "
+              f"(hours) ({cfg.shot_ra / 15.0:0.6f},{cfg.shot_dec:0.6f}) with {track_str} track")
+        print(f"[{cfg.datevshot}] Set shot exp time: {cfg.total_exp_time:0.1f}s")
+        print(f"[{cfg.datevshot}] Set shot object: {cfg.shot_obj}")
 
         tf.close()
 
@@ -5204,17 +5228,35 @@ def rdet_rf1(cfg):
 
 def approx_snr(snr_array):
         """
-        a curve that approximates what we expect from a normal SNR (good down to around 4.5 to 4.8 and out to 10.0)
+        a curve that approximates a nominal ***MAXIMUM*** of what we expect from a normal SNR
+            (normally from 4.8 to 10.0) for a single IFU, assuming 3x 360sec exposures and good seeing, etc.
+            note that there can be factors of 2x-3x just by varying the conditions a bit
+            and, of course, any REAL line of sight variations
+
+        imposed conditions:
+
+        (continuum around line > -3)   &
+        (4.8 <= snr <= 10.0) &
+        (chi2 < 1.5 ) &
+        (1.5 <= linewidth(sigma) <= 16.) &
+        (chi2_fib <= 4.5)
+
+        ignored conditions: seeing, tput, etc (just assume to be good)
 
         :param snr_array: (snr array, normally 4.8 to 10.0 in steps of 0.1)
         :return: counts expected per IFU (under normal 3-dither, 360second exposures)
         """
 
-        return 425. * np.exp(-0.9 * snr_array) #per IFUs though, down to snr 4.8 with limited validation
+        return 300. * np.exp(-0.9 * snr_array) #per IFUs though, down to snr 4.8 with limited validation
 
 
 def approx_count_at_snr(snr_array, total_exp_time, num_dithers):
         """
+
+        #adjust the SNR based on approximate proportionality of sqrt(time)
+        #e.g. adjust the depth in a way, based off the empirical model and the standard HETDEX 360 second exposure
+        # since we are using the TOTAL time here, need to set that as per exposure
+        # AND we assume, if multiple exposuress that they are dithered and do not overlap
 
         :param snr_array:
         :param total_exp_time:
@@ -5222,10 +5264,6 @@ def approx_count_at_snr(snr_array, total_exp_time, num_dithers):
         :return: adjusted SNRs and counts expected per IFU
         """
 
-        #adjust the SNR based on approximate proportionality of sqrt(time)
-        #e.g. adjust the depth in a way, based off the empirical model and the standard HETDEX 360 second exposure
-        # since we are using the TOTAL time here, need to set that as per exposure
-        # AND we assume, if multiple exposuress that they are dithered and do not overlap
         per_exp_time_mux = np.sqrt(total_exp_time / num_dithers / 360.0)
 
         # adjusts the area covered
@@ -5235,116 +5273,121 @@ def approx_count_at_snr(snr_array, total_exp_time, num_dithers):
         return approx_snr(snr_array/per_exp_time_mux) * vol_mux
 
 
-def check_line_detections(cfg):
-    """
-    basic examination of results of line detecetions (rdet_rf1)
-
-    summary --- if there are too many line detections (with adjustments for exposure time, SNR, etc)
-                then either warn and continue or fail and abort
-
-    not worried about too few detections at this time
-
-    :param cfg:
-    :return:
-    """
-
-    #todo: switch to per IFU
-    #      use biweight instead of sum ... so we need to track the dets by IFU to do this
-
-
-
-    rc = 0
-    min_snr = 4.8
-    max_snr = 10.0
-    step_snr = 0.1
-    warn_thresh = 3.0
-    fail_thresh = 10.0
-    try:
-        #recall, .mc has the 1 line per detction (.spec has the spectra, .list has all the involved fibers)
-        #        colnames = ['wave', 'wave_err','flux','flux_err','linewidth','linewidth_err',
-        #             'continuum','continuum_err','sn','sn_err','chi2','chi2_err','ra','dec',
-        #             'datevshot','noise_ratio','linewidth_fix','chi2_fix', 'chi2fib',
-        #             'src_index','multiname', 'exp','xifu','yifu','xraw','yraw','weight',
-        #             'apcor','sn_cen', 'flux_noise_1sigma', 'sn_3fib', 'sn_3fib_cen','dummy']
-
-        fns = glob.glob(os.path.join(cfg.cwd, "alldet/detect_out/*.mc"))
-
-        #one per IFU
-        num_ifus = len(fns)
-        all_lw = []
-        all_cont = []
-        all_snr = []
-        all_chi2 = []
-        all_chi2_fib = []
-
-        for fn in fns:
-            xlw, xcont, xsnr, xchi2, xchi2fib = np.loadtxt(fn, usecols=[4, 6, 8, 10, 18], unpack=True)
-            all_lw += list(xlw)
-            all_cont += list(xcont)
-            all_snr += list(xsnr)
-            all_chi2 += list(xchi2)
-            all_chi2_fib += list(xchi2fib)
-
-        all_lw = np.array(all_lw)
-        all_cont = np.array(all_cont)
-        all_snr = np.array(all_snr)
-        all_chi2 = np.array(all_chi2)
-        all_chi2_fib = np.array(all_chi2_fib)
-
-        # default: based on snr >=4.8
-        #all_snr = np.array(sorted(all_snr[all_snr >= min_snr]))
-
-        #basic, standard selection, but not exhaustive
-        sel = np.array(all_cont > -3) * np.array(all_snr >= 4.8) * np.array(all_chi2 < 1.5) * \
-              np.array(all_lw >= 1.5) * np.array(all_lw <= 16) * np.array(all_chi2_fib <= 4.5)
-        all_snr = np.array(sorted(all_snr[sel]))
-
-        if len(all_snr) > 0:
-            data_min_snr = round(np.nanmin(all_snr),1)
-            data_max_snr = round(np.nanmax(all_snr),1)
-
-            min_snr = max(min_snr,data_min_snr)
-            max_snr = min(max_snr, data_max_snr)
-            xbins = np.arange(min_snr,max_snr+step_snr,step_snr)
-
-            binned_snr = np.histogram(all_snr,bins=xbins)
-            data_snr = np.sum(binned_snr[0])
-
-            #model_snr = int(np.sum(approx_snr(xbins)) * np.sqrt(cfg.total_exp_time / 1080.) * num_ifus / 78)
-
-            model_snr = int(np.sum(approx_count_at_snr(xbins,cfg.total_exp_time,cfg.numexp))) * num_ifus
-
-            print(f"[{cfg.datevshot}] Line dets for SNR [{min_snr:0.1f},{max_snr:0.1f}]. Data / Model {data_snr} / {model_snr} ")
-
-            cfg.ratio_line_dets = data_snr / model_snr
-
-            if cfg.ratio_line_dets > fail_thresh:
-                if not FORCE_CONTINUE:
-                    print(f"[{cfg.datevshot}] Fail! {cfg.ratio_line_dets:0.1f}x number of expected detections "
-                          f"SNR [{min_snr:0.1f},{max_snr:0.1f}]. Will terminate.")
-                    rc = -1
-                else:
-                    print(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x number of expected detections "
-                          f"SNR [{min_snr:0.1f},{max_snr:0.1f}]. "
-                          f"Force flag set, so will continue")
-                    rc = 1
-            elif cfg.ratio_line_dets > warn_thresh:
-                print(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x number of expected detections "
-                      f"SNR [{min_snr:0.1f},{max_snr:0.1f}]")
-                rc = 1
-            else: # probably fine here
-                print(f"[{cfg.datevshot}] (DEBUG) {cfg.ratio_line_dets:0.1f}x number of expected detections "
-                      f"SNR [{min_snr:0.1f},{max_snr:0.1f}]")
-                rc = 0
-
-            print(f"[{cfg.datevshot}] !!! DEBUG !!! for now, force the rc to be zero")
-            rc  =0
-
-    except:
-        print(traceback.format_exc())
-        rc = 0 #cannot make a call here
-
-    return rc
+#
+# defunct? replaced with  check_line_detections_by_ifu
+#
+# def check_line_detections(cfg):
+#     """
+#     basic examination of results of line detecetions (rdet_rf1)
+#
+#     summary --- if there are too many line detections (with adjustments for exposure time, SNR, etc)
+#                 then either warn and continue or fail and abort
+#
+#     not worried about too few detections at this time
+#
+#     :param cfg:
+#     :return:
+#     """
+#
+#     #todo: switch to per IFU
+#     #      use biweight instead of sum ... so we need to track the dets by IFU to do this
+#
+#
+#
+#     rc = 0
+#     min_snr = 4.8
+#     max_snr = 10.0
+#     step_snr = 0.1
+#     warn_thresh = 3.0
+#     fail_thresh = 10.0
+#     try:
+#         #recall, .mc has the 1 line per detction (.spec has the spectra, .list has all the involved fibers)
+#         #        colnames = ['wave', 'wave_err','flux','flux_err','linewidth','linewidth_err',
+#         #             'continuum','continuum_err','sn','sn_err','chi2','chi2_err','ra','dec',
+#         #             'datevshot','noise_ratio','linewidth_fix','chi2_fix', 'chi2fib',
+#         #             'src_index','multiname', 'exp','xifu','yifu','xraw','yraw','weight',
+#         #             'apcor','sn_cen', 'flux_noise_1sigma', 'sn_3fib', 'sn_3fib_cen','dummy']
+#
+#         fns = glob.glob(os.path.join(cfg.cwd, "alldet/detect_out/*.mc"))
+#
+#         #one per IFU
+#         num_ifus = len(fns)
+#         all_lw = []
+#         all_cont = []
+#         all_snr = []
+#         all_chi2 = []
+#         all_chi2_fib = []
+#
+#         for fn in fns:
+#             xlw, xcont, xsnr, xchi2, xchi2fib = np.loadtxt(fn, usecols=[4, 6, 8, 10, 18], unpack=True)
+#             all_lw += list(xlw)
+#             all_cont += list(xcont)
+#             all_snr += list(xsnr)
+#             all_chi2 += list(xchi2)
+#             all_chi2_fib += list(xchi2fib)
+#
+#         all_lw = np.array(all_lw)
+#         all_cont = np.array(all_cont)
+#         all_snr = np.array(all_snr)
+#         all_chi2 = np.array(all_chi2)
+#         all_chi2_fib = np.array(all_chi2_fib)
+#
+#         # default: based on snr >=4.8
+#         #all_snr = np.array(sorted(all_snr[all_snr >= min_snr]))
+#
+#         #basic, standard selection, but not exhaustive
+#         #!!! make sure any changed match with check_line_detections_by_ifu() !!!
+#         sel = np.array(all_cont > -3.) * np.array(all_snr >= 4.8) * np.array(all_snr <= 10.0) * np.array(all_chi2 < 1.5) * \
+#               np.array(all_lw >= 1.5) * np.array(all_lw <= 16.) * np.array(all_chi2_fib <= 4.5)
+#         all_snr = np.array(sorted(all_snr[sel]))
+#
+#         if len(all_snr) > 0:
+#             data_min_snr = round(np.nanmin(all_snr),1)
+#             data_max_snr = round(np.nanmax(all_snr),1)
+#
+#             min_snr = max(min_snr,data_min_snr)
+#             max_snr = min(max_snr, data_max_snr)
+#             xbins = np.arange(min_snr,max_snr+step_snr,step_snr)
+#
+#             binned_snr = np.histogram(all_snr,bins=xbins)
+#             data_snr = np.sum(binned_snr[0])
+#
+#             #model_snr = int(np.sum(approx_snr(xbins)) * np.sqrt(cfg.total_exp_time / 1080.) * num_ifus / 78)
+#
+#             model_snr = int(np.sum(approx_count_at_snr(xbins,cfg.total_exp_time,cfg.numexp))) * num_ifus
+#             print(f"[{cfg.datevshot}] Line dets for SNR inputs: IFUs = {num_ifus}, exp time = {cfg.total_exp_time},"
+#                   f"num exp = {cfg.numexp}, SNR range = [{xbins[0]},{xbins[-1]}], result = {model_snr}")
+#             print(f"[{cfg.datevshot}] Line dets for SNR [{min_snr:0.1f},{max_snr:0.1f}]. Data / Model {data_snr} / {model_snr} ")
+#
+#             cfg.ratio_line_dets = data_snr / model_snr
+#
+#             if cfg.ratio_line_dets > fail_thresh:
+#                 if not FORCE_CONTINUE:
+#                     print(f"[{cfg.datevshot}] Fail! {cfg.ratio_line_dets:0.1f}x number of expected detections "
+#                           f"SNR [{min_snr:0.1f},{max_snr:0.1f}]. Will terminate.")
+#                     rc = -1
+#                 else:
+#                     print(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x number of expected detections "
+#                           f"SNR [{min_snr:0.1f},{max_snr:0.1f}]. "
+#                           f"Force flag set, so will continue")
+#                     rc = 1
+#             elif cfg.ratio_line_dets > warn_thresh:
+#                 print(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x number of expected detections "
+#                       f"SNR [{min_snr:0.1f},{max_snr:0.1f}]")
+#                 rc = 1
+#             else: # probably fine here
+#                 print(f"[{cfg.datevshot}] (DEBUG) {cfg.ratio_line_dets:0.1f}x number of expected detections "
+#                       f"SNR [{min_snr:0.1f},{max_snr:0.1f}]")
+#                 rc = 0
+#
+#             print(f"[{cfg.datevshot}] !!! DEBUG !!! for now, force the rc to be zero")
+#             rc  =0
+#
+#     except:
+#         print(traceback.format_exc())
+#         rc = 0 #cannot make a call here
+#
+#     return rc
 
 
 def check_line_detections_by_ifu(cfg):
@@ -5401,15 +5444,18 @@ def check_line_detections_by_ifu(cfg):
             ifu_name = os.path.basename(fn).split(".")[0].split("_")[1:] #ie. 20240801v002_323_043_040.mc
             ifu_name = '_'.join(ifu_name)
             cfg.ifu_list.append(ifu_name)
-            cfg.ifU_linedet_ct.append(-1)
+            cfg.ifu_linedet_ct.append(-1)
+            cfg.ifu_linedet_ratio.append(-1)
 
             #this is a basic sanity sub-selection ... it may be different than what is applied
             #for the input to ELiXer, but, this is a way to semi-calibrate these data
             #to what is rouhgly, normally expected to see if we are way off
             # (i.e. we would normally expecte something like 5-20 line detects per IFU to survive this
             #       down-selection for a 3-Dither, 1100s observation)
-            sel = np.array(xcont > -3) * np.array(xsnr >= 4.8) * np.array(xchi2 < 1.5) * \
-                  np.array(xlw >= 1.5) * np.array(xlw <= 16) * np.array(xchi2fib <= 4.5)
+
+            ## !!!! make sure any changed MATCH those in check_line_detections() !!!
+            sel = np.array(xcont > -3.) * np.array(xsnr >= 4.8) * np.array(xsnr <= 10.0) * np.array(xchi2 < 1.5) * \
+                  np.array(xlw >= 1.5) * np.array(xlw <= 16.) * np.array(xchi2fib <= 4.5)
 
             xsnr = sorted(xsnr[sel])
 
@@ -5425,18 +5471,28 @@ def check_line_detections_by_ifu(cfg):
                 #plus this handles summing just over the desired SNR range
                 binned_snr = np.histogram(xsnr,bins=xbins)
                 data_ct.append(np.sum(binned_snr[0]))
-                cfg.ifU_linedet_ct[-1] = data_ct[-1]
+                cfg.ifu_linedet_ct[-1] = data_ct[-1]
 
-            else:
+                # build a model, based on the SNR range in the IFU (each can be different)
+                # model_snr = int(np.sum(approx_snr(xbins)) * np.sqrt(cfg.total_exp_time / 1080.))
+                model_snr = max(1,int(np.sum(approx_count_at_snr(xbins, cfg.total_exp_time, cfg.numexp))))
+                cfg.ifu_linedet_ratio[-1] = data_ct[-1] / max(1,model_snr)
+
+            else: #NO appropriate data in IFU
                 #zero_ifu.append(os.path.basename(fn))
+                print(f"[{cfg.datevshot}] ***DEBUG*** No detections in range for IFU: {os.path.basename(fn)}")
                 data_ct.append(len(xsnr)) #either 0 or 1 here
-                cfg.ifU_linedet_ct[-1] = data_ct[-1]
-                xbins = np.arange(min_snr, max_snr + step_snr, step_snr)
+                cfg.ifu_linedet_ct[-1] = data_ct[-1]
+                #xbins = np.arange(min_snr, max_snr + step_snr, step_snr)
+                model_snr = 1 #just so we won't get a divide by zero, but the real count will be 0 or 1 anyway
+                cfg.ifu_linedet_ratio[-1] = 0
 
-            #build a model, based on the SNR range in the IFU
-            #model_snr = int(np.sum(approx_snr(xbins)) * np.sqrt(cfg.total_exp_time / 1080.))
-            model_snr = int(np.sum(approx_count_at_snr(xbins, cfg.total_exp_time, cfg.numexp))) * num_ifus
             model_ct.append(model_snr)
+
+        #since the SNR range varies from IFU to IFU, cannot report a single range
+        #NOR is it correct to just run one estimate and multiply by the number of IFUs
+        print(f"[{cfg.datevshot}] Line dets for SNR inputs: IFUs = {num_ifus}, exp time = {cfg.total_exp_time:0.1f},"
+              f"num exp = {cfg.numexp}, total count = {np.sum(model_ct)}")
 
         #now compare data vs model
         data_ct = np.array(data_ct)
@@ -5453,7 +5509,16 @@ def check_line_detections_by_ifu(cfg):
         warn_ct = np.count_nonzero(data_over_model >= warn_thresh) - fail_ct
         pass_ct = np.count_nonzero(data_over_model < warn_thresh)
 
-        print(f"[{cfg.datevshot}] Excessive Line det counts by IFU: {fail_ct} Fail, {warn_ct} Warn, {pass_ct} Pass")
+        print(f"[{cfg.datevshot}] Line det counts: totals data = {np.sum(data_ct)} vs model = {np.sum(model_ct)}; "
+              f" by IFU: {fail_ct} Fail, {warn_ct} Warn, {pass_ct} Pass")
+
+
+        if fail_ct > 0 or warn_ct > 0:
+            idx_ifu = np.where(data_over_model >= warn_thresh)[0]
+            for i in idx_ifu:
+                stat_str = "fail" if cfg.ifu_linedet_ratio[i] >= fail_thresh else "warn"
+                print(f"[{cfg.datevshot}] Line Dets {stat_str}: IFU {cfg.ifu_list[i]} has {cfg.ifu_linedet_ct[i]} dets at "
+                      f"{cfg.ifu_linedet_ratio[i]}x the maximum expected.")
 
         #todo: could we flag an IFU as bad for this reason? That its line dets are way too high?
         # note: amp_stats() have already been built ... could append to it?
@@ -5462,21 +5527,21 @@ def check_line_detections_by_ifu(cfg):
         if (fail_ct / num_ifus >= 0.5) or \
                 ( (fail_ct / num_ifus >= 0.2) and (2 * fail_ct + warn_ct) / num_ifus >= 1.0):
             if not FORCE_CONTINUE:
-                print(f"[{cfg.datevshot}] Fail! {cfg.ratio_line_dets:0.1f}x nominal maximum total number of expected detections "
-                      f"SNR [{min_snr:0.1f},{max_snr:0.1f}]. Will terminate.")
+                print(f"[{cfg.datevshot}] Fail! {cfg.ratio_line_dets:0.1f}x nominal maximum total number of"
+                      f" expected detections SNR [{min_snr:0.1f},{max_snr:0.1f}]. Will terminate.")
                 rc = -1
             else:
-                print(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x nominal maximum total number of expected detections "
-                      f"SNR [{min_snr:0.1f},{max_snr:0.1f}]. "
+                print(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x nominal maximum total number of"
+                      f" expected detections SNR [{min_snr:0.1f},{max_snr:0.1f}]. "
                       f"--force flag set, so will continue")
                 rc = 1
         elif warn_ct / num_ifus >= 0.5: #if half or more are warns
-            print(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x nominal maximum total number of expected detections "
-                  f"SNR [{min_snr:0.1f},{max_snr:0.1f}]")
+            print(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x nominal maximum total number of"
+                  f" expected detections SNR [{min_snr:0.1f},{max_snr:0.1f}]")
             rc = 1
         else:
-            print(f"[{cfg.datevshot}] (DEBUG) {cfg.ratio_line_dets:0.1f}x nominal maximum total number of expected detections "
-                  f"SNR [{min_snr:0.1f},{max_snr:0.1f}]")
+            print(f"[{cfg.datevshot}] (DEBUG) {cfg.ratio_line_dets:0.1f}x nominal maximum total number of"
+                  f" expected detections")
             rc = 0
 
     except:
@@ -7863,7 +7928,7 @@ if not cfg.multifits_only and (cfg.total_exp_time is None or cfg.total_exp_time 
 # print(f"!!! DEBUG !!!")
 # check_line_detections_by_ifu(cfg)
 #
-# Quit(cfg, 0, f"DEBUG exit. {cfg.datevshot}",do_write_status=False)
+# Quit(cfg, 0, f"DEBUG exit. {cfg.datevshot}",do_write_status=False,do_write_summary=False)
 
 #########
 # after the initial setup, move stdout and stderr to a log file
@@ -7893,6 +7958,7 @@ print(f"[{cfg.datevshot}] Logging redirected to: {cfg.cwd}/{cfg.file_stdout.name
 
 # get the progress state. Useful if resuming (implied)
 dtprog = progress_init(cfg)
+
 
 
 #update for long exposures
