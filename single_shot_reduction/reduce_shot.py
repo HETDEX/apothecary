@@ -5247,6 +5247,9 @@ def approx_snr(snr_array):
         :return: counts expected per IFU (under normal 3-dither, 360second exposures)
         """
 
+        #the np.exp(-0.9 * SNR) shape is pretty good (at SNR << 4.5, the upturn should get sharper though)
+        #the scale in front could be 150 to 450, depending on number of factors (See above note)
+        #so, run with 300. , in the middle, for now
         return 300. * np.exp(-0.9 * snr_array) #per IFUs though, down to snr 4.8 with limited validation
 
 
@@ -5389,6 +5392,57 @@ def approx_count_at_snr(snr_array, total_exp_time, num_dithers):
 #
 #     return rc
 
+
+def adjust_minimum_snr(single_exposure_time, avg_sky, baseline_snr=4.8, baseline_sky=500.):
+    """
+
+    based on the (approximate) depth as scaled by sqrt(single exposure time / 360.0s baseline)
+    and under the assumption that this holds and shot (sky) noise does not rise faster ...
+       we do, however, attempt to correct for extra sky noise with a term that divides by the
+       sqrt of the ratio of the shot average sky / baseline sky
+
+    the idea is that for a normal HETDEX exposure of about 360s (1080 sec total for 3 dithers),
+      SNR ~ 4.8 is about the lowest we care to go
+
+    for longer exposures, assuming the sqrt(time) holds, those that would have been 4.8 (real) detections
+      get larger SNR. For 2250 single expsoure (6.25x longer), that is like 4.8 * sqrt(2250/360s) ~ 12.0 SNR
+      (note there are exposures up into the 4000-5000s range)
+      BUT this has, say, avg_sky around 1750, so 12.0 SNR * 1/sqrt(1750/400)) ~ 5.7 SNR
+
+    and stuff we would consider junk/noise can rise to the minimum very easily
+
+    --- OR --- INVERT this and get a minimum SNR that knocks out junk??
+
+    HMMM Maybe we need to INCREASE rather than decress when sky is bad? the idea being that bad sky
+     makes it easier to get a higher SNR that is just noise? so we'd raise the SNR floor to cut those out?
+
+     so longer exposures means deeper and maybe we keep SNR the same, BUT bad sky increases noise more
+       so we raise the floor?
+
+
+    DOES not consider seeing, tput or apcor
+
+    :param single_exposure_time: the exposure time for a SINGLE exposure (dither)
+    :param avg_sky: the average sky for the shot
+    :param baseline_snr: the SNR (e.g. the normal floor)
+    :param baseline_sky: a baseline reference sky value (most HETDEX are in the low 100s)
+    :return:
+    """
+
+    #these two conteract each other ...
+    # with time_adjust allowing for what would be a lower SNR for a shorter exposure (signal increase) and
+    # sky_adjust pushing that SNR higher when the sky is worse (noise increase)
+    # i.e. for a long exposure, if the sky remained low, you could start with lower SNR which would be the equivalent
+    #   of 4.8 on a standard exposure, but for large enough sky, regardless of exposure length, the sky noise is
+    #   high enough to generate too many low SNR (false) detections
+    sky_adjust = np.sqrt(avg_sky/baseline_sky)
+    time_adjust = np.sqrt(single_exposure_time / 360.0)
+    net_adjust = sky_adjust / time_adjust
+
+    return max(baseline_snr, np.round(baseline_snr * net_adjust,1))
+    #return np.round(baseline_snr * net_adjust, 1)
+
+#def raise_snr_floor(single_exposure_time, avg_sky, baseline_snr=4.8, baseline_sky=1000.):
 
 def check_line_detections_by_ifu(cfg):
     """
@@ -7718,7 +7772,7 @@ def prep_elixer(cfg):
                             with open("elixer.slurm",'r') as slurm_file:
                                 for line in slurm_file:
                                     if "#SBATCH -t" in line and "Run time" in line:
-                                        if "days" in line: #this is a problem
+                                        if "day" in line: #this is a problem (could be day or days)
                                             #example: #SBATCH -t 2 days, 1:54:00            # Run time (hh:mm:ss)
 
                                             print(f"[{cfg.datevshot}] WARNING!!! Excessive ELiXer run time {line.rstrip()}")
