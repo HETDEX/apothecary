@@ -434,6 +434,7 @@ class Detections(tables.IsDescription):
 
     p_cnn = tables.Float32Col(dflt=-1.0)  #added in 0.10.2
     p_cnn_model = tables.StringCol(itemsize=32,dflt="")
+    p_conf = tables.Float32Col(dflt=-1.0) #added in 0.10.4
 
 
 class SpectraLines(tables.IsDescription):
@@ -650,7 +651,7 @@ class VIRUSShot(tables.IsDescription): #Shot table
     expnum = tables.Int32Col((3))
     exptime = tables.Float32Col((3))
     darktime = tables.Float32Col((3))
-    mjd = tables.Float32Col((3))
+    mjd = tables.Float32Col((3))   #this really should be float64 ... otherwise is limite to 160s resolution
     fwhm_virus = tables.Float32Col(pos=10)
     fwhm_virus_err = tables.Float32Col(pos=11)
     response_4540 = tables.Float32Col(pos=12)  # normalized for 360s
@@ -2095,6 +2096,8 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                                 new_row[col] = ""
                             elif col == "healpix":
                                 new_row[col] = -999
+                            elif col == "p_conf":
+                                new_row[col] = -1.0
                         except:
                             pass
 
