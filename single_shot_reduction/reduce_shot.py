@@ -33,8 +33,10 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # 1.0.11 extra status.warn conditions, IFU analysis adjustments based on exptime
 # 1.0.12 add options for --linedet_parms and --force
 # 1.0.13 updates to reload warn and fail conditions after a late --resume
+# 1.0.14 restrict minimum SNR of *.mc raw line detections that make it into HETDEX_API based on avg_sky
+# 1.0.15 fix issue where progress.dat could be overwritten as reset back to start; all progress lost
 
-__version__ = '1.0.13'
+__version__ = '1.0.15'
 
 import numpy as np
 import sys
@@ -105,7 +107,7 @@ FilterDetsOnBadAmps = True # if True, do NOT pass detections that are on reporte
 DefaultClean = 1 #clean 0 does nothing, 1 cleans script files and temporary stuff, 2,3,4,5 are increasingly agressive
 FutureShotDateLimit = 20490101000  # do not allow shots after this dave+shot
 LastKnownFplane = "fp20240731"
-ElixerSnrThresh = 4.5 #do not run elixer on line sources where the S/N < 4.5
+HETDEX_API_SNR_Thresh = 4.5 #do not include line sources where the S/N < this value
 GuiderFWHM_ALL = True #if True and using the GUIDER FWHM, use all within the observation timeframe
                       #if False, just use the two nearest in time to the end of the observation
 
@@ -157,7 +159,7 @@ FAIL_AVG_SKY = 9999.0 #avg sky "background" from *amp.out (d*amp.dat) above this
 DIAG_AMP_IMG_VMIN_VMAX = (-30, 30)  # fixed ranges for the IFU+amp diag images (shot_analysis() and make_amp_images())
 DIAG_AMP_IMG_DPI = 100
 
-DEFAULT_MIN_SNR_FOR_ELIXER = 4.3 #can be changed by --linedet_filter switch
+DEFAULT_MIN_SNR_FOR_ELIXER = 4.3 #can be changed by --linedet_filter switch (and might not agree with HETDEX_API_SNR_Thresh)
 #pretty generous here, maybe should also adjust the warnings based on exptime and observing conditions?
 WARN_NUM_LINE_DETS = 5000
 WARN_NUM_CONT_DETS = 500
@@ -273,6 +275,7 @@ s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_sour
 
 @dataclass
 class Config:
+    args = None
 
     hetdex: bool = False #if True, can re-run hetdex shots, otherwise they are not allowed
     het_raw_path: str = "" #path to local het_raw instead of under cwd()
@@ -328,7 +331,7 @@ class Config:
     dither_norms = []
     dither_positions = []
     linedet_filter = 0 #default, normal filtering
-    linedet_parms = (1, 0.0) #old HETDEX style = (3, 0.5) #must be (<int>,<float>)
+    linedet_parms = [1, 0.0] #old HETDEX style = (3, 0.5) #must be (<int>,<float>)
 
     made_amp_images = False #used to indicate the diagnostic IFU+amp images were already made in this run instance
     #active_ifus = None #number of active IFUs (note not normally set until late into step04e?)
@@ -343,11 +346,13 @@ class Config:
     num_line_dets = -1 #unset
     num_cont_dets = -1 #unset
     ratio_line_dets = 1.0 #unset, assume normal
+    snr_rescale = 1.0 #recommended multiplier to raise the normal, minimum SNR floor (based on long exposure noise)
 
     # for cleanup at the end
     copy_lock_file = None
     node_clean_done = False
     dtprog = None
+    write_progress = True #allow progress.dat to be written out
 
 ########################################################################
 # Basic user input
@@ -404,10 +409,8 @@ args = list(sys.argv) #python3 map is no longer a list, so need to cast here
 del args[0] #args.pop(0) #remove THIS file
 args = [x.replace("--","-") for x in args]
 
-
-
-
 cfg = Config()
+cfg.args = copy.copy(args) #need to check some args if present, later on
 
 check_version(cfg)
 
@@ -464,6 +467,8 @@ if "-help" in args:
                     1.x+ = OFF + HETDEX_API snr set to this value (i.e. for values 1.1 and up, single decimal precision)
                     
     --linedet_parms : grid (int) and step (float) for line detections as <grid>,<step>
+                      3x dither default is 3,0.5
+                      1x dither default is 1,0.0
     
     --local_het_raw_path : if present, specifies the "local" het_raw path to use for locally copied data. This is a path
                      to which /het_raw/ will be appended.
@@ -1420,9 +1425,10 @@ def progress_update(cfg,progress_dict,key=None,status=True):
         if key is not None:
             progress_dict[key] = status
 
-        fn = os.path.join(cfg.cwd,"progress.dat")
-        with open(fn, 'w') as f:
-            json.dump(progress_dict, f, indent=4)  # indent=4 for pretty-printing
+        if cfg.write_progress:
+            fn = os.path.join(cfg.cwd,"progress.dat")
+            with open(fn, 'w') as f:
+                json.dump(progress_dict, f, indent=4)  # indent=4 for pretty-printing
 
     except:
         print(f"Exception in progress_update(). {traceback.format_exc()}")
@@ -1502,7 +1508,8 @@ def progress_init(cfg,initialize_only=False):
                   "s06d_elixer": False,
                   "s06e_source_cat": False, }
 
-        progress_update(cfg,dtprog) #write out the file, no updates yet
+        if not initialize_only:
+            progress_update(cfg,dtprog) #write out the file, no updates yet
 
         cfg.dtprog = dtprog
     return dtprog
@@ -1806,6 +1813,7 @@ def write_limited_summary(cfg):
                 f.write(f"Bad Amps:\t???\n")
                 f.write(f"Amp Stats:\t???\n")
 
+            f.write("")  # always end with a blank line, so can read easier with cat
     except:
         print(f"[{cfg.datevshot}] Exception! trying to write limited summary file", traceback.format_exc())
 
@@ -1830,6 +1838,7 @@ def Quit(cfg,rc,msg=None,do_write_status=True,do_post_clean=True,do_write_summar
     dtprog = cfg.dtprog
     if dtprog is None:
         dtprog = progress_init(cfg,initialize_only=True)
+        cfg.write_progress = False
 
     #on a resume, make sure we have loaded the warn triggers
     if cfg.resume and (do_write_status or do_write_summary):
@@ -2169,6 +2178,8 @@ def get_guider_fwhm(cfg):
                 if not fail:
                     print(f"[{cfg.datevshot}] Found {saved_fn}. Using guider seeing FWHM = {fwhm}")
                     return fwhm
+        else:
+            print(f"[{cfg.datevshot}] Did not find {saved_fn}.")
 
         exposure_times = [] #exposure times (seconds) from HDU
         exposure_fn_times =[] #date T time string from the fileanames
@@ -2264,6 +2275,7 @@ def get_guider_fwhm(cfg):
 
         base_tarfn = get_gc_path(cfg,"gc1",path)
         if os.path.exists(base_tarfn):
+            print(f"[{cfg.datevshot}] Getting gc1 from {base_tarfn}")
             with tar.open(base_tarfn, "r") as tarfh:
                 gc1_names = tarfh.getnames()
                 #should look like a list of:  20241017T024256.0_gc1_sci.fits
@@ -2285,6 +2297,7 @@ def get_guider_fwhm(cfg):
 
         base_tarfn = get_gc_path(cfg, "gc2", path)
         if os.path.exists(base_tarfn):
+            print(f"[{cfg.datevshot}] Getting gc2 from {base_tarfn}")
             with tar.open(base_tarfn, "r") as tarfh:
                 gc2_names = tarfh.getnames()
                 #should look like a list of:  20241017T024256.0_gc1_sci.fits
@@ -2297,8 +2310,10 @@ def get_guider_fwhm(cfg):
         # get the time from the filename, subtract the exposure time and accept all
         # guider images that have a filename time AFTER and within some small XX beyond the original sciece filetime
 
+
         if GuiderFWHM_ALL: #use all within specified time range
 
+            print(f"[{cfg.datevshot}] Getting approx start/stop times for science frames ...")
             for fntime, exptime in zip(exposure_fn_times, exposure_times):
                 #fntime, from the name is the time the exposure STARTED (not written). It matches to "UT" card and the stop is the "DATE" card in HDU
                 fntime = datetime(int(fntime[0:4]), int(fntime[4:6]), int(fntime[6:8]),
@@ -2320,6 +2335,8 @@ def get_guider_fwhm(cfg):
 
             if gc1_names is not None:
                 gc1_near = [] #list of lists ... ie. if 3 exposures, will be a 3 long list each with 2 elements
+                print(f"[{cfg.datevshot}] Checking corresponding {len(gc1_names)} gc1 files and {len(gc_start_times)} "
+                      f"timestamps ...")
                 for start_time, stop_time in zip(gc_start_times,gc_stop_times):
                     for name in gc1_names:
                         #just want the time part
@@ -2332,6 +2349,8 @@ def get_guider_fwhm(cfg):
 
             if gc2_names is not None:
                 gc2_near = [] #list of lists ... ie. if 3 exposures, will be a 3 long list each with 2 elements
+                print(f"[{cfg.datevshot}] Checking corresponding {len(gc2_names)} gc2 files and {len(gc_start_times)} "
+                      f"timestamps ...")
                 for start_time, stop_time in zip(gc_start_times,gc_stop_times):
                     for name in gc2_names:
                         #just want the time part
@@ -2379,9 +2398,15 @@ def get_guider_fwhm(cfg):
 
             base_tarfn = get_gc_path(cfg, "gc1", path)
 
-            if os.path.exists(base_tarfn):
+            excessive_time_count = 0
+            iq_idx_start =0
+            if os.path.exists(base_tarfn) and gc1_near is not None and len(gc1_near) > 0:
+                print(f"[{cfg.datevshot}] Collecting data from matched {len(gc1_near)} gc1 files ...")
                 for name in gc1_near:
+                #for name in tqdm(gc1_near):
                     try:
+                        start_time = time.perf_counter_ns()
+
                         t1, p1 = Utils.open_file_from_tar(base_tarfn, name)
                         fh = fits.open(t1)
                         if fh[0].header['GUIDLOOP'] == 'ACTIVE':
@@ -2402,6 +2427,20 @@ def get_guider_fwhm(cfg):
 
                         fh.close()
                         t1.close()
+                        elapsed = (time.perf_counter_ns() - start_time) // 1e9
+                        if elapsed > 5.0: #5 seconds is excessive
+                            if excessive_time_count > 2:
+                                print(f"[{cfg.datevshot}] Excessive time collecting gc1 data. Aborting collection.")
+                                iq = iq[0:iq_idx_start + 1]
+                                iq_time = iq_time[0:iq_idx_start + 1]
+                                iq_dither = iq_dither[0:iq_idx_start + 1]
+                                break
+                            else:
+                                excessive_time_count += 1
+                        else:
+                            excessive_time_count = 0
+
+
                     except:
                         pass #don't let one bad read bomb out
 
@@ -2411,8 +2450,12 @@ def get_guider_fwhm(cfg):
             #     base_tarfn = os.path.join(cfg.virus_tar_path.rstrip(".tar"), "gc2.tar")
 
             base_tarfn = get_gc_path(cfg, "gc2", path)
-            if os.path.exists(base_tarfn):
+            excessive_time_count = 0
+            iq_idx_start = len(iq)
+            if os.path.exists(base_tarfn) and gc2_near is not None and len(gc2_near) > 0:
+                print(f"[{cfg.datevshot}] Collecting data from matched {len(gc2_near)} gc2 files ...")
                 for name in gc2_near:
+                #for name in tqdm(gc2_near):
                     try:
                         t1, p1 = Utils.open_file_from_tar(base_tarfn, name)
                         fh = fits.open(t1)
@@ -2434,6 +2477,18 @@ def get_guider_fwhm(cfg):
 
                         fh.close()
                         t1.close()
+                        elapsed = (time.perf_counter_ns() - start_time) // 1e9
+                        if elapsed > 5.0: #5 seconds is excessive
+                            if excessive_time_count > 2:
+                                print(f"[{cfg.datevshot}] Excessive time collecting gc2 data. Aborting collection.")
+                                iq = iq[0:iq_idx_start + 1]
+                                iq_time = iq_time[0:iq_idx_start + 1]
+                                iq_dither = iq_dither[0:iq_idx_start + 1]
+                                break
+                            else:
+                                excessive_time_count += 1
+                        else:
+                            excessive_time_count = 0
                     except:
                         pass #don't let one bad read bomb out
 
@@ -3970,7 +4025,7 @@ def get_local_ra_dec(cfg):
         #print(f"[{cfg.datevshot}] Building local gettar file for run1s and run2s ... ")
 
         if cfg.local_het_raw_path is None:
-            return
+            return None, None, None
 
         tarfile_path = os.path.join(cfg.local_het_raw_path,
                                     f"{cfg.datevshot[:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar")
@@ -3978,7 +4033,25 @@ def get_local_ra_dec(cfg):
         tf = tar.open(tarfile_path)
         tarpaths = np.array(tf.getnames())
 
-        u_exp, u_exp_idx = np.unique([x.split("/")[1] for x in tarpaths],return_index=True)
+        sel_fits = np.array([x[-5:] == ".fits" for x in tarpaths])
+        tarpaths = tarpaths[sel_fits]
+
+        try:
+            u_exp, u_exp_idx = np.unique([x.split("/")[1] for x in tarpaths],return_index=True)
+        except: #maybe a bad path? re-run in loop
+            l_exp = []
+            for x in tarpaths:
+                try:
+                    l_exp = x.split("/")[1]
+                except:
+                    print(f"[{cfg.datevshot}] Notice! get_local_ra_dec() unexpected tarpath: {x}")
+
+            u_exp, u_exp_idx = np.unique(l_exp, return_index=True)
+
+        if len(u_exp) == 0: #none found
+            print(f"[{cfg.datevshot}] Warning! get_local_ra_dec() could not determine exposures.")
+            return None, None, None
+
 
         all_ra = []
         all_dec = []
@@ -5393,7 +5466,8 @@ def approx_count_at_snr(snr_array, total_exp_time, num_dithers):
 #     return rc
 
 
-def adjust_minimum_snr(single_exposure_time, avg_sky, baseline_snr=4.8, baseline_sky=500.):
+def adjust_minimum_snr(single_exposure_time, avg_sky, seeing = None,
+                       baseline_snr=4.8, baseline_sky=500., baseline_seeing= 1.8):
     """
 
     based on the (approximate) depth as scaled by sqrt(single exposure time / 360.0s baseline)
@@ -5435,14 +5509,92 @@ def adjust_minimum_snr(single_exposure_time, avg_sky, baseline_snr=4.8, baseline
     # i.e. for a long exposure, if the sky remained low, you could start with lower SNR which would be the equivalent
     #   of 4.8 on a standard exposure, but for large enough sky, regardless of exposure length, the sky noise is
     #   high enough to generate too many low SNR (false) detections
+
+
+    # todo --OR-- assume signal naturally increases and we don't need to adjust by time
+    #             AND we only correct UP (make the lower cutoff a larger SNR) based on the avg_sky
+    #                       with a higher baseline_sky (maybe around 1000)
+    #    note: HETDEX length exposures have avg_sky 120 - 330 range
+    # if we dump time_adjust and just use sky, then a baseline around 1000 is about right?
+
     sky_adjust = np.sqrt(avg_sky/baseline_sky)
-    time_adjust = np.sqrt(single_exposure_time / 360.0)
+    time_adjust = np.sqrt(single_exposure_time / 360.0) #for long expsousres adjust target down
+    if seeing is not None: #for good seeing this is < 1 and adjusts the target SNR down
+        seeing_adjust = seeing / baseline_seeing
+    else:
+        seeing_adjust = 1.0
     net_adjust = sky_adjust / time_adjust
 
-    return max(baseline_snr, np.round(baseline_snr * net_adjust,1))
+    return max(baseline_snr, np.round(baseline_snr * net_adjust * seeing_adjust,1))
     #return np.round(baseline_snr * net_adjust, 1)
 
+def snr_rescale(avg_sky,baseline_sky=1000.):
+    """
+    simple scaling based on the avg_sky
+
+    this would be used to re-scale the *.mc file reported SNR
+    for really bad sky, the idea is that the SNR get much smaller
+    (e.g. for sky around 7500.0 and a baseline of 1000.0, reported SNR 13 becomed about 4.8)
+    empirically, so far, this seems about right (with say 50%?) that is it might be for sky 7500.0 we
+      want something between SNR 13 and 17 to go to 4.8
+
+    so you'd take this and multiply it through the *.mc files ... need to feed that to HETDEX_API (otherwise
+      it takes way to long to build up the line.h5 file)
+        #>>> since we can pass in an SNR cut, might flip this around and pass in the SNR that WOULD be 4.8
+        #>>> and then rescale the resulting values? ... NOTE: if ELiXer runs these, it would get the higher
+        #>>> SNR, I think ... could instead raise the flux_err  arrays?
+
+    the seeing and the tput and the exposure length take care of themselves, boosting the signal to noise
+
+    this is a correction to attempt to handle un-accounted for really bad sky "noise" (not a sky residual, per se)
+
+    :param avg_sky:
+    :param baseline_sky:
+    :return:
+    """
+
+    #as showm, this returns a value >= 1.0
+    #with the intended use being to divide the *.mc SNR columns to lower their value and keep a fixed
+    #  snr minimum or multiply into the snr minimum to raise the lower cut off
+    return max(1.0, np.sqrt(avg_sky / baseline_sky))
+
 #def raise_snr_floor(single_exposure_time, avg_sky, baseline_snr=4.8, baseline_sky=1000.):
+
+def get_raw_line_detections_from_mc(cfg):
+    """
+
+    notice! a version of this is also in check_line_detctions_by_ifu() since it
+            also iterates over the mc files
+
+    :param cfg:
+    :return: total # of line detects, line detects by bin, left edges of the bins
+    """
+
+    step = 0.1
+    counts = []
+    edges = []
+    total = -1
+    try:
+        mc_path = os.path.join(cfg.cwd_orig,f"sci{cfg.datevshot}/alldet/detect_out")
+        if os.path.exists(mc_path):
+            fns = glob.glob(f"{mc_path}/*.mc")
+            all_sn = []
+            for fn in fns:
+                sn = np.loadtxt(fn, usecols=[8])
+                all_sn += list(sn)
+            all_sn = np.array(all_sn)
+
+            min_sn = np.min(all_sn)
+            max_sn = np.max(all_sn)
+            bin_sn = np.arange(np.floor(min_sn * 10.)/10.,np.ceil(max_sn * 10.)/10.+step,step)
+            counts, edges = np.histogram(all_sn,bins=bin_sn)
+
+            if len(edges) > 0:
+                edges = edges[:-1] #cut off the right most edge so counts matches (left) edges
+    except:
+        print(traceback.format_exc())
+
+    return total, counts, edges
 
 def check_line_detections_by_ifu(cfg):
     """
@@ -5458,17 +5610,6 @@ def check_line_detections_by_ifu(cfg):
     :return:
     """
 
-    #todo: switch to per IFU
-    #      use biweight instead of sum ... so we need to track the dets by IFU to do this
-
-    # def approx_snr(x):
-    #     """
-    #     a curve that approximates what we expect from a normal SNR (good down to around 4.5 to 4.8 and out to 10.0)
-    #
-    #     :param x: (snr array, normalluy 4.8 to 10.0 in steps of 0.1)
-    #     :return:
-    #     """
-    #     return 100. * np.exp(-0.9 * x) #assumes a single IFU gives about 15 for 4.8 <= SNR <= 10.0
 
     rc = 0
     min_snr = 4.8
@@ -5492,6 +5633,9 @@ def check_line_detections_by_ifu(cfg):
         data_ct = [] #one per IFU
         model_ct = []
 
+        all_sn = []
+
+
 
         for fn in fns:
             xlw, xcont, xsnr, xchi2, xchi2fib = np.loadtxt(fn, usecols=[4, 6, 8, 10, 18], unpack=True)
@@ -5500,6 +5644,9 @@ def check_line_detections_by_ifu(cfg):
             cfg.ifu_list.append(ifu_name)
             cfg.ifu_linedet_ct.append(-1)
             cfg.ifu_linedet_ratio.append(-1)
+
+            all_sn += list(xsnr)
+
 
             #this is a basic sanity sub-selection ... it may be different than what is applied
             #for the input to ELiXer, but, this is a way to semi-calibrate these data
@@ -5543,9 +5690,37 @@ def check_line_detections_by_ifu(cfg):
 
             model_ct.append(model_snr)
 
+        all_sn = np.array(all_sn)
+
+        min_mc_snr = np.min(all_sn)
+        max_mc_snr = np.max(all_sn)
+        bin_sn = np.arange(np.floor(min_mc_snr * 10.) / 10., np.ceil(max_mc_snr * 10.) / 10. + 0.1, 0.1)
+        counts, edges = np.histogram(all_sn, bins=bin_sn)
+        total_mc_line_dets = len(all_sn)
+
+        #this will be a stupid long string
+        snr_log_str = ", ".join([f"{e:0.1f} ({c})" for e, c in zip(edges, counts)])
+        print(f"[{cfg.datevshot}] Raw *.mc line detects by snr. Total = {total_mc_line_dets} for "
+              f"SNR {min_mc_snr:0.1f} to {max_mc_snr:0.1f}: {snr_log_str}")
+
+        #todo: make a suggested SNR cut based on the avg_sky?? or other parameters ...
+        #      research on that formulation still in progress
+        if cfg.avg_sky is None:
+            cfg.avg_sky = get_avg_sky(cfg)
+        cfg.snr_rescale = snr_rescale(cfg.avg_sky)
+
+        if cfg.snr_rescale > 1.0:
+            print(f"[{cfg.datevshot}] Recommend rescale minimum SNR. "
+                  f"Line count @ 4.8 = {np.count_nonzero(all_sn>=4.8)}. "
+                  f"Line count @ {4.8 * cfg.snr_rescale:0.1f} = {np.count_nonzero(all_sn>=(4.8*cfg.snr_rescale))}")
+
+        if len(edges) > 0:
+            edges = edges[:-1]  # cut off the right most edge so counts matches (left) edges
+
         #since the SNR range varies from IFU to IFU, cannot report a single range
         #NOR is it correct to just run one estimate and multiply by the number of IFUs
-        print(f"[{cfg.datevshot}] Line dets for SNR inputs: IFUs = {num_ifus}, exp time = {cfg.total_exp_time:0.1f},"
+        print(f"[{cfg.datevshot}] Model line dets for SNR inputs (nominal {min_snr:0.1f} to {max_snr:0.1f}): "
+              f"IFUs = {num_ifus}, exp time = {cfg.total_exp_time:0.1f},"
               f"num exp = {cfg.numexp}, total count = {np.sum(model_ct)}")
 
         #now compare data vs model
@@ -5563,9 +5738,8 @@ def check_line_detections_by_ifu(cfg):
         warn_ct = np.count_nonzero(data_over_model >= warn_thresh) - fail_ct
         pass_ct = np.count_nonzero(data_over_model < warn_thresh)
 
-        print(f"[{cfg.datevshot}] Line det counts: totals data = {np.sum(data_ct)} vs model = {np.sum(model_ct)}; "
+        print(f"[{cfg.datevshot}] Downselected line det counts: totals data = {np.sum(data_ct)} vs model = {np.sum(model_ct)}; "
               f" by IFU: {fail_ct} Fail, {warn_ct} Warn, {pass_ct} Pass")
-
 
         if fail_ct > 0 or warn_ct > 0:
             idx_ifu = np.where(data_over_model >= warn_thresh)[0]
@@ -6049,7 +6223,7 @@ def amp_stats(cfg,shot_h5_fqfn=None,update=True):
 
             #???how much of stats_qc needs to be re-done since it is based on 3-dithers and some joint statistics???
             #several of the checks are looking for extreme variation over the dithers, which can't be done with just one dither
-            t = AmpStats.stats_qc(t, extend=True,total_exp_time=cfg.total_exp_time)
+            t = AmpStats.stats_qc(t, extend=True,total_exp_time=cfg.total_exp_time,num_exposures=cfg.numexp)
 
             print(f"[{cfg.datevshot}] {np.count_nonzero(t['flag']!=1)} amps marked explicitly 'bad'")
 
@@ -7056,6 +7230,12 @@ def build_detection_hdf5(cfg):
             cmd += f" --detect_path \"{cfg.cwd}/alldet/detect_out\""
             if cfg.linedet_filter >= 1.1:
                 cmd += f" --sn_min {cfg.linedet_filter:0.1f}"
+            elif cfg.snr_rescale > 1.0:
+                #NOTE: the HETDEX_API minimum value is configured at 4.5 NOT 4.8
+                # which is the defulat for HETDEX_API_SNR_Thresh
+                cmd += f" --sn_min {HETDEX_API_SNR_Thresh * cfg.snr_rescale:0.1f}"
+                print(f"[{cfg.datevshot}] Rescaled minimum SNR for inclusion from "
+                      f"{HETDEX_API_SNR_Thresh:0.1f} to {HETDEX_API_SNR_Thresh * cfg.snr_rescale:0.1f}.")
             #else, using HETDEX_API default if or 1
 
             system_command(cfg, cmd)
@@ -7909,7 +8089,9 @@ if cfg.numexp <= 0: # and not cfg.multifits_only:
 #     NumProcs_mp_rcal = 10
 #     NumProcs_mp_rf1 = 10
 
-if cfg.exp <= 0 and not cfg.multifits_only:
+if cfg.exp <= 0 and cfg.multifits_only:
+    pass #this is fine
+elif cfg.exp <= 0 and not cfg.multifits_only:
     print(f"[{cfg.datevshot}] Working on {cfg.datevshot} with {cfg.numexp} exposure(s) ...")
     if cfg.numexp == 1 or cfg.numexp == 3: #okay
         pass
@@ -7926,7 +8108,7 @@ else:
             try:
                 dex_dvs = np.loadtxt("/corral-repl/utexas/Hobby-Eberly-Telesco/detect/fwhm.all",dtype=str,usecols=0)
                 if cfg.datevshot in dex_dvs:
-                    print(f"WARNING! {cfg.datevshot} is an original HETDEX observation.")
+                    print(f"WARNING! {cfg.datevshot} is a original HETDEX observation.")
                     print(f"         Attempting to use only one exposure may not generate the expected results.")
                 #else: we are not going to print anything ... while this occurred during the original HETDEX run
                 #      this is not a previously reduced HETDEX observation
@@ -8299,6 +8481,9 @@ else:
 
 #precheck
 
+if "-linedet_parms" not in cfg.args:
+    cfg.linedet_parms = (1, 0.0)  # standard non-dithered, applies to all cases unless changed
+
 if cfg.shot_only: #we are done
     Quit(cfg, 0, f"[{cfg.datevshot}] --shot_only specified.  Will end here.")
 elif cfg.numexp == 1:
@@ -8308,16 +8493,21 @@ elif cfg.numexp == 3:
 
     if rc == 1: #all good
         cfg.dither_configuration = 1 #standard hetdex
-        pass
+        if "-linedet_parms" not in cfg.args:
+            cfg.linedet_parms = (3, 0.5)  # HETDEX style = (3, 0.5) #must be (<int>,<float>)
+        #else it was specfied, so use it
     elif rc == 0: #not HETDEX dither (that is okay but we cannot move on to source detection)
-        cfg.dither_configuration = 0 # non-standard, assume multiple exposures, but not dithered
-        post_clean(cfg)
-        Quit(cfg, 0,f"[{cfg.datevshot}] ({cfg.numexp}) exposures not in HETDEX dither configuration and is not "
-             f"compatible with source detection. Will end here.")
+        cfg.dither_configuration = 0  # non-standard, assume multiple exposures, but not dithered
+        if FORCE_CONTINUE:
+            print(f"[{cfg.datevshot}] Non-standard dither configuration, but --force flag set, so will continue.")
+        else:
+            post_clean(cfg)
+            Quit(cfg, 0,f"[{cfg.datevshot}] ({cfg.numexp}) exposures not in HETDEX dither configuration and is not "
+                 f"compatible with source detection. Will end here.")
     else: #fail case
         cfg.dither_configuration = -1
         Quit(cfg, -1,f"[{cfg.datevshot}] Fatal error checking dither configuration. Will terminate here.")
-else:
+else: #not 1 and not 3
     post_clean(cfg)
     Quit(cfg,0,f"[{cfg.datevshot}] Number of exposures ({cfg.numexp}) incompatible with source detection. Will end here.")
 
