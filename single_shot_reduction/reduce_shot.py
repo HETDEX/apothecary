@@ -35,8 +35,9 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # 1.0.13 updates to reload warn and fail conditions after a late --resume
 # 1.0.14 restrict minimum SNR of *.mc raw line detections that make it into HETDEX_API based on avg_sky
 # 1.0.15 fix issue where progress.dat could be overwritten as reset back to start; all progress lost
+# 1.0.16 add --repair switch
 
-__version__ = '1.0.15'
+__version__ = '1.0.16'
 
 import numpy as np
 import sys
@@ -153,7 +154,7 @@ hetdex_api_path = os.path.dirname(importlib.util.find_spec("hetdex_api").origin)
 #h5tools is actually a sibling
 hetdex_api_path = "/".join(hetdex_api_path.split("/")[0:-1])
 
-MAX_SAFE_AVG_SKY = 1000.0 #avg sky "background" from *amp.out (d*amp.dat) above this value is a problem
+MAX_SAFE_AVG_SKY = 500.0 #avg sky "background" from *amp.out (d*amp.dat) above this value is a problem
 FAIL_AVG_SKY = 9999.0 #avg sky "background" from *amp.out (d*amp.dat) above this value is a full fail
 
 DIAG_AMP_IMG_VMIN_VMAX = (-30, 30)  # fixed ranges for the IFU+amp diag images (shot_analysis() and make_amp_images())
@@ -490,6 +491,8 @@ if "-help" in args:
                                          into SLURM queue as previously designated. Updates elixer slurm scripts,
                                          if needed, to adjust to path changes.
     
+    --repair : basically --resume but with a repair/re-copy of files that would have been lost to cleaning
+    
     --resume : (re)starts roughly at the last completed step (see sciXXXX/progress.dat)
            !!! Notice: This does NOT re-run steps that completed with failures, it only re-runs incomplete steps.
            !!! Notice: --resume has priority over --overwrite
@@ -694,6 +697,24 @@ if "-shot_only" in args:
 if "-multifits_only" in args:
     cfg.multifits_only = True
     args.remove("-multifits_only")
+
+
+
+if "-exp" in args:
+    i = args.index("-exp")
+    try:
+        cfg.exp = int(args[i+1])
+    except:
+        print(f"Invalid -exp specified")
+        exit(-1)
+
+    del args[i+1]  # args.pop(0) #remove THIS file
+    args.remove("-exp")
+
+
+if "-repair" in args: #like resume, but with a copy of files
+    cfg.repair = True
+    args.remove("-repair")
 
 if "-resume" in args: #opposide of --overwite ... do NOT touch the (intermediate) output of the working directory
     cfg.resume = True
@@ -3344,9 +3365,13 @@ def initial_setup(cfg):
 
     workdir = os.path.join(WorkDirRoot,f"sci{cfg.datevshot}")
 
+    repair = False
     resume = False #notice: cfg.resume MAY be true and this can still be false if the directory does not already exist
     if os.path.exists(workdir):
-        if cfg.resume:
+        if cfg.repair:
+            print(f"[{cfg.datevshot}] Resume + Repair. Leave directory intact, but re-copy work files: {workdir}")
+            repair = True
+        elif cfg.resume:
             print(f"[{cfg.datevshot}] Resuming. Leave directory intact: {workdir}")
             resume = True
         elif cfg.overwrite:
@@ -3362,7 +3387,8 @@ def initial_setup(cfg):
             return -1
 
     if not resume:
-        os.makedirs(workdir)
+        #os.makedirs(workdir)
+        Path(workdir).mkdir(parents=True, exist_ok=True)
 
         if LocalScriptRepo is not None:
             #need to see if can get the file lock in case another instance is copying
@@ -3391,6 +3417,29 @@ def initial_setup(cfg):
                     cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
 
             #lock auto releases
+        else:
+            print(f"[{cfg.datevshot}] Using main script repo (may be remote) ...")
+            cfg.scriptdir = os.path.join(ScriptRepo,"science_reductions")
+    elif repair:
+        if LocalScriptRepo is not None:
+            fatal_rtn = False
+            lock = FileLock(Lock_mutex_fn) #we are in the top directory (not sciXXXX)
+            with lock:
+                if cfg.update_local_repo:
+                    print(f"[{cfg.datevshot}] Updating local repo ... (this may take 1-2 minutes)")
+                    shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
+                                    os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
+                    cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+
+                if os.path.exists(LocalScriptRepo): #we want to use it
+                    print(f"[{cfg.datevshot}] Using local repo ...")
+                    cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                else:
+                    print(f"[{cfg.datevshot}] Fatal! --repair selected, but no script repo.")
+                    fatal_rtn = True
+            # lock auto releases
+            if fatal_rtn:
+                return -1
         else:
             print(f"[{cfg.datevshot}] Using main script repo (may be remote) ...")
             cfg.scriptdir = os.path.join(ScriptRepo,"science_reductions")
@@ -3510,7 +3559,7 @@ def initial_setup(cfg):
     #     else:
     #         cfg.virus_tar_path = os.path.join(virus_paths[0],virustar)
 
-    if not resume or cfg.update_local_repo:
+    if not resume or cfg.update_local_repo or repair:
 
         # some other process might be updating the local repo ... do not proceed IF there is a lock
         lock = FileLock(Lock_mutex_fn)  # we are in the top directory (not sciXXXX)
@@ -3636,6 +3685,8 @@ def initial_setup(cfg):
         system_command(cfg, f"sed -i s#/scratch/03261/polonius/single_shot/science_reductions#{cfg.cwd}# detect/rsp3fc")
 
 
+        if cfg.repair: #from here on out, resume and repair are the same
+            cfg.resume = True
         return 0
     #end if not resume
 
@@ -4493,10 +4544,24 @@ def run_vdrp(cfg):
 
     os.chdir(os.path.join(cfg.cwd,"vdrp/shifts"))
 
+    rta_fn = f"rta.{cfg.datevshot[0:6]}"
+
     if cfg.build_rta:
         #track is east (0) or west (1)
-        with open(f"rta.{cfg.datevshot[0:6]}", "w") as f:
+        with open(rta_fn, "w") as f:
             f.write(f"run_shifts.sh {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} {cfg.shot_ra / 15.0} {cfg.shot_dec} {cfg.shot_track} \n")
+
+
+    if not os.path.exists(rta_fn):
+        if os.path.exists(os.path.join(karlgettar,rta_fn)):
+            shutil.copy(os.path.join(karlgettar,rta_fn), ".")
+
+    #one last try: either the copy failed or the auto-creation failed
+    if not os.path.exists(rta_fn):
+        with open(rta_fn, "w") as f:
+            f.write(f"run_shifts.sh {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} {cfg.shot_ra / 15.0} {cfg.shot_dec} {cfg.shot_track} \n")
+
+    #if not os.path.exists(rta_fn): #this is fatal now, but it will fail appropriately
 
     fail_gaia = False
     fail_sdss = False
@@ -6223,7 +6288,10 @@ def amp_stats(cfg,shot_h5_fqfn=None,update=True):
 
             #???how much of stats_qc needs to be re-done since it is based on 3-dithers and some joint statistics???
             #several of the checks are looking for extreme variation over the dithers, which can't be done with just one dither
-            t = AmpStats.stats_qc(t, extend=True,total_exp_time=cfg.total_exp_time,num_exposures=cfg.numexp)
+            try:
+                t = AmpStats.stats_qc(t, extend=True,total_exp_time=cfg.total_exp_time,num_exposures=cfg.numexp)
+            except: #some older versions don't have "num_exposures"
+                t = AmpStats.stats_qc(t, extend=True, total_exp_time=cfg.total_exp_time)
 
             print(f"[{cfg.datevshot}] {np.count_nonzero(t['flag']!=1)} amps marked explicitly 'bad'")
 
@@ -7827,6 +7895,27 @@ def prep_elixer(cfg):
         print(f"[{cfg.datevshot}] Preparing detctions lists for ELiXer ...")
         #make subdirs elixer/line, elixer/cont
         elixdir = os.path.join(cfg.cwd,"elixer/")
+
+        #should purge the directory if it exists? or move to another directory? (elixer.backup?)
+        if os.path.exists(elixdir):
+            #see if anything has actually been done with it? is there evidence of a slurm run
+
+            slurmfiles = glob.glob(f"{os.path.join(elixdir,'out')}/ELIXER.o*")
+            elixerfiles = glob.glob(f"{os.path.join(elixdir, 'out')}/*.h5")
+            if len(slurmfiles) != 0 or len(elixerfiles) != 0:
+                fns = glob.glob(f"{os.path.join(cfg.cwd,'elixer')}.*")
+                ct = len(fns) + 1
+                outdir = os.path.join(cfg.cwd, f"elixer.backup_{ct}")
+                while os.path.exists(outdir):
+                    ct += 1
+                    outdir = os.path.join(cfg.cwd,f"elixer.backup_{ct}")
+                #now move
+                print(f"[{cfg.datevshot}] Old elixer directory found. Moving it to: {outdir}")
+                Path(elixdir).rename(Path(outdir))
+            else: #wipe out the directory and start over
+                print(f"[{cfg.datevshot}] Old elixer directory found. Unused. Will remove and rebuild.")
+                shutil.rmtree(elixdir)
+
         Path(elixdir).mkdir(parents=True, exist_ok=True)
 
         if FilterDetsOnBadAmps:
@@ -7881,7 +7970,7 @@ def prep_elixer(cfg):
         tasks_per_node = 0 #use the default 40
 
         if line_ct > 500 or cont_ct > 500:
-            tasks_per_node = 25 #slow it down and conserve memory
+            tasks_per_node = 32 #slow it down and conserve memory
 
         if make_lines or make_conts:
             shot_h5 = os.path.join(cfg.cwd,f"{cfg.datevshot}.h5")
@@ -8224,6 +8313,10 @@ if s01_run1s and not dtprog["s01_run1s"]:
     progress_update(cfg,dtprog,"s01_run1s")
 else:
     print(f"[{cfg.datevshot}] Skipping s01_run1s run1s")
+
+    #However, still need this later for vdrp pathing
+    if not os.path.exists("./reductions"):
+        system_command(cfg,"ln -s ../reductions reductions")
 
 
 if s01b_amp_images and not dtprog["s01b_amp_images"]:
