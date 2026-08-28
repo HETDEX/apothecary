@@ -289,6 +289,7 @@ class Config:
     overwrite: bool = False
     shot_only: bool = False
     resume: bool = False
+    repair: bool = False
     shotid: int = 0
     datevshot: str = ""
     exp: int = 0  #specific exposure number to reduce
@@ -433,11 +434,11 @@ if "-help" in args:
                       negatives do the same as positives except they force the clean-up immediately and as the only action
                       0 = No clean up at all. Intermediate files and all tempory scripts reamin. Good for debugging.
                       1 = *** default *** Basic cleaning of scripts and non-informative intermediate files
-                          (--resume can still work if accompanied by --update)
+                          (--resume can still work if accompanied by --update or --repair)
                       2 = removes additional intermediate files, and most debugging files, vdrp, etc
-                          (--resume can still work if accompanied by --update)
+                          (--resume can still work if accompanied by --update or --repair)
                       3 = removes logging information, analysis, match_pngs, etc
-                          (--resume can still work if accompanied by --update)
+                          (--resume can still work if accompanied by --update or --repair)
                       4 = removes the .mc, .spec, .list, etc files 
                           (!!! cannot use --resume at level 4 or after !!!) 
                       5 = removes EVERYTHING except the shot h5 file
