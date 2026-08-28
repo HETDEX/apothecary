@@ -36,8 +36,9 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # 1.0.14 restrict minimum SNR of *.mc raw line detections that make it into HETDEX_API based on avg_sky
 # 1.0.15 fix issue where progress.dat could be overwritten as reset back to start; all progress lost
 # 1.0.16 add --repair switch
+# 1.0.17 add log repalcement
 
-__version__ = '1.0.16'
+__version__ = '1.0.17'
 
 import numpy as np
 import sys
@@ -273,6 +274,22 @@ s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_sour
 #     unless you REALLY known
 #     what you are doing !!!
 ########################################################################
+
+
+def log(logstr):
+    """
+
+    :param logstr:
+    :return:
+    """
+
+    try:
+        d = datetime.now()
+        msg = "[%s:%s:%s.%s]  %s" % (str(d.hour).zfill(2), str(d.minute).zfill(2), str(d.second).zfill(2),
+                                     str(d.microsecond).zfill(6), logstr)
+        print(msg)
+    except:
+        print(f"Log Exception!", traceback.format_exc())
 
 @dataclass
 class Config:
@@ -6583,6 +6600,7 @@ def shot_analyisis(cfg,ratio=False):
             plt.imshow(h5.root.Astrometry.CoaddImages.png_exp01.read())  # ,origin="upper")
             plt.tight_layout()
             plt.savefig(f"coadd_{cfg.datevshot}_exp01.png", dpi=96)
+            plt.close('all')
         except:
             pass
 
@@ -6593,6 +6611,7 @@ def shot_analyisis(cfg,ratio=False):
             plt.imshow(h5.root.Astrometry.CoaddImages.png_exp02.read())  # ,origin="upper")
             plt.tight_layout()
             plt.savefig(f"coadd_{cfg.datevshot}_exp02.png", dpi=96)
+            plt.close('all')
         except:
             pass
 
@@ -6603,6 +6622,7 @@ def shot_analyisis(cfg,ratio=False):
             plt.imshow(h5.root.Astrometry.CoaddImages.png_exp03.read())  # ,origin="upper")
             plt.tight_layout()
             plt.savefig(f"coadd_{cfg.datevshot}_exp03.png", dpi=96)
+            plt.close('all')
         except:
             pass
 
@@ -6793,9 +6813,11 @@ def shot_analyisis(cfg,ratio=False):
                 if ratio is False:
                     plt.savefig(f"i{mf_base.decode()[10:13]}_{cfg.datevshot}_{mf_base.decode()}.png",
                                 dpi=DIAG_AMP_IMG_DPI)
+                    plt.close('all')
                 else:
                     plt.savefig(f"i{mf_base.decode()[10:13]}_{cfg.datevshot}_{mf_base.decode()}_ratio.png",
                                 dpi=DIAG_AMP_IMG_DPI)
+                    plt.close('all')
 
                 cfg.made_amp_images = True
     except:
@@ -7201,8 +7223,10 @@ def make_amp_images(cfg,ratio=False):
             plt.tight_layout()
             if ratio:
                 plt.savefig(f"i{mf_base[10:13]}_{cfg.datevshot}_{mf_base}_ratio.png", dpi=DIAG_AMP_IMG_DPI)
+                plt.close('all')
             else:
                 plt.savefig(f"i{mf_base[10:13]}_{cfg.datevshot}_{mf_base}.png", dpi=DIAG_AMP_IMG_DPI)
+                plt.close('all')
 
     except:
         #print(traceback.format_exc())
