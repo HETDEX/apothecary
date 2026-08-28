@@ -276,7 +276,7 @@ s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_sour
 ########################################################################
 
 
-def log(logstr):
+def log(logstr,flush=False):
     """
 
     :param logstr:
@@ -285,11 +285,11 @@ def log(logstr):
 
     try:
         d = datetime.now()
-        msg = "[%s:%s:%s.%s]  %s" % (str(d.hour).zfill(2), str(d.minute).zfill(2), str(d.second).zfill(2),
+        msg = "%s:%s:%s.%s -- %s" % (str(d.hour).zfill(2), str(d.minute).zfill(2), str(d.second).zfill(2),
                                      str(d.microsecond).zfill(6), logstr)
-        print(msg)
+        print(msg,flush=flush)
     except:
-        print(f"Log Exception!", traceback.format_exc())
+        print(f"Log Exception!", traceback.format_exc(),flush=True)
 
 @dataclass
 class Config:
@@ -859,7 +859,7 @@ else:
 
 #check datevshot ... can only be numeric or in datevshot format, but could be truncated
 
-print(f"[{cfg.datevshot}] Evaluating with datevshot = {cfg.datevshot}",flush=True)
+log(f"[{cfg.datevshot}] Evaluating with datevshot = {cfg.datevshot}",flush=True)
 
 ########################################################################
 # worker functions
@@ -887,7 +887,7 @@ def check_lib_calib(cfg):
         if os.path.exists(path_check):
             rc = 1 #warn, we are updating
     except:
-        print(f"[{cfg.datevshot}] Could not check on lib_calib status.")
+        log(f"[{cfg.datevshot}] Could not check on lib_calib status.")
         rc = -1
 
     return rc
@@ -1132,7 +1132,7 @@ def hetdex_dither(cfg):
                 #     rc = 1
     except:
         rc = -1
-        print(f"[{cfg.datevshot}] Exception in hetdex_dither()", traceback.format_exc())
+        log(f"[{cfg.datevshot}] Exception in hetdex_dither()", traceback.format_exc())
 
     try:
         h5.close()
@@ -1176,23 +1176,23 @@ def post_clean(cfg):
         node_clean(cfg)
 
         if cfg.clean <=0:
-            print(f"[{cfg.datevshot}] No -clean")
+            log(f"[{cfg.datevshot}] No -clean")
             cfg.clean_done = True
             return
         else:
-            print(f"[{cfg.datevshot}] --clean {cfg.clean}")
+            log(f"[{cfg.datevshot}] --clean {cfg.clean}")
 
 
         if cfg.clean_only:  #this is at the top and cfg.cwd has NOT been set to cfg.datevshot
             if not safe_cd(os.path.join(cfg.cwd,f"sci{cfg.datevshot}")):
-                print(f"[{cfg.datevshot}] Could not initiate --clean")
+                log(f"[{cfg.datevshot}] Could not initiate --clean")
                 return
             else:
                 #we did successfully jump to sciXXXX direcotry so update to that for the remainder
                 cfg.cwd = os.getcwd()
         else:
             if not safe_cd(cfg.cwd):
-                print(f"[{cfg.datevshot}] Could not initiate --clean")
+                log(f"[{cfg.datevshot}] Could not initiate --clean")
                 return
 
         #os.chdir(os.path.join(cfg.cwd,f"sci{cfg.datevshot}"))
@@ -1690,7 +1690,7 @@ def write_summary(cfg):
 
             f.write("") #always end with a blank line, so can read easier with cat
     except:
-        print(f"[{cfg.datevshot}] Exception! trying to write summary file", traceback.format_exc())
+        log(f"[{cfg.datevshot}] Exception! trying to write summary file", traceback.format_exc())
 
     try:
         h5.close()
@@ -1729,7 +1729,7 @@ def write_limited_summary(cfg):
                         break
 
         if not overwrite:
-            print(f"[{cfg.datevshot}] existing, populated summary.txt file found. Will not overwrite.")
+            log(f"[{cfg.datevshot}] existing, populated summary.txt file found. Will not overwrite.")
             return
 
         if cfg.shot_ra == -999.9:
@@ -1854,7 +1854,7 @@ def write_limited_summary(cfg):
 
             f.write("")  # always end with a blank line, so can read easier with cat
     except:
-        print(f"[{cfg.datevshot}] Exception! trying to write limited summary file", traceback.format_exc())
+        log(f"[{cfg.datevshot}] Exception! trying to write limited summary file", traceback.format_exc())
 
 
     os.chdir(orig_dir)
@@ -1870,9 +1870,9 @@ def Quit(cfg,rc,msg=None,do_write_status=True,do_post_clean=True,do_write_summar
     """
 
     if msg is not None:
-        print(f"[{cfg.datevshot}] ({rc})",msg)
+        log(f"[{cfg.datevshot}] ({rc})",msg)
     else:
-        print(f"[{cfg.datevshot}] ({rc})")
+        log(f"[{cfg.datevshot}] ({rc})")
 
     dtprog = cfg.dtprog
     if dtprog is None:
@@ -1899,7 +1899,7 @@ def Quit(cfg,rc,msg=None,do_write_status=True,do_post_clean=True,do_write_summar
                         rc = -1  # fatal
                     else:
                         # not fatal, but still a warning
-                        print(f"[{cfg.datevshot}] Average Sky is problematically large: {avg_sky:0.1f}. Non-fatal.")
+                        log(f"[{cfg.datevshot}] Average Sky is problematically large: {avg_sky:0.1f}. Non-fatal.")
 
         if (cfg.num_cont_dets < 0 or cfg.num_line_dets < 0) and dtprog["s06b_fof"]:
             get_detection_counts(cfg)
@@ -2020,14 +2020,14 @@ def blocking_command(cfg,cmd):
         rc = 0
         #cmdlist = [cmd[0], cmd[1:]]
         if EchoCmds:
-            print(f"[{cfg.datevshot}] subproc CMD: ({os.getcwd()}) > {cmd}")
+            log(f"[{cfg.datevshot}] subproc CMD: ({os.getcwd()}) > {cmd}")
 
         rc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT).wait()
 
         if EchoCmds:
-            print(f"[{cfg.datevshot}] subproc rc = {rc}: CMD = ({os.getcwd()}) > {cmd}")
+            log(f"[{cfg.datevshot}] subproc rc = {rc}: CMD = ({os.getcwd()}) > {cmd}")
     except:
-        print(f"[{cfg.datevshot}] Exception! in blocking_command. cmd = {cmd}\n",traceback.format_exc())
+        log(f"[{cfg.datevshot}] Exception! in blocking_command. cmd = {cmd}\n",traceback.format_exc())
         rc = -1
 
     return rc
@@ -2044,7 +2044,7 @@ def system_command(cfg,cmd):
 
     #echo the command
     if EchoCmds:
-        print(f"[{cfg.datevshot}] CMD: ({os.getcwd()}) > {cmd}")
+        log(f"[{cfg.datevshot}] CMD: ({os.getcwd()}) > {cmd}")
 
     if cfg.file_stdout:
         os.system(f"{cmd} &>> {cfg.file_stdout.name}")
@@ -2065,7 +2065,7 @@ def linear_exptime_scale(cfg):
         if cfg.total_exp_time is not None and cfg.numexp is not None:
             mux = max(1.0, (cfg.total_exp_time / max(1, cfg.numexp) / 360.))  # 360secs is the nominal default for a HETDEX exposure
     except:
-        print(f"[{cfg.datevshot}] linear_exptime_scale excetpion. {traceback.format_exc()}")
+        log(f"[{cfg.datevshot}] linear_exptime_scale excetpion. {traceback.format_exc()}")
 
     return mux
 
@@ -2096,7 +2096,7 @@ def get_exposure_times(cfg):
                         if os.path.exists(extended_tarfn):
                             base_tarfn = extended_tarfn
                         else: #did not find it ... could try to scan for any {virus_shot}.tar below here
-                            print(f"[{cfg.datevshot}] could not find tarfile?")
+                            log(f"[{cfg.datevshot}] could not find tarfile?")
         else:
             base_tarfn = os.path.join(path, f"virus/{virus_shot}.tar")
 
@@ -2128,13 +2128,13 @@ def get_exposure_times(cfg):
                         try:
                             if abs(fh[0].header['EXPTIME'] - fh[0].header['PEXPTIME']) > 30.0:
                                 use_exp = fh[0].header['PEXPTIME'] - 8.0 #the 8.0 is an approximate correction from Greg Z.
-                                print(f"[{cfg.datevshot}] EXPTIME {fh[0].header['EXPTIME']} vs "
+                                log(f"[{cfg.datevshot}] EXPTIME {fh[0].header['EXPTIME']} vs "
                                       f"PEXPTIME {fh[0].header['PEXPTIME']} large difference. Using PEXPTIME - 8.0s.")
                             else:
                                 use_exp = fh[0].header['EXPTIME']
                         except:
                             use_exp = fh[0].header['EXPTIME']
-                            print(f"[{cfg.datevshot}] Exception retrieving EXPTIME. Using value: {use_exp}",
+                            log(f"[{cfg.datevshot}] Exception retrieving EXPTIME. Using value: {use_exp}",
                                   traceback.format_exc())
 
                         exposure_times.append(use_exp)
@@ -2142,15 +2142,15 @@ def get_exposure_times(cfg):
 
         if len(exposure_times) == 0:
             # could not find any
-            print(f"[{cfg.datevshot}] Total exposure time: fail, could not compute")
+            log(f"[{cfg.datevshot}] Total exposure time: fail, could not compute")
             cfg.total_exp_time = 0.0
         else:
             cfg.total_exp_time = np.nansum(exposure_times)
             cfg.dither_exp_times = exposure_times
-            print(f"[{cfg.datevshot}] Total exposure time: {cfg.total_exp_time}")
+            log(f"[{cfg.datevshot}] Total exposure time: {cfg.total_exp_time}")
 
     except:
-        print(f"[{cfg.datevshot}] Exception in get_exposure_times: {traceback.format_exc()}")
+        log(f"[{cfg.datevshot}] Exception in get_exposure_times: {traceback.format_exc()}")
 
 def get_guider_fwhm(cfg):
     """
@@ -2198,12 +2198,12 @@ def get_guider_fwhm(cfg):
             fwhm = np.loadtxt(saved_fn,dtype=float) #just one value
             if fwhm is None or np.isnan(fwhm):
                  #we will continue below and rebuild
-                print(f"[{cfg.datevshot}] Found {saved_fn}, but guider seeing FWHM is inavlid ({fwhm}). Will recompute ...")
+                log(f"[{cfg.datevshot}] Found {saved_fn}, but guider seeing FWHM is inavlid ({fwhm}). Will recompute ...")
             else:
                 fail = False
                 try:
                     if len(fwhm) == 0 or fwhm[0] <= 0:
-                        print(f"[{cfg.datevshot}] Found {saved_fn}, but guider seeing FWHM is inavlid ({fwhm}). Will recompute ...")
+                        log(f"[{cfg.datevshot}] Found {saved_fn}, but guider seeing FWHM is inavlid ({fwhm}). Will recompute ...")
                         fail = True
                 except:
                     pass
@@ -2211,14 +2211,14 @@ def get_guider_fwhm(cfg):
                 try:
                     fwhm = float(fwhm)
                 except:
-                    print(f"[{cfg.datevshot}] Found {saved_fn}, but guider seeing FWHM is inavlid ({fwhm}). Will recompute ...")
+                    log(f"[{cfg.datevshot}] Found {saved_fn}, but guider seeing FWHM is inavlid ({fwhm}). Will recompute ...")
                     fail = True
 
                 if not fail:
-                    print(f"[{cfg.datevshot}] Found {saved_fn}. Using guider seeing FWHM = {fwhm}")
+                    log(f"[{cfg.datevshot}] Found {saved_fn}. Using guider seeing FWHM = {fwhm}")
                     return fwhm
         else:
-            print(f"[{cfg.datevshot}] Did not find {saved_fn}.")
+            log(f"[{cfg.datevshot}] Did not find {saved_fn}.")
 
         exposure_times = [] #exposure times (seconds) from HDU
         exposure_fn_times =[] #date T time string from the fileanames
@@ -2279,13 +2279,13 @@ def get_guider_fwhm(cfg):
                         try:
                             if abs(fh[0].header['EXPTIME'] - fh[0].header['PEXPTIME']) > 30.0:
                                 use_exp = fh[0].header['PEXPTIME'] - 8.0  # the 8.0s is an approximate correction from Greg Z.
-                                print(f"[{cfg.datevshot}] EXPTIME {fh[0].header['EXPTIME']} vs "
+                                log(f"[{cfg.datevshot}] EXPTIME {fh[0].header['EXPTIME']} vs "
                                       f"PEXPTIME {fh[0].header['PEXPTIME']} large difference. Using PEXPTIME - 8.0s.")
                             else:
                                 use_exp = fh[0].header['EXPTIME']
                         except:
                             use_exp = fh[0].header['EXPTIME']
-                            print(f"[{cfg.datevshot}] Exception retrieving EXPTIME. Using value: {use_exp}",
+                            log(f"[{cfg.datevshot}] Exception retrieving EXPTIME. Using value: {use_exp}",
                                   traceback.format_exc())
 
                         exposure_times.append(use_exp)
@@ -2297,12 +2297,12 @@ def get_guider_fwhm(cfg):
 
         if len(exposure_fn_times) == 0:
             #could not find any
-            print(f"[{cfg.datevshot}] Total exposure time: fail, could not locate")
+            log(f"[{cfg.datevshot}] Total exposure time: fail, could not locate")
             return None
         else:
             cfg.total_exp_time = np.nansum(exposure_times)
             cfg.dither_exp_times = exposure_times
-            print(f"[{cfg.datevshot}] Total exposure time: {cfg.total_exp_time}")
+            log(f"[{cfg.datevshot}] Total exposure time: {cfg.total_exp_time}")
 
         #try gc1
         # base_tarfn = os.path.join(path,"gc1/gc1.tar")
@@ -2310,11 +2310,11 @@ def get_guider_fwhm(cfg):
         #     #try based on the virus_tar_path, up two levels
         #     base_tarfn = os.path.join(cfg.virus_tar_path.rstrip(".tar"),"gc1.tar")
 
-        print(f"[{cfg.datevshot}] Computing guider for seeing FWHM (this can take a while) ...")
+        log(f"[{cfg.datevshot}] Computing guider for seeing FWHM (this can take a while) ...")
 
         base_tarfn = get_gc_path(cfg,"gc1",path)
         if os.path.exists(base_tarfn):
-            print(f"[{cfg.datevshot}] Getting gc1 from {base_tarfn}")
+            log(f"[{cfg.datevshot}] Getting gc1 from {base_tarfn}")
             with tar.open(base_tarfn, "r") as tarfh:
                 gc1_names = tarfh.getnames()
                 #should look like a list of:  20241017T024256.0_gc1_sci.fits
@@ -2336,7 +2336,7 @@ def get_guider_fwhm(cfg):
 
         base_tarfn = get_gc_path(cfg, "gc2", path)
         if os.path.exists(base_tarfn):
-            print(f"[{cfg.datevshot}] Getting gc2 from {base_tarfn}")
+            log(f"[{cfg.datevshot}] Getting gc2 from {base_tarfn}")
             with tar.open(base_tarfn, "r") as tarfh:
                 gc2_names = tarfh.getnames()
                 #should look like a list of:  20241017T024256.0_gc1_sci.fits
@@ -2352,7 +2352,7 @@ def get_guider_fwhm(cfg):
 
         if GuiderFWHM_ALL: #use all within specified time range
 
-            print(f"[{cfg.datevshot}] Getting approx start/stop times for science frames ...")
+            log(f"[{cfg.datevshot}] Getting approx start/stop times for science frames ...")
             for fntime, exptime in zip(exposure_fn_times, exposure_times):
                 #fntime, from the name is the time the exposure STARTED (not written). It matches to "UT" card and the stop is the "DATE" card in HDU
                 fntime = datetime(int(fntime[0:4]), int(fntime[4:6]), int(fntime[6:8]),
@@ -2374,7 +2374,7 @@ def get_guider_fwhm(cfg):
 
             if gc1_names is not None:
                 gc1_near = [] #list of lists ... ie. if 3 exposures, will be a 3 long list each with 2 elements
-                print(f"[{cfg.datevshot}] Checking corresponding {len(gc1_names)} gc1 files and {len(gc_start_times)} "
+                log(f"[{cfg.datevshot}] Checking corresponding {len(gc1_names)} gc1 files and {len(gc_start_times)} "
                       f"timestamps ...")
                 for start_time, stop_time in zip(gc_start_times,gc_stop_times):
                     for name in gc1_names:
@@ -2388,7 +2388,7 @@ def get_guider_fwhm(cfg):
 
             if gc2_names is not None:
                 gc2_near = [] #list of lists ... ie. if 3 exposures, will be a 3 long list each with 2 elements
-                print(f"[{cfg.datevshot}] Checking corresponding {len(gc2_names)} gc2 files and {len(gc_start_times)} "
+                log(f"[{cfg.datevshot}] Checking corresponding {len(gc2_names)} gc2 files and {len(gc_start_times)} "
                       f"timestamps ...")
                 for start_time, stop_time in zip(gc_start_times,gc_stop_times):
                     for name in gc2_names:
@@ -2440,7 +2440,7 @@ def get_guider_fwhm(cfg):
             excessive_time_count = 0
             iq_idx_start =0
             if os.path.exists(base_tarfn) and gc1_near is not None and len(gc1_near) > 0:
-                print(f"[{cfg.datevshot}] Collecting data from matched {len(gc1_near)} gc1 files ...")
+                log(f"[{cfg.datevshot}] Collecting data from matched {len(gc1_near)} gc1 files ...")
                 for name in gc1_near:
                 #for name in tqdm(gc1_near):
                     try:
@@ -2469,7 +2469,7 @@ def get_guider_fwhm(cfg):
                         elapsed = (time.perf_counter_ns() - start_time) // 1e9
                         if elapsed > 5.0: #5 seconds is excessive
                             if excessive_time_count > 2:
-                                print(f"[{cfg.datevshot}] Excessive time collecting gc1 data. Aborting collection.")
+                                log(f"[{cfg.datevshot}] Excessive time collecting gc1 data. Aborting collection.")
                                 iq = iq[0:iq_idx_start + 1]
                                 iq_time = iq_time[0:iq_idx_start + 1]
                                 iq_dither = iq_dither[0:iq_idx_start + 1]
@@ -2492,7 +2492,7 @@ def get_guider_fwhm(cfg):
             excessive_time_count = 0
             iq_idx_start = len(iq)
             if os.path.exists(base_tarfn) and gc2_near is not None and len(gc2_near) > 0:
-                print(f"[{cfg.datevshot}] Collecting data from matched {len(gc2_near)} gc2 files ...")
+                log(f"[{cfg.datevshot}] Collecting data from matched {len(gc2_near)} gc2 files ...")
                 for name in gc2_near:
                 #for name in tqdm(gc2_near):
                     try:
@@ -2519,7 +2519,7 @@ def get_guider_fwhm(cfg):
                         elapsed = (time.perf_counter_ns() - start_time) // 1e9
                         if elapsed > 5.0: #5 seconds is excessive
                             if excessive_time_count > 2:
-                                print(f"[{cfg.datevshot}] Excessive time collecting gc2 data. Aborting collection.")
+                                log(f"[{cfg.datevshot}] Excessive time collecting gc2 data. Aborting collection.")
                                 iq = iq[0:iq_idx_start + 1]
                                 iq_time = iq_time[0:iq_idx_start + 1]
                                 iq_dither = iq_dither[0:iq_idx_start + 1]
@@ -2864,27 +2864,27 @@ def precheck(cfg):
         # maybe editing progress.dat, and attempting to resume, but in the wrong directory
         try:
             if f"sci{cfg.datevshot}" in cfg.cwd_orig:
-                print(f"[{cfg.datevshot}] WARNING! Will abort! Working directory may not be as intended: {cfg.cwd_orig}")
-                print(f"[{cfg.datevshot}] It appears to already in include the reduction output dir (sci{cfg.datevshot}).")
+                log(f"[{cfg.datevshot}] WARNING! Will abort! Working directory may not be as intended: {cfg.cwd_orig}")
+                log(f"[{cfg.datevshot}] It appears to already in include the reduction output dir (sci{cfg.datevshot}).")
                 if cfg.resume:
-                    print(f"[{cfg.datevshot}] Did you --resume from the wrong directory?")
+                    log(f"[{cfg.datevshot}] Did you --resume from the wrong directory?")
                 return -1
         except:
             print(f"Warning! Could not validate current working directory.",traceback.format_exc())
 
 
         # echo a few key paths:
-        print(f"[{cfg.datevshot}] Precheck. HETDEX_API path: {hetdex_api_path}",flush=True)
-        print(f"[{cfg.datevshot}] Precheck. ELiXer path: {elixer_path}",flush=True)
+        log(f"[{cfg.datevshot}] Precheck. HETDEX_API path: {hetdex_api_path}",flush=True)
+        log(f"[{cfg.datevshot}] Precheck. ELiXer path: {elixer_path}",flush=True)
 
         month = cfg.datevshot[0:6]
         path_check = os.path.join(hetdex_projects_path,f"lib_calib/{month}")
         if not os.path.exists(path_check):
-            print(f"[{cfg.datevshot}] Precheck fail. Dir does not exist: {path_check}")
+            log(f"[{cfg.datevshot}] Precheck fail. Dir does not exist: {path_check}")
             return -1
 
         if check_lib_calib(cfg) != 0:
-            print(f"[{cfg.datevshot}] Precheck fail. lib_calib/{cfg.datevshot[0:6]} directory not ready")
+            log(f"[{cfg.datevshot}] Precheck fail. lib_calib/{cfg.datevshot[0:6]} directory not ready")
             return -1
 
         #common missing installs (that don't show up until later)
@@ -2939,13 +2939,13 @@ def precheck(cfg):
             if np.int64(cfg.datevshot.replace("v","")) in dex_shots:
                 cfg.hetdex_original = True
                 if not cfg.hetdex and not cfg.multifits_only:
-                    print(f"[{cfg.datevshot}] is an existing HETDEX shot. To re-reduce here, re-run with --hetdex")
+                    log(f"[{cfg.datevshot}] is an existing HETDEX shot. To re-reduce here, re-run with --hetdex")
                     rc = -1
                 else:
                     #this is okay
-                    print(f"[{cfg.datevshot}] is an existing HETDEX shot, but --hetdex or --multifits_only specified, so will re-reduce.")
+                    log(f"[{cfg.datevshot}] is an existing HETDEX shot, but --hetdex or --multifits_only specified, so will re-reduce.")
         except:
-            print(f"[{cfg.datevshot}] Exception checking HETDEX Survye file {HETDEXSurvey}", traceback.format_exc())
+            log(f"[{cfg.datevshot}] Exception checking HETDEX Survye file {HETDEXSurvey}", traceback.format_exc())
 
 
         if rc != 0:
@@ -2983,7 +2983,7 @@ def update_only(cfg):
 def set_fitradecsp(cfg):
     try:
         os.environ['SSR_fitradecsp'] = f"{cfg.scriptdir}/fitradecsp"
-        print(f"[{cfg.datevshot}] Set SSR_fitradecsp to {os.getenv('SSR_fitradecsp')}")
+        log(f"[{cfg.datevshot}] Set SSR_fitradecsp to {os.getenv('SSR_fitradecsp')}")
     except:
         print(f"Exception in set_fitradecsp: {traceback.format_exc()}")
 
@@ -2991,14 +2991,14 @@ def set_fitradecsp(cfg):
 def set_vred(cfg):
     try:
         os.environ['SSR_vred'] = f"{cfg.scriptdir}/vred"
-        print(f"[{cfg.datevshot}] Set SSR_vred to {os.getenv('SSR_vred')}")
+        log(f"[{cfg.datevshot}] Set SSR_vred to {os.getenv('SSR_vred')}")
     except:
         print(f"Exception in SSR_vred: {traceback.format_exc()}")
 
 def set_vred3(cfg):
     try:
         os.environ['SSR_vred3'] = f"{cfg.scriptdir}/vred3"
-        print(f"[{cfg.datevshot}] Set SSR_vred3 to {os.getenv('SSR_vred3')}")
+        log(f"[{cfg.datevshot}] Set SSR_vred3 to {os.getenv('SSR_vred3')}")
     except:
         print(f"Exception in SSR_vred3: {traceback.format_exc()}")
 
@@ -3059,13 +3059,13 @@ def get_het_raw_archive(cfg):
                 if os.path.exists(fullpath):
                     return fullpath,False,False
             else: #this is a problem
-                print(f"[{cfg.datevshot}] Problem identifying het_raw archive. Not found.")
+                log(f"[{cfg.datevshot}] Problem identifying het_raw archive. Not found.")
                 return None, False, False
 
-        print(f"[{cfg.datevshot}] Problem identifying het_raw archive. Could not locate archive.")
+        log(f"[{cfg.datevshot}] Problem identifying het_raw archive. Could not locate archive.")
         return None, False, False #did not find the file anywhere ... this is an error
     except:
-        print(f"[{cfg.datevshot}] Exception in get_het_raw_archive: {traceback.format_exc()}")
+        log(f"[{cfg.datevshot}] Exception in get_het_raw_archive: {traceback.format_exc()}")
         return None, False, False
 
 def get_het_raw_copy_mutex(cfg,virus_path,release=None):
@@ -3119,14 +3119,14 @@ def get_het_raw_copy_mutex(cfg,virus_path,release=None):
                                         line = f.readline()
                                 except:
                                     line = "Unable to read .sync file"
-                                print(f"[{cfg.datevshot}] copy must wait. Archive tar already being copied by another process: {line}")
+                                log(f"[{cfg.datevshot}] copy must wait. Archive tar already being copied by another process: {line}")
                             else:
                                 with open(os.path.join(mux_root,sync_fn), "w") as f:
                                     f.write(f"PID: {os.getpid()} BEGAN {str(datetime.now())} from {cfg.cwd_orig}\n")
-                                    print(f"[{cfg.datevshot}] cleared to copy from /corral. {active} other active copies.")
+                                    log(f"[{cfg.datevshot}] cleared to copy from /corral. {active} other active copies.")
                                     redlight = False
                         else:
-                            print(f"[{cfg.datevshot}] too many active ({active}) copies from /corral. Limit ({CorralMaxCopyLimit}) . Must wait ...")
+                            log(f"[{cfg.datevshot}] too many active ({active}) copies from /corral. Limit ({CorralMaxCopyLimit}) . Must wait ...")
 
                     if redlight:
                         time.sleep(SafeActiveShotsSleep)
@@ -3136,7 +3136,7 @@ def get_het_raw_copy_mutex(cfg,virus_path,release=None):
                 try:
                     os.remove(os.path.join(mux_root, release))
                 except:
-                    print(f"[{cfg.datevshot}] Exception in get_het_raw_copy_mutex, release corral: {traceback.format_exc()}")
+                    log(f"[{cfg.datevshot}] Exception in get_het_raw_copy_mutex, release corral: {traceback.format_exc()}")
         elif "/work" == virus_path[:5]:  # needs a limit
             mux_root = "/".join(cfg.cwd_orig.split("/")[:4]) + "/ssr_mux/work"
             if not os.path.exists(mux_root):
@@ -3167,7 +3167,7 @@ def get_het_raw_copy_mutex(cfg,virus_path,release=None):
                                         line = f.readline()
                                 except:
                                     line = "Unable to read .sync file"
-                                print(f"[{cfg.datevshot}] copy must wait. Archive tar already being copied by another process: {line}")
+                                log(f"[{cfg.datevshot}] copy must wait. Archive tar already being copied by another process: {line}")
                             else:
                                 with open(os.path.join(mux_root, sync_fn), "w") as f:
                                     f.write(f"PID: {os.getpid()} BEGAN {str(datetime.now())} from {cfg.cwd_orig}\n")
@@ -3187,11 +3187,11 @@ def get_het_raw_copy_mutex(cfg,virus_path,release=None):
                     os.remove(os.path.join(mux_root, release))
                     #os.remove(release)
                 except:
-                    print(f"[{cfg.datevshot}] Exception in get_het_raw_copy_mutex, release work: {traceback.format_exc()}")
+                    log(f"[{cfg.datevshot}] Exception in get_het_raw_copy_mutex, release work: {traceback.format_exc()}")
         else:
             return None #no limit needed
     except:
-        print(f"[{cfg.datevshot}] Exception in get_het_raw_copy_mutex: {traceback.format_exc()}")
+        log(f"[{cfg.datevshot}] Exception in get_het_raw_copy_mutex: {traceback.format_exc()}")
 
 
 
@@ -3207,7 +3207,7 @@ def copy_het_raw_file(cfg):
     try:
         virus_path, is_dvs_tar, is_local = get_het_raw_archive(cfg)
         if virus_path is None: #problem, cannot continue
-            print(f"[{cfg.datevshot}] Fatal! Cannot find het_raw data.")
+            log(f"[{cfg.datevshot}] Fatal! Cannot find het_raw data.")
             return -1
 
 
@@ -3222,18 +3222,18 @@ def copy_het_raw_file(cfg):
                 destination_path = os.path.join(cfg.local_het_raw_path,
                                                 f"{cfg.datevshot[:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar")
                 if os.path.exists(destination_path):  # good copy
-                    print(f"[{cfg.datevshot}] Using {destination_path}")
+                    log(f"[{cfg.datevshot}] Using {destination_path}")
                 else:
-                    print(f"[{cfg.datevshot}] Unexpected error. {destination_path} does not exist")
+                    log(f"[{cfg.datevshot}] Unexpected error. {destination_path} does not exist")
                     return -1
 
             # copy_check = virus_path[:-3] + "copy"  #always ends in .tar, use .copy to indicate in progress copy
             # #use this as both the mutex and the copy in progress indicator
             # while os.path.exists(copy_check):
             #     #some other process is copying it ... wait for it to be done.
-            #     print(f"[{cfg.datevshot}] Waiting on copy of: {virus_path}")
+            #     log(f"[{cfg.datevshot}] Waiting on copy of: {virus_path}")
             #     time.sleep(SafeActiveShotsSleep) #reuse the sleep delay
-            # print(f"[{cfg.datevshot}] Using {virus_path}")
+            # log(f"[{cfg.datevshot}] Using {virus_path}")
             return 0 #ready to go
         else: #this needs to be copied
             #get the copy mutex ... this also handles limits on /corral
@@ -3248,7 +3248,7 @@ def copy_het_raw_file(cfg):
             with lock: #we have the lock now
                 #does the tar file already exist? someone else already copied got it?
                 # if os.path.exists(virus_path):  # someone else already copied it.
-                #     print(f"[{cfg.datevshot}] Using (already copied) {virus_path}")
+                #     log(f"[{cfg.datevshot}] Using (already copied) {virus_path}")
 
                 # we need to limit our access hits to corral across ALL instances
                 # so there is an additional mutex
@@ -3261,7 +3261,7 @@ def copy_het_raw_file(cfg):
                 destination_path = os.path.join(cfg.local_het_raw_path,
                                                 f"{cfg.datevshot[:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar")
                 if os.path.exists(destination_path):  # good copy ... someone else already handled it
-                    print(f"[{cfg.datevshot}] Using {destination_path}")
+                    log(f"[{cfg.datevshot}] Using {destination_path}")
                     cfg.virus_tar_path = destination_path
                 else: #do the copy or untar
 
@@ -3321,7 +3321,7 @@ def copy_het_raw_file(cfg):
                                     system_command(cfg, cmd)
 
                         else:
-                            print(f"[{cfg.datevshot}] (1) Failed to copy/extract date tar file.", traceback.format_exc())
+                            log(f"[{cfg.datevshot}] (1) Failed to copy/extract date tar file.", traceback.format_exc())
                             rc = -1
                     else:
                         #this is the date.tar, then need to extract parts of it
@@ -3351,10 +3351,10 @@ def copy_het_raw_file(cfg):
                                     cmd = f"tar -xvf {virus_path} -C {destination_path} {file_to_extract}"
                                     system_command(cfg, cmd)
                             else:
-                                print(f"[{cfg.datevshot}] (2) Failed to copy/extract date tar file.", traceback.format_exc())
+                                log(f"[{cfg.datevshot}] (2) Failed to copy/extract date tar file.", traceback.format_exc())
                                 rc = -1
                         except:
-                            print(f"[{cfg.datevshot}] (3) Failed to copy/extract date tar file.", traceback.format_exc())
+                            log(f"[{cfg.datevshot}] (3) Failed to copy/extract date tar file.", traceback.format_exc())
                             rc = -1
 
                     #release the mutex/counter decrement
@@ -3365,7 +3365,7 @@ def copy_het_raw_file(cfg):
                 #     print(f"*** DEBUG FORCE EXIT *** ")
                 #     rc = -1
     except:
-        print(f"[{cfg.datevshot}] Exception in copy_het_raw_file: {traceback.format_exc()}")
+        log(f"[{cfg.datevshot}] Exception in copy_het_raw_file: {traceback.format_exc()}")
         rc = -1
 
     return rc
@@ -3387,20 +3387,20 @@ def initial_setup(cfg):
     resume = False #notice: cfg.resume MAY be true and this can still be false if the directory does not already exist
     if os.path.exists(workdir):
         if cfg.repair:
-            print(f"[{cfg.datevshot}] Resume + Repair. Leave directory intact, but re-copy work files: {workdir}")
+            log(f"[{cfg.datevshot}] Resume + Repair. Leave directory intact, but re-copy work files: {workdir}")
             repair = True
         elif cfg.resume:
-            print(f"[{cfg.datevshot}] Resuming. Leave directory intact: {workdir}")
+            log(f"[{cfg.datevshot}] Resuming. Leave directory intact: {workdir}")
             resume = True
         elif cfg.overwrite:
-            print(f"[{cfg.datevshot}] Overwriting directory {workdir} ... ")
+            log(f"[{cfg.datevshot}] Overwriting directory {workdir} ... ")
             shutil.rmtree(workdir)
         else:
-            print(f"[{cfg.datevshot}] Shot directory already exists here! {workdir}")
-            print(f"[{cfg.datevshot}] Please include --resume or --overwrite to make intention clear.")
-            print(f"[{cfg.datevshot}] Or is this a repeated SLURM task?")
+            log(f"[{cfg.datevshot}] Shot directory already exists here! {workdir}")
+            log(f"[{cfg.datevshot}] Please include --resume or --overwrite to make intention clear.")
+            log(f"[{cfg.datevshot}] Or is this a repeated SLURM task?")
             if cfg.clean > 1:
-                print(f"[{cfg.datevshot}] Did you intend to only clean up the directory? "
+                log(f"[{cfg.datevshot}] Did you intend to only clean up the directory? "
                       f"If so, --clean needs to be the negative value. (see --help)")
             return -1
 
@@ -3425,18 +3425,18 @@ def initial_setup(cfg):
                     #         shutil.copy2(cfg.code_fn_to_copy, os.getcwd())
 
                 if os.path.exists(LocalScriptRepo): #we want to use it
-                    print(f"[{cfg.datevshot}] Using local repo ...")
+                    log(f"[{cfg.datevshot}] Using local repo ...")
                     cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
                 else:
                     #copy first to local script repo
-                    print(f"[{cfg.datevshot}] Copying to local repo ...")
+                    log(f"[{cfg.datevshot}] Copying to local repo ...")
                     shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
                                     os.path.join(os.getcwd(),LocalScriptRepo), dirs_exist_ok=True)
                     cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
 
             #lock auto releases
         else:
-            print(f"[{cfg.datevshot}] Using main script repo (may be remote) ...")
+            log(f"[{cfg.datevshot}] Using main script repo (may be remote) ...")
             cfg.scriptdir = os.path.join(ScriptRepo,"science_reductions")
     elif repair:
         if LocalScriptRepo is not None:
@@ -3444,22 +3444,22 @@ def initial_setup(cfg):
             lock = FileLock(Lock_mutex_fn) #we are in the top directory (not sciXXXX)
             with lock:
                 if cfg.update_local_repo:
-                    print(f"[{cfg.datevshot}] Updating local repo ... (this may take 1-2 minutes)")
+                    log(f"[{cfg.datevshot}] Updating local repo ... (this may take 1-2 minutes)")
                     shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
                                     os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
                     cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
 
                 if os.path.exists(LocalScriptRepo): #we want to use it
-                    print(f"[{cfg.datevshot}] Using local repo ...")
+                    log(f"[{cfg.datevshot}] Using local repo ...")
                     cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
                 else:
-                    print(f"[{cfg.datevshot}] Fatal! --repair selected, but no script repo.")
+                    log(f"[{cfg.datevshot}] Fatal! --repair selected, but no script repo.")
                     fatal_rtn = True
             # lock auto releases
             if fatal_rtn:
                 return -1
         else:
-            print(f"[{cfg.datevshot}] Using main script repo (may be remote) ...")
+            log(f"[{cfg.datevshot}] Using main script repo (may be remote) ...")
             cfg.scriptdir = os.path.join(ScriptRepo,"science_reductions")
     else:
         if LocalScriptRepo is not None:
@@ -3468,22 +3468,22 @@ def initial_setup(cfg):
             with lock:
 
                 if cfg.update_local_repo:
-                    print(f"[{cfg.datevshot}] Updating local repo ... (this may take 1-2 minutes)")
+                    log(f"[{cfg.datevshot}] Updating local repo ... (this may take 1-2 minutes)")
                     shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
                                     os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
                     cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
 
                 if os.path.exists(LocalScriptRepo): #we want to use it
-                    print(f"[{cfg.datevshot}] Using local repo ...")
+                    log(f"[{cfg.datevshot}] Using local repo ...")
                     cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
                 else:
-                    print(f"[{cfg.datevshot}] Fatal! --resume selected, but no script repo.")
+                    log(f"[{cfg.datevshot}] Fatal! --resume selected, but no script repo.")
                     fatal_rtn = True
             # lock auto releases
             if fatal_rtn:
                 return -1
         else:
-            print(f"[{cfg.datevshot}] Using main script repo (may be remote) ...")
+            log(f"[{cfg.datevshot}] Using main script repo (may be remote) ...")
             cfg.scriptdir = os.path.join(ScriptRepo,"science_reductions")
 
     set_fitradecsp(cfg)
@@ -3497,7 +3497,7 @@ def initial_setup(cfg):
     #if True: #new way
     if copy_het_raw_file(cfg) < 0:
         #FATAL
-        print(f"[{cfg.datevshot}] FATAL! Could not obtain het_raw data.")
+        log(f"[{cfg.datevshot}] FATAL! Could not obtain het_raw data.")
         return -1
     # else: #old way
     #     virustar = f"{cfg.datevshot[0:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar"
@@ -3512,8 +3512,8 @@ def initial_setup(cfg):
     #             fail = True
     #             src_tar = os.path.join(HETRaw_archive,f"{cfg.datevshot[:8]}.tar")
     #             if os.path.exists(src_tar):
-    #                 print(f"[{cfg.datevshot}]. Could not locate {virustar} under {virus_paths}")
-    #                 print(f"[{cfg.datevshot}]. Will attempt to copy {src_tar}. If successful, this will take many minutes ...")
+    #                 log(f"[{cfg.datevshot}]. Could not locate {virustar} under {virus_paths}")
+    #                 log(f"[{cfg.datevshot}]. Will attempt to copy {src_tar}. If successful, this will take many minutes ...")
     #
     #                 #tmp lock file (so only one attempt to copy and extract; since there are often many observations
     #                 #   in this file, only one of the tasks that are on that date should copy)
@@ -3554,7 +3554,7 @@ def initial_setup(cfg):
     #                                     fail = False #we should be okay now
     #
     #                             except:
-    #                                 print(f"[{cfg.datevshot}] Failed to copy/extract date tar file.",traceback.format_exc())
+    #                                 log(f"[{cfg.datevshot}] Failed to copy/extract date tar file.",traceback.format_exc())
     #
     #                             #not necessary ... changed to just extract the key files
     #                             #now we should delete the big <date>.tar file
@@ -3565,8 +3565,8 @@ def initial_setup(cfg):
     #                             fail = False #another process DID copy and the file we want is there now
     #
     #             if fail:
-    #                 print(f"[{cfg.datevshot}] FATAL. Could not locate {virustar} under {virus_paths}")
-    #                 print(f"[{cfg.datevshot}] You may need to first copy and extract "
+    #                 log(f"[{cfg.datevshot}] FATAL. Could not locate {virustar} under {virus_paths}")
+    #                 log(f"[{cfg.datevshot}] You may need to first copy and extract "
     #                       f"{HETRaw_archive}/<date>.tar to your local het_raw directory")
     #                 return -1
     #             else: #we did eventually get what we need, so go back to the working dir and continue
@@ -3584,10 +3584,10 @@ def initial_setup(cfg):
         with lock:
             # obtained the lock, so we should be good now,
             # just release and go
-            print(f"[{cfg.datevshot}] Mutex checked. Okay. Safe to local_repo.")
+            log(f"[{cfg.datevshot}] Mutex checked. Okay. Safe to local_repo.")
             # lock auto releases
 
-        print(f"[{cfg.datevshot}] Copying source code to working directory {cfg.cwd}...")
+        log(f"[{cfg.datevshot}] Copying source code to working directory {cfg.cwd}...")
         ## if ANY of this fails it is fatal
 
         #shutil.copy2(os.path.join(cfg.scriptdir, "science_reductions", "rsetups"),".") #no, this function is its equivalent
@@ -3632,7 +3632,7 @@ def initial_setup(cfg):
         if os.path.exists(os.path.join(karlfplane, f"fp{cfg.datevshot[0:8]}")):
             shutil.copy2(os.path.join(karlfplane, f"fp{cfg.datevshot[0:8]}"), os.path.join(cfg.cwd,"vdrp/fplane"))
         else:
-            print(f"[{cfg.datevshot}] !Warning! fplane file (fp{cfg.datevshot[0:8]}) not found. Using last known ({LastKnownFplane}) instead. ")
+            log(f"[{cfg.datevshot}] !Warning! fplane file (fp{cfg.datevshot[0:8]}) not found. Using last known ({LastKnownFplane}) instead. ")
             shutil.copy2(os.path.join(karlfplane, f"{LastKnownFplane}"), os.path.join(cfg.cwd, f"vdrp/fplane/fp{cfg.datevshot[0:8]}"))
 
         #fix paths in the . cfg files
@@ -3736,7 +3736,7 @@ def add_text_to_image(cfg, image_path: str, text: str):
         except IOError:
             #this will not work, does not give you a TrueType font needed to insert into png
             #font = ImageFont.load_default()
-            print(f"[{cfg.datevshot}] Exception! in add_text_to_image(). Cannot find fonts.", traceback.format_exc())
+            log(f"[{cfg.datevshot}] Exception! in add_text_to_image(). Cannot find fonts.", traceback.format_exc())
             return
 
         # Measure text size
@@ -3764,9 +3764,9 @@ def add_text_to_image(cfg, image_path: str, text: str):
 
         # Save — convert back to RGBA-safe PNG
         img.save(image_path, format="PNG")
-        print(f"[{cfg.datevshot}] Updated image: {image_path}")
+        log(f"[{cfg.datevshot}] Updated image: {image_path}")
     except:
-        print(f"[{cfg.datevshot}] Exception! in add_text_to_image()", traceback.format_exc())
+        log(f"[{cfg.datevshot}] Exception! in add_text_to_image()", traceback.format_exc())
 
 
 def get_avg_sky(cfg):
@@ -3798,7 +3798,7 @@ def get_avg_sky(cfg):
         img_exps = [os.path.basename(x).split("exp")[1][:2] for x in img_fns]
 
         if len(fns) == 0:
-            print(f"[{cfg.datevshot}] Can not collect avg_sky. Could not locate: {pattern}")
+            log(f"[{cfg.datevshot}] Can not collect avg_sky. Could not locate: {pattern}")
             return None
         #column headers
         #Spc_slt_iid_am Factor N_c Avg Scale W0 W1 Nlo Avg_orig chi Frac_c2 Frac0
@@ -3815,14 +3815,14 @@ def get_avg_sky(cfg):
                     img_path = img_fns[ix]
                     add_text_to_image(cfg, img_path, f"sky {x_avg:0.1f}")
                 except:
-                    print(f"[{cfg.datevshot}] Exception! in get_avg_sky(), trying to add sky value to png", traceback.format_exc())
+                    log(f"[{cfg.datevshot}] Exception! in get_avg_sky(), trying to add sky value to png", traceback.format_exc())
 
         if len(avg) > 1:
             avg_sky = np.nanmean(avg)
         elif len(avg) == 1:
             avg_sky = avg[0]
         else: #this is a problem
-            print(f"[{cfg.datevshot}] Warning! Could not compute an average sky in get_avg_sky(): avg={avg}")
+            log(f"[{cfg.datevshot}] Warning! Could not compute an average sky in get_avg_sky(): avg={avg}")
 
         #the lower level file may be deleted in the clean step, so save off here so can
         #update the h5 file in the ssr_hdf5 call in the next process
@@ -3831,7 +3831,7 @@ def get_avg_sky(cfg):
                 f.write(f"{avg_sky}\n")
 
     except:
-        print(f"[{cfg.datevshot}] Exception! in get_avg_sky()", traceback.format_exc())
+        log(f"[{cfg.datevshot}] Exception! in get_avg_sky()", traceback.format_exc())
 
     return avg_sky
 
@@ -3850,7 +3850,7 @@ def get_detection_counts(cfg):
                 cfg.num_line_dets = len(t)
                 del t
         else:
-            print(f"[{cfg.datevshot}] Warning! Could not load number of line detections. Not found: {fn}")
+            log(f"[{cfg.datevshot}] Warning! Could not load number of line detections. Not found: {fn}")
 
         fn = os.path.join(cfg.cwd_orig, f"sci{cfg.datevshot}/{cfg.datevshot}_cont_sourcecat.tab")
         if os.path.exists(fn):
@@ -3859,9 +3859,9 @@ def get_detection_counts(cfg):
                 cfg.num_cont_dets = len(t)
                 del t
         else:
-            print(f"[{cfg.datevshot}] Warning! Could not load number of cont detections. Not found: {fn}")
+            log(f"[{cfg.datevshot}] Warning! Could not load number of cont detections. Not found: {fn}")
     except:
-        print(f"[{cfg.datevshot}] Warning! Could not load number of detections.",traceback.format_exc())
+        log(f"[{cfg.datevshot}] Warning! Could not load number of detections.",traceback.format_exc())
 
 
 
@@ -3902,7 +3902,7 @@ def update_vdrp_config_limits(cfg):
             #vmin = 0 #if both are zero, it will trigger a zScale calculation
             #vmax = 0
 
-            print(f"[{cfg.datevshot}] Updating vdrp calibration star maglimit to {magmax}")# and contrast vmin/vmax to {vmin}/{vmax}.")
+            log(f"[{cfg.datevshot}] Updating vdrp calibration star maglimit to {magmax}")# and contrast vmin/vmax to {vmin}/{vmax}.")
 
             files = ['vdrp/vdrp.config','vdrp/vdrp.config.original',
                      'vdrp/vdrp.config.gaia','vdrp/vdrp.config.sdss','vdrp/vdrp.config.panstarrs']
@@ -3914,7 +3914,7 @@ def update_vdrp_config_limits(cfg):
                 #system_command(cfg, f"sed -i s/\"cofes_vis_vmax = 30\"/\"cofes_vis_vmax = {vmax}\"/ {file}")
 
     except:
-        print(f"[{cfg.datevshot}] Exception! in update_vdrp_config_limits()", traceback.format_exc())
+        log(f"[{cfg.datevshot}] Exception! in update_vdrp_config_limits()", traceback.format_exc())
 
 def node_setup(cfg): #,safelimit=0):
     """
@@ -3933,7 +3933,7 @@ def node_setup(cfg): #,safelimit=0):
         #if safelimit > 0 and MaxSafeActiveShots > 0:
         if MaxSafeActiveShots > 0:
             redlight = True
-            print(f"[{cfg.datevshot}] checking if safe to start ...")
+            log(f"[{cfg.datevshot}] checking if safe to start ...")
 
             while redlight:
                 with lock:
@@ -3946,9 +3946,9 @@ def node_setup(cfg): #,safelimit=0):
                             #f.write(f"BEGIN {str(datetime.now())}\n")
                             f.write(f"PID: {os.getpid()} BEGAN {str(datetime.now())} from {cfg.cwd_orig}\n")
                         redlight = False
-                        print(f"[{cfg.datevshot}] cleared to start.")
+                        log(f"[{cfg.datevshot}] cleared to start.")
                     else:
-                        print(f"[{cfg.datevshot}] too many active shots ({active}). Limit {MaxSafeActiveShots}. Must wait ...")
+                        log(f"[{cfg.datevshot}] too many active shots ({active}). Limit {MaxSafeActiveShots}. Must wait ...")
 
                 if redlight:
                     time.sleep(SafeActiveShotsSleep)
@@ -4005,7 +4005,7 @@ def node_active_ct(cfg):
         with lock: #lock ACQUIRED here
             fns = glob.glob(os.path.join(Node_basedir,"*.sync"))
             ct = len(fns)
-            print(f"[{cfg.datevshot}] checking active shot count for shared /tmp: {ct}")
+            log(f"[{cfg.datevshot}] checking active shot count for shared /tmp: {ct}")
         #lock auto releases
     except:
         print(f"Exception! in node_active_ct()", traceback.format_exc())
@@ -4085,13 +4085,13 @@ def get_local_ra_dec(cfg):
         # outfile = os.path.join(cfg.cwd, f"{cfg.datevshot}.local_gettar")
         # try:
         #     if os.path.exists(outfile):
-        #         print(f"[{cfg.datevshot}] Using existing local gettar file {outfile}")
+        #         log(f"[{cfg.datevshot}] Using existing local gettar file {outfile}")
         #         all_exp = np.loadtxt(outfile,dtype=str,usecols=3,unpack=True)
         #         return len(np.unique(all_exp)) , outfile
         # except:
-        #     print(f"[{cfg.datevshot}] Exception using existing local gettar file {outfile}. Will rebuild.",traceback.format_exc())
+        #     log(f"[{cfg.datevshot}] Exception using existing local gettar file {outfile}. Will rebuild.",traceback.format_exc())
 
-        #print(f"[{cfg.datevshot}] Building local gettar file for run1s and run2s ... ")
+        #log(f"[{cfg.datevshot}] Building local gettar file for run1s and run2s ... ")
 
         if cfg.local_het_raw_path is None:
             return None, None, None
@@ -4113,12 +4113,12 @@ def get_local_ra_dec(cfg):
                 try:
                     l_exp = x.split("/")[1]
                 except:
-                    print(f"[{cfg.datevshot}] Notice! get_local_ra_dec() unexpected tarpath: {x}")
+                    log(f"[{cfg.datevshot}] Notice! get_local_ra_dec() unexpected tarpath: {x}")
 
             u_exp, u_exp_idx = np.unique(l_exp, return_index=True)
 
         if len(u_exp) == 0: #none found
-            print(f"[{cfg.datevshot}] Warning! get_local_ra_dec() could not determine exposures.")
+            log(f"[{cfg.datevshot}] Warning! get_local_ra_dec() could not determine exposures.")
             return None, None, None
 
 
@@ -4166,15 +4166,15 @@ def get_local_ra_dec(cfg):
         if cfg.total_exp_time is None or cfg.total_exp_time <= 0:
             cfg.total_exp_time = np.sum(all_time)
 
-        print(f"[{cfg.datevshot}] Set shot RA, Dec to ({cfg.shot_ra:0.6f},{cfg.shot_dec:0.6f}) or "
+        log(f"[{cfg.datevshot}] Set shot RA, Dec to ({cfg.shot_ra:0.6f},{cfg.shot_dec:0.6f}) or "
               f"(hours) ({cfg.shot_ra / 15.0:0.6f},{cfg.shot_dec:0.6f}) with {track_str} track")
-        print(f"[{cfg.datevshot}] Set shot exp time: {cfg.total_exp_time:0.1f}s")
-        print(f"[{cfg.datevshot}] Set shot object: {cfg.shot_obj}")
+        log(f"[{cfg.datevshot}] Set shot exp time: {cfg.total_exp_time:0.1f}s")
+        log(f"[{cfg.datevshot}] Set shot object: {cfg.shot_obj}")
 
         tf.close()
 
     except:
-        print(f"[{cfg.datevshot}] Exception! in get_local_ra_dec()", traceback.format_exc())
+        log(f"[{cfg.datevshot}] Exception! in get_local_ra_dec()", traceback.format_exc())
 
     return cfg.shot_ra, cfg.shot_dec, cfg.shot_track
 
@@ -4199,14 +4199,14 @@ def make_local_gettar_file(cfg):
         # outfile = os.path.join(cfg.cwd, f"{cfg.datevshot}.local_gettar")
         # try:
         #     if os.path.exists(outfile):
-        #         print(f"[{cfg.datevshot}] Using existing local gettar file {outfile}")
+        #         log(f"[{cfg.datevshot}] Using existing local gettar file {outfile}")
         #         all_exp = np.loadtxt(outfile,dtype=str,usecols=3,unpack=True)
         #         return len(np.unique(all_exp)) , outfile
         # except:
-        #     print(f"[{cfg.datevshot}] Exception using existing local gettar file {outfile}. Will rebuild.",traceback.format_exc())
+        #     log(f"[{cfg.datevshot}] Exception using existing local gettar file {outfile}. Will rebuild.",traceback.format_exc())
 
 
-        print(f"[{cfg.datevshot}] Building local gettar file for run1s and run2s ... " )
+        log(f"[{cfg.datevshot}] Building local gettar file for run1s and run2s ... " )
 
         tarfile_path = os.path.join(cfg.local_het_raw_path,f"{cfg.datevshot[:8]}/virus/virus0000{cfg.datevshot[-3:]}.tar")
 
@@ -4215,7 +4215,7 @@ def make_local_gettar_file(cfg):
         obstype = os.path.basename(tarpaths[0]).split('.')[-2][-3:]
         #only want if is "sci" ... if not, this is an error and the reduction should stop
         if obstype != 'sci':
-            print(f"[{cfg.datevshot}] {obstype} != sci")
+            log(f"[{cfg.datevshot}] {obstype} != sci")
             tf.close()
             return 0, None
 
@@ -4252,7 +4252,7 @@ def make_local_gettar_file(cfg):
                 cfg.shot_track = 0 #east
             else:
                 cfg.shot_track = 1  #west
-            print(f"[{cfg.datevshot}] Set shot RA, Dec to ({cfg.shot_ra:0.6f},{cfg.shot_dec:0.6f}) or (hours) ({cfg.shot_ra/15.0:0.6f},{cfg.shot_dec:0.6f})")
+            log(f"[{cfg.datevshot}] Set shot RA, Dec to ({cfg.shot_ra:0.6f},{cfg.shot_dec:0.6f}) or (hours) ({cfg.shot_ra/15.0:0.6f},{cfg.shot_dec:0.6f})")
 
         tf.close()
 
@@ -4262,12 +4262,12 @@ def make_local_gettar_file(cfg):
                 for fs in filestring:
                     fgt.write(fs)
 
-            print(f"[{cfg.datevshot}] Wrote {outfile} for run1s and run2s ... ")
+            log(f"[{cfg.datevshot}] Wrote {outfile} for run1s and run2s ... ")
             cfg.gettar_fn = outfile
             return len(np.unique(all_exp)), outfile
 
     except:
-        print(f"[{cfg.datevshot}] Exception! in make_local_gettar_file()", traceback.format_exc())
+        log(f"[{cfg.datevshot}] Exception! in make_local_gettar_file()", traceback.format_exc())
         return 0, None
 
 def run_run1s(cfg):
@@ -4279,7 +4279,7 @@ def run_run1s(cfg):
     :return:
     """
 
-    print(f"[{cfg.datevshot}] run1s ...")
+    log(f"[{cfg.datevshot}] run1s ...")
     #probably should change to use subprocess
     if cfg.exp > 0:
         exps = [cfg.exp]
@@ -4296,19 +4296,19 @@ def run_run1s(cfg):
         if cfg.multifits_only:
             if cfg.sub_shot is not None:
                 if cfg.ifuslot is not None:
-                    print(f"[{cfg.datevshot}] substituting shot {cfg.sub_shot} for gettar lookup and using only IFUSlot {cfg.ifuslot}...")
+                    log(f"[{cfg.datevshot}] substituting shot {cfg.sub_shot} for gettar lookup and using only IFUSlot {cfg.ifuslot}...")
                     system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 {cfg.sub_shot} $3 {cfg.ifuslot}'# run1s")
                     system_command(cfg, f"sed -i s#'$1,$2,$3,$4'#'$1,$2,\"{cfg.datevshot[-3:]}\",$4'# run1s")
                     system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 {cfg.sub_shot} $3 {cfg.ifuslot}'# run2s")
                     system_command(cfg, f"sed -i s#'$1,$2,$3,$4'#'$1,$2,\"{cfg.datevshot[-3:]}\",$4'# run2s")
                 else:
-                    print(f"[{cfg.datevshot}] substituting shot {cfg.sub_shot} for gettar lookup ...")
+                    log(f"[{cfg.datevshot}] substituting shot {cfg.sub_shot} for gettar lookup ...")
                     system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 {cfg.sub_shot} $3'# run1s")
                     system_command(cfg, f"sed -i s#'$1,$2,$3,$4'#'$1,$2,\"{cfg.datevshot[-3:]}\",$4'# run1s")
                     system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 {cfg.sub_shot} $3'# run2s")
                     system_command(cfg, f"sed -i s#'$1,$2,$3,$4'#'$1,$2,\"{cfg.datevshot[-3:]}\",$4'# run2s")
             elif cfg.ifuslot is not None:
-                print(f"[{cfg.datevshot}] using only IFUSlot {cfg.ifuslot}...")
+                log(f"[{cfg.datevshot}] using only IFUSlot {cfg.ifuslot}...")
                 system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 $2 $3 {cfg.ifuslot}'# run1s")
                 system_command(cfg, f"sed -i s#'$1 $2 $3'#'$1 $2 $3 {cfg.ifuslot}'# run2s")
 
@@ -4345,7 +4345,7 @@ def check_run1s(cfg):
     :return:
     """
 
-    print(f"[{cfg.datevshot}] todo:  check run1s ... see check_red1.ipynb")
+    log(f"[{cfg.datevshot}] todo:  check run1s ... see check_red1.ipynb")
 
     rc = 0
 
@@ -4372,7 +4372,7 @@ def vdrp_check_norms(cfg):
 
         if len(fns) == 0:
             rc = -1
-            print(f"[{cfg.datevshot}] vdrp : check norms ... no matches found")
+            log(f"[{cfg.datevshot}] vdrp : check norms ... no matches found")
         else:
             fns = sorted(fns)
             for fn in fns:
@@ -4405,7 +4405,7 @@ def vdrp_check_shout_ifu(cfg):
     path = "./"  # /scratch/03261/polonius/science_reductions/vdrp/shifts/"
     rc = 0
 
-    print(f"[{cfg.datevshot}] vdrp : check shout ifu ... ")
+    log(f"[{cfg.datevshot}] vdrp : check shout ifu ... ")
     try:
         wildcard = cfg.datevshot[0:6]
     except:
@@ -4413,10 +4413,10 @@ def vdrp_check_shout_ifu(cfg):
 
     paths = glob.glob(f"{path}{wildcard}*v???")
 
-    print(f"[{cfg.datevshot}] vdrp : checking {len(paths)} directories ... ")
+    log(f"[{cfg.datevshot}] vdrp : checking {len(paths)} directories ... ")
     if len(paths) == 0:
         rc = -1
-        print(f"[{cfg.datevshot}] vdrp : check shout ifu ... no matches found for: {path}{wildcard}*v??? ")
+        log(f"[{cfg.datevshot}] vdrp : check shout ifu ... no matches found for: {path}{wildcard}*v??? ")
 
     # for path in tqdm(paths):
     for path in paths:
@@ -4429,20 +4429,20 @@ def vdrp_check_shout_ifu(cfg):
             stats = os.stat(fn)
 
             if stats.st_size == 0:
-                print(f"[{cfg.datevshot}] vdrp : {basedir} : empty shout.ifu")
+                log(f"[{cfg.datevshot}] vdrp : {basedir} : empty shout.ifu")
                 rc = -1
             elif stats.st_size < 1000:
-                print(f"[{cfg.datevshot}] vdrp : {basedir} : small shout.ifu ({stats.st_size})")
+                log(f"[{cfg.datevshot}] vdrp : {basedir} : small shout.ifu ({stats.st_size})")
                 rc = -1
 
         except:
             print(traceback.format_exc())
-            print(f"[{cfg.datevshot}] cvdrp : {basedir} : unknown or missing shout.ifu")
+            log(f"[{cfg.datevshot}] cvdrp : {basedir} : unknown or missing shout.ifu")
 
     if rc != 0:
-        print(f"[{cfg.datevshot}] vdrp : check shout ifu ... fail ")
+        log(f"[{cfg.datevshot}] vdrp : check shout ifu ... fail ")
     else:
-        print(f"[{cfg.datevshot}] vdrp : check shout ifu ... OK")
+        log(f"[{cfg.datevshot}] vdrp : check shout ifu ... OK")
     return rc
 
 def vdrp_cp2dithall(cfg,catalog=None):
@@ -4452,7 +4452,7 @@ def vdrp_cp2dithall(cfg,catalog=None):
     :return:
     """
 
-    print(f"[{cfg.datevshot}] vdrp : cp2dithall ... ")
+    log(f"[{cfg.datevshot}] vdrp : cp2dithall ... ")
     rc = 0
     dirs = glob.glob(f"./{cfg.datevshot[0:6]}??v???")
     #note: do not want the log file YYYYMMDDvSSS.log
@@ -4466,7 +4466,7 @@ def vdrp_cp2dithall(cfg,catalog=None):
             dithall_use = os.path.join(d, "dithall.use")
             if not os.path.exists(dithall_use):
                 rc = -1
-                print(f"[{cfg.datevshot}] vdrp : cp2dithall {catalog} ... fail. File does not exist {os.getcwd()} {dithall_use}")
+                log(f"[{cfg.datevshot}] vdrp : cp2dithall {catalog} ... fail. File does not exist {os.getcwd()} {dithall_use}")
                 continue
 
             with open(dithall_use, "r") as f1:
@@ -4483,9 +4483,9 @@ def vdrp_cp2dithall(cfg,catalog=None):
             rc = -1
 
     if rc != 0:
-        print(f"[{cfg.datevshot}] vdrp : cp2dithall {catalog}... fail")
+        log(f"[{cfg.datevshot}] vdrp : cp2dithall {catalog}... fail")
     else:
-        print(f"[{cfg.datevshot}] vdrp : cp2dithall {catalog}... OK")
+        log(f"[{cfg.datevshot}] vdrp : cp2dithall {catalog}... OK")
     return rc
 
 def run_vdrp(cfg):
@@ -4499,7 +4499,7 @@ def run_vdrp(cfg):
         #command is based on rta.YYYYMM
         #run_shifts 20240730 009 16.317927 33.689304 1  20240730 GAIA
         fail_gaia = False
-        print(f"[{cfg.datevshot}] VDRP: GAIA")
+        log(f"[{cfg.datevshot}] VDRP: GAIA")
         try:
             with open(f"rta.{cfg.datevshot[0:6]}", "r") as rta:
                 for line in rta:  # really should only be one line
@@ -4520,7 +4520,7 @@ def run_vdrp(cfg):
                 fail_gaia = True
 
         except Exception as e:
-            print(f"[{cfg.datevshot}] VDRP: GAIA fail.", e, "\n", traceback.format_exc())
+            log(f"[{cfg.datevshot}] VDRP: GAIA fail.", e, "\n", traceback.format_exc())
             fail_gaia = True
 
         return fail_gaia
@@ -4529,7 +4529,7 @@ def run_vdrp(cfg):
         #command is based on rta.YYYYMM
         #run_shifts 20240730 009 16.317927 33.689304 1  20240730 SDSS
         fail_sdss = False
-        print(f"[{cfg.datevshot}] VDRP: SDSS")
+        log(f"[{cfg.datevshot}] VDRP: SDSS")
         try:
             with open(f"rta.{cfg.datevshot[0:6]}", "r") as rta:
                 for line in rta:  # really should only be one line
@@ -4550,7 +4550,7 @@ def run_vdrp(cfg):
                 fail_sdss = True
 
         except Exception as e:
-            print(f"[{cfg.datevshot}] VDRP: SDSS fail.", e, "\n", traceback.format_exc())
+            log(f"[{cfg.datevshot}] VDRP: SDSS fail.", e, "\n", traceback.format_exc())
             fail_sdss = True
 
         return fail_sdss
@@ -4594,37 +4594,37 @@ def run_vdrp(cfg):
         #GAIA first
         fail_gaia = do_gaia(cfg)
         if fail_gaia:
-            print(f"[{cfg.datevshot}] VDRP: Astrometry FAIL with GAIA. Attempting SDSS as fallback.")
+            log(f"[{cfg.datevshot}] VDRP: Astrometry FAIL with GAIA. Attempting SDSS as fallback.")
             fail_sdss = do_sdss(cfg)
             if fail_sdss:
-                print(f"[{cfg.datevshot}] VDRP: Astrometry fallback FAIL with SDSS.")
+                log(f"[{cfg.datevshot}] VDRP: Astrometry fallback FAIL with SDSS.")
             else:
-                print(f"[{cfg.datevshot}] VDRP: Astrometry fallback PASS with SDSS.")
+                log(f"[{cfg.datevshot}] VDRP: Astrometry fallback PASS with SDSS.")
                 used_sdss = True
         else:
             used_gaia = True
     elif cfg.starcat_ast == 'sdss':
         fail_sdss = do_sdss(cfg)
         if fail_sdss:
-            print(f"[{cfg.datevshot}] VDRP: Astrometry FAIL with SDSS. Attempting GAIA as fallback.")
+            log(f"[{cfg.datevshot}] VDRP: Astrometry FAIL with SDSS. Attempting GAIA as fallback.")
             fail_gaia = do_sdss(cfg)
             if fail_gaia:
-                print(f"[{cfg.datevshot}] VDRP: Astrometry fallback FAIL with GAIA.")
+                log(f"[{cfg.datevshot}] VDRP: Astrometry fallback FAIL with GAIA.")
             else:
-                print(f"[{cfg.datevshot}] VDRP: Astrometry fallback PASS with GAIA.")
+                log(f"[{cfg.datevshot}] VDRP: Astrometry fallback PASS with GAIA.")
                 used_gaia = True
         else:
             used_sdss = True
     else: #should not happend
-        print(f"[{cfg.datevshot}] VDRP: unexpected starcat_ast value [{cfg.starcat_ast}] ; using GAIA as default ")
+        log(f"[{cfg.datevshot}] VDRP: unexpected starcat_ast value [{cfg.starcat_ast}] ; using GAIA as default ")
         fail_gaia = do_gaia(cfg)
         if fail_gaia:
-            print(f"[{cfg.datevshot}] VDRP: Astrometry FAIL with GAIA (2). Attempting SDSS as fallback.")
+            log(f"[{cfg.datevshot}] VDRP: Astrometry FAIL with GAIA (2). Attempting SDSS as fallback.")
             fail_sdss = do_sdss(cfg)
             if fail_sdss:
-                print(f"[{cfg.datevshot}] VDRP: Astrometry fallback FAIL with SDSS (2).")
+                log(f"[{cfg.datevshot}] VDRP: Astrometry fallback FAIL with SDSS (2).")
             else:
-                print(f"[{cfg.datevshot}] VDRP: Astrometry fallback PASS with SDSS (2).")
+                log(f"[{cfg.datevshot}] VDRP: Astrometry fallback PASS with SDSS (2).")
                 used_sdss = True
         else:
             used_gaia = True
@@ -4641,7 +4641,7 @@ def run_vdrp(cfg):
     #always third
     if do_panstarrs or (fail_gaia and fail_sdss):
         #PanSTARRS
-        print(f"[{cfg.datevshot}] VDRP: PANSTARRS")
+        log(f"[{cfg.datevshot}] VDRP: PANSTARRS")
         try:
             with open(f"rta.{cfg.datevshot[0:6]}","r") as rta:
                 for line in rta: #really should only be one line
@@ -4664,24 +4664,24 @@ def run_vdrp(cfg):
                 used_panstarrs = True
 
         except Exception as e:
-            print(f"[{cfg.datevshot}] VDRP: PANSTARRS fail.", e, "\n", traceback.format_exc())
+            log(f"[{cfg.datevshot}] VDRP: PANSTARRS fail.", e, "\n", traceback.format_exc())
             fail_panstarrs = True
 
     #update to which one was actually used (should be 0 or 1 at most)
     if used_gaia:
         if cfg.starcat_ast != 'gaia':
-            print(f"[{cfg.datevshot}] VDRP: updating astrometry catalog used to GAIA")
+            log(f"[{cfg.datevshot}] VDRP: updating astrometry catalog used to GAIA")
             cfg.starcat_ast = "gaia"
     elif used_sdss:
         if cfg.starcat_ast != 'sdss':
-            print(f"[{cfg.datevshot}] VDRP: updating astrometry catalog used to SDSS")
+            log(f"[{cfg.datevshot}] VDRP: updating astrometry catalog used to SDSS")
             cfg.starcat_ast = "sdss"
     elif used_panstarrs:
         if cfg.starcat_ast != 'panstarrs':
-            print(f"[{cfg.datevshot}] VDRP: updating astrometry catalog used to PANSTARRS")
+            log(f"[{cfg.datevshot}] VDRP: updating astrometry catalog used to PANSTARRS")
             cfg.starcat_ast = "panstarrs"
     else: #going to be fatal
-        print(f"[{cfg.datevshot}] VDRP: unable to fix astrometry.")
+        log(f"[{cfg.datevshot}] VDRP: unable to fix astrometry.")
 
     #todo: which is the main dithall, etc???? (normally it is SDSS for calibration and gaia for astrometry)
     #print("!!! todo: copy GAIA dithaall to /scatch/projects and /corral-repl ???")
@@ -4709,28 +4709,28 @@ def check_vdrp(cfg):
 
     # check the dithall.gaia exists
     if os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.gaia")):
-        print(f"[{cfg.datevshot}] VDRP: GAIA [Pass]")
+        log(f"[{cfg.datevshot}] VDRP: GAIA [Pass]")
     else:
-        print(f"[{cfg.datevshot}] VDRP: GAIA [FAIL]")
+        log(f"[{cfg.datevshot}] VDRP: GAIA [FAIL]")
         fail_gaia = True
 
     # check the dithall.sdss exists
     if os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.sdss")):
-        print(f"[{cfg.datevshot}] VDRP: SDSS [Pass]")
+        log(f"[{cfg.datevshot}] VDRP: SDSS [Pass]")
     else:
-        print(f"[{cfg.datevshot}] VDRP: SDSS [FAIL]")
+        log(f"[{cfg.datevshot}] VDRP: SDSS [FAIL]")
         fail_sdss = True
 
     # check the dithall.panstarrs exists (this might not have been run, so it may be okay if it did not)
     if os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.panstarrs")):
-        print(f"[{cfg.datevshot}] VDRP: PanSTARRs [Pass]")
+        log(f"[{cfg.datevshot}] VDRP: PanSTARRs [Pass]")
     else:
         fail_panstarrs = True
         if (fail_gaia and fail_sdss):
-            print(f"[{cfg.datevshot}] VDRP: PanSTARRs [FAIL]")
+            log(f"[{cfg.datevshot}] VDRP: PanSTARRs [FAIL]")
         else:
             #maybe it just was not set to run
-            print(f"[{cfg.datevshot}] VDRP: PanSTARRs not found.")
+            log(f"[{cfg.datevshot}] VDRP: PanSTARRs not found.")
 
     if fail_gaia and fail_sdss and fail_panstarrs:
         return -1
@@ -4767,7 +4767,7 @@ def prepare_reduction_dir(cfg):
 
             tarfile = f"d{cfg.datevshot[0:8]}s{cfg.datevshot[-3:]}{exp}_mu.tar"
 
-            print(f"[{cfg.datevshot}] Creating directory and untarring ({expdir}/{tarfile}) multi*fits to: {datadir}")
+            log(f"[{cfg.datevshot}] Creating directory and untarring ({expdir}/{tarfile}) multi*fits to: {datadir}")
 
             Path(datadir).mkdir(parents=True, exist_ok=True)
 
@@ -4777,7 +4777,7 @@ def prepare_reduction_dir(cfg):
 
             #CoFe*.fits
             tarfile = f"d{cfg.datevshot[0:8]}s{cfg.datevshot[-3:]}{exp}_co.tar"
-            print(f"[{cfg.datevshot}] Untarring ({expdir}/{tarfile}) CoFe*fits to: {datadir}")
+            log(f"[{cfg.datevshot}] Untarring ({expdir}/{tarfile}) CoFe*fits to: {datadir}")
             cmd = f"tar -xvf {expdir}/{tarfile} -C {datadir}"
             system_command(cfg,cmd)
 
@@ -4799,7 +4799,7 @@ def run_fluxcalibration(cfg,star_catalog='sdss'):
 
     # NOTICE: this operates under two directories ... there is a second directory change partway down
 
-    print(f"[{cfg.datevshot}] flux calibration using {star_catalog} ... ")
+    log(f"[{cfg.datevshot}] flux calibration using {star_catalog} ... ")
 
     #setup the softlink for the star_catalog
     os.chdir(os.path.join(cfg.cwd, "vdrp/shifts"))
@@ -4826,11 +4826,11 @@ def run_fluxcalibration(cfg,star_catalog='sdss'):
         system_command(cfg, f"unlink local.tp")
     system_command(cfg,f"ln -s tp/{cfg.datevshot}sedtp_f.dat local.tp")
 
-    print(f"[{cfg.datevshot}] flux calibration using {star_catalog} (rsetstar) ... ")
+    log(f"[{cfg.datevshot}] flux calibration using {star_catalog} (rsetstar) ... ")
     #call rsetstar independently
     system_command(cfg, f"rsetstar {cfg.datevshot[0:8]} {cfg.datevshot[-3:]} {star_catalog}")
 
-    print(f"[{cfg.datevshot}] flux calibration using {star_catalog} (rallcal) ... ")
+    log(f"[{cfg.datevshot}] flux calibration using {star_catalog} (rallcal) ... ")
 
 
     #may need to update the tp upper limit
@@ -4846,7 +4846,7 @@ def run_fluxcalibration(cfg,star_catalog='sdss'):
         tp_upper = max(0.25, 0.25 * linear_exptime_scale(cfg))
 
         if tp_upper > 0.25:
-            print(f"[{cfg.datevshot}] *** Altering max tp from 0.25 to {round(tp_upper,2)} due to long exptime ({cfg.total_exp_time}s)")
+            log(f"[{cfg.datevshot}] *** Altering max tp from 0.25 to {round(tp_upper,2)} due to long exptime ({cfg.total_exp_time}s)")
             base_tp_str = "$2<0.25"
             tp_str = f"$2<{round(tp_upper,2)}"
 
@@ -4854,9 +4854,9 @@ def run_fluxcalibration(cfg,star_catalog='sdss'):
             system_command(cfg, f"sed -i s/\"{base_tp_str}\"/\"{tp_str}\"/ rgettp")
             system_command(cfg, f"sed -i s/\"{base_tp_str}\"/\"{tp_str}\"/ cal_script/rgettp")
         else:
-            print(f"[{cfg.datevshot}] Exposure is typical. Will not adjust tp calculation.")
+            log(f"[{cfg.datevshot}] Exposure is typical. Will not adjust tp calculation.")
     else:
-        print(f"[{cfg.datevshot}] *** WARNING!!! exposure time is not known. Cannot adjust tp calculation.")
+        log(f"[{cfg.datevshot}] *** WARNING!!! exposure time is not known. Cannot adjust tp calculation.")
 
     #no longer includes rsetstar
     system_command(cfg,f"rallcal {cfg.datevshot[0:8]} {cfg.datevshot[-3:]}")
@@ -4891,18 +4891,18 @@ def check_fluxcalibration(cfg):
             if np.shape(out)[0] > 0:
                 if not np.any(out[:, 5]):  # 5 is the actual throughput, I think and 4 is tied to it? cols 2, 3 don't seem to matter
                     rc = -1
-                    print(f"[{cfg.datevshot}] bad throughput {cfg.datevshot}. All zero values.")
+                    log(f"[{cfg.datevshot}] bad throughput {cfg.datevshot}. All zero values.")
             else:
                 rc = -1
-                print(f"[{cfg.datevshot}] bad throughput {cfg.datevshot}. *sedtp_f.dat is empty.")
+                log(f"[{cfg.datevshot}] bad throughput {cfg.datevshot}. *sedtp_f.dat is empty.")
         else:
             rc = -1
-            print(f"[{cfg.datevshot}] bad throughput {cfg.datevshot}. *sedtp_f.dat file does not exist.")
+            log(f"[{cfg.datevshot}] bad throughput {cfg.datevshot}. *sedtp_f.dat file does not exist.")
     except:
         print(traceback.format_exc())
         rc = -1
-        print(f"[{cfg.datevshot}] bad throughput {cfg.datevshot}")
-        print(f"[{cfg.datevshot}] bad throughput. output shape = {np.shape(out)}")
+        log(f"[{cfg.datevshot}] bad throughput {cfg.datevshot}")
+        log(f"[{cfg.datevshot}] bad throughput. output shape = {np.shape(out)}")
 
     return rc
 
@@ -4935,10 +4935,10 @@ def run_make_ifucen(cfg):
                 if badct < 3:  # allow 1 or 2 bad ifus
                     badsel = ras == -666
                     mf = np.loadtxt(f"ifucen_{cfg.datevshot}.dat", dtype=str, usecols=(0), unpack=True)
-                    print(f"[{cfg.datevshot}] failed to get {badct} IFU centers ({mf[badsel]}). Treat as non-fatal.")
+                    log(f"[{cfg.datevshot}] failed to get {badct} IFU centers ({mf[badsel]}). Treat as non-fatal.")
                     rc = 0 #call it non-fatal
                 else:
-                    print(f"[{cfg.datevshot}] failed to get {badct} IFU centers. Likely fatal.")
+                    log(f"[{cfg.datevshot}] failed to get {badct} IFU centers. Likely fatal.")
                     rc = -1
             else:
                 #all is good, assume anyway
@@ -4949,7 +4949,7 @@ def run_make_ifucen(cfg):
     except:
         print(traceback.format_exc())
         rc = -1
-        print(f"[{cfg.datevshot}] failed to get IFU centers.")
+        log(f"[{cfg.datevshot}] failed to get IFU centers.")
 
 
     return rc
@@ -4995,41 +4995,41 @@ def run_rfft(cfg):
                         #  the entries were 166 characters each
                         bad_pattern = '\x00\x00\x00_\x00\x00\x00_\x00\x00\x00_'
                         if col1[0] == bad_pattern:
-                            print(f"[{cfg.datevshot}] rfft [FAIL] {fn}. Bad data/format.")
+                            log(f"[{cfg.datevshot}] rfft [FAIL] {fn}. Bad data/format.")
                         else:
                             #assume good
-                            print(f"[{cfg.datevshot}] rfft [Pass] {fn}")
+                            log(f"[{cfg.datevshot}] rfft [Pass] {fn}")
                     elif suffix == "ds9.reg": #not important, but just assume good
-                        print(f"[{cfg.datevshot}] rfft [Pass] {fn}")
+                        log(f"[{cfg.datevshot}] rfft [Pass] {fn}")
                     elif suffix == "sky.dat": #this is the easy one to check
                         col2 = np.loadtxt(fn,dtype=float,usecols=[1])
                         if np.any(col2):
-                            print(f"[{cfg.datevshot}] rfft [Pass] {fn}")
+                            log(f"[{cfg.datevshot}] rfft [Pass] {fn}")
                         else:
-                            print(f"[{cfg.datevshot}] rfft [FAIL] {fn}. All zero values.")
+                            log(f"[{cfg.datevshot}] rfft [FAIL] {fn}. All zero values.")
                     else: #this is the fits ... do we want to check it?
-                        print(f"[{cfg.datevshot}] rfft [Pass] {fn}")
+                        log(f"[{cfg.datevshot}] rfft [Pass] {fn}")
 
                 else:
-                    print(f"[{cfg.datevshot}] rfft [FAIL] {fn} file not found")
+                    log(f"[{cfg.datevshot}] rfft [FAIL] {fn} file not found")
                     rc = -1 #even though this is fatal, go ahead and loop over all files and expXX so can get into the log
                             #could be a useful diagnoistic
 
     except:
         #print(traceback.format_exc())
         rc = -1
-        print(f"[{cfg.datevshot}] Exception! run_rfft", traceback.format_exc())
+        log(f"[{cfg.datevshot}] Exception! run_rfft", traceback.format_exc())
 
     avg_sky = get_avg_sky(cfg)
     if avg_sky is not None:
         cfg.avg_sky = avg_sky
         if avg_sky > MAX_SAFE_AVG_SKY:
             if avg_sky >= FAIL_AVG_SKY:
-                print(f"[{cfg.datevshot}] Average Sky is catastrophically large and/or unable to be fit: {avg_sky:0.1f}.")
+                log(f"[{cfg.datevshot}] Average Sky is catastrophically large and/or unable to be fit: {avg_sky:0.1f}.")
                 rc = -1  # fatal
             else:
                 #not fatal, but still a warning
-                print(f"[{cfg.datevshot}] Average Sky is problematically large: {avg_sky:0.1f}. Non-fatal.")
+                log(f"[{cfg.datevshot}] Average Sky is problematically large: {avg_sky:0.1f}. Non-fatal.")
     return rc
 
 
@@ -5043,9 +5043,9 @@ def mp_rcal_worker(out_list,cfg,set_idx,indicies,multis, ras, decs):
     :return:
     """
 
-    print(f"[{cfg.datevshot}] idx[{set_idx}] mp_rcal_worker serial for: {multis}",flush=True)
+    log(f"[{cfg.datevshot}] idx[{set_idx}] mp_rcal_worker serial for: {multis}",flush=True)
     for multi, ra, dec, ix in zip(multis, ras, decs,indicies):
-        print(f"[{cfg.datevshot}] (run_rcal) {set_idx}-{ix}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ",flush=True)  # ,end="")
+        log(f"[{cfg.datevshot}] (run_rcal) {set_idx}-{ix}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ",flush=True)  # ,end="")
 
         # grid_n = 3  # n x n so 3 = a 3x3 grid
         # grid_step = 0.5  # grid step size
@@ -5077,7 +5077,7 @@ def mp_rcal(cfg,multis, ras, decs,num_procs=NumProcs_mp_rcal):
         num_procs = int(np.floor(MaxTotalProcs_mp_rcal / active_shots))
         num_procs = max(1,min(num_procs,MaxPerShotProcs_mp_rcal)) #always at least one
 
-    print(f"[{cfg.datevshot}] flux calibration  ***MULTITHREADED*** (run_rcal) ({len(ras)}), num_procs = {num_procs}...")
+    log(f"[{cfg.datevshot}] flux calibration  ***MULTITHREADED*** (run_rcal) ({len(ras)}), num_procs = {num_procs}...")
 
     with multiprocessing.Manager() as manager:
         mgr_list = manager.list()
@@ -5085,7 +5085,7 @@ def mp_rcal(cfg,multis, ras, decs,num_procs=NumProcs_mp_rcal):
         processes = []
 
         for i in range(num_procs):
-            print(f"[{cfg.datevshot}] (run_rcal): Spinning up mp_rcal i={i},  len(multis) = {len(multis[idx[i]])}, idx[i] = {idx[i]}")
+            log(f"[{cfg.datevshot}] (run_rcal): Spinning up mp_rcal i={i},  len(multis) = {len(multis[idx[i]])}, idx[i] = {idx[i]}")
             process = multiprocessing.Process(target=mp_rcal_worker,
                                                args=(mgr_list,cfg,i,idx[i],multis[idx[i]],ras[idx[i]],decs[idx[i]]))
 
@@ -5094,10 +5094,10 @@ def mp_rcal(cfg,multis, ras, decs,num_procs=NumProcs_mp_rcal):
 
         # Wait for processes to complete
         for process in processes:
-            print(f"[{cfg.datevshot}] (run_rcal): Joining {process}")
+            log(f"[{cfg.datevshot}] (run_rcal): Joining {process}")
             process.join()
 
-        print(f"[{cfg.datevshot}] (run_rcal): mp_rcal all done")
+        log(f"[{cfg.datevshot}] (run_rcal): mp_rcal all done")
         #again, don't care about the results here, just need them done
 
 def run_rcal(cfg):
@@ -5179,13 +5179,13 @@ def run_rcal(cfg):
 
         if len(passed_rcal_list) == len(ras):
             rc = 0
-            print(f"[{cfg.datevshot}] (run_rcal) All Pass")
+            log(f"[{cfg.datevshot}] (run_rcal) All Pass")
         elif len(failed_rcal_list) == len(ras):  # all failed
             rc = -1
-            print(f"[{cfg.datevshot}] (run_rcal) ALL FAIL")
+            log(f"[{cfg.datevshot}] (run_rcal) ALL FAIL")
         else:
             rc = 1
-            print(f"[{cfg.datevshot}] (run_rcal) Mixed results of {len(ras)}: {len(passed_rcal_list)} Pass, {len(failed_rcal_list)} FAIL")
+            log(f"[{cfg.datevshot}] (run_rcal) Mixed results of {len(ras)}: {len(passed_rcal_list)} Pass, {len(failed_rcal_list)} FAIL")
 
 
     except:
@@ -5205,13 +5205,13 @@ def mp_rf1_worker(out_list,cfg,set_idx,indicies,multis, ras, decs):
     :return:
     """
 
-    print(f"[{cfg.datevshot}] idx[{set_idx}] mp_rf1_worker serial for: {multis}",flush=True)
+    log(f"[{cfg.datevshot}] idx[{set_idx}] mp_rf1_worker serial for: {multis}",flush=True)
     for multi, ra, dec, ix in zip(multis, ras, decs,indicies):
-        print(f"[{cfg.datevshot}] (mp_rf1) : {set_idx}-{ix}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ",flush=True)  # ,end="")
+        log(f"[{cfg.datevshot}] (mp_rf1) : {set_idx}-{ix}) {multi[6:]}  {ra:0.7f} {dec:0.7f} ... ",flush=True)  # ,end="")
 
         #grid_n = 3 #n x n so 3 = a 3x3 grid
         #grid_step = 0.5 #grid step size
-        #print(f"[{cfg.datevshot}] *** test *** set grid_step and grid_n to 0.0 1")
+        #log(f"[{cfg.datevshot}] *** test *** set grid_step and grid_n to 0.0 1")
         # grid_n = 1
         # grid_step = 0.0
         grid_n = f"{int(cfg.linedet_parms[0])}"
@@ -5250,7 +5250,7 @@ def mp_rf1(cfg,multis, ras, decs,num_procs=NumProcs_mp_rf1):
         num_procs = int(np.floor(MaxTotalProcs_mp_rf1 / active_shots))
         num_procs = max(1,min(num_procs, MaxPerShotProcs_mp_rf1)) #always at least one
 
-    print(f"[{cfg.datevshot}] line detections ***MULTITHREADED*** (rdet_rf1) ({len(ras)}), using num_procs = {num_procs}...")
+    log(f"[{cfg.datevshot}] line detections ***MULTITHREADED*** (rdet_rf1) ({len(ras)}), using num_procs = {num_procs}...")
 
     with multiprocessing.Manager() as manager:
         mgr_list = manager.list()
@@ -5267,10 +5267,10 @@ def mp_rf1(cfg,multis, ras, decs,num_procs=NumProcs_mp_rf1):
 
         # Wait for processes to complete
         for process in processes:
-            print(f"[{cfg.datevshot}] (mp_rf1) : Joining {process}")
+            log(f"[{cfg.datevshot}] (mp_rf1) : Joining {process}")
             process.join()
 
-        print(f"[{cfg.datevshot}] (mp_rf1) : rdet_rf1 all done")
+        log(f"[{cfg.datevshot}] (mp_rf1) : rdet_rf1 all done")
         #again, don't care about the results here, just need them done
 
 def rdet_rf1(cfg):
@@ -5312,12 +5312,12 @@ def rdet_rf1(cfg):
         #     #check that .list, .mc, .spec exist
         #     #20240730v009_025_067_032.list
 
-        #print(f"[{cfg.datevshot}] line detections ***MULTITHREADED*** (rdet_rf1) ({len(ras)})")#, num_procs = {NumProcs_mp_rf1}...")
+        #log(f"[{cfg.datevshot}] line detections ***MULTITHREADED*** (rdet_rf1) ({len(ras)})")#, num_procs = {NumProcs_mp_rf1}...")
         mp_rf1(cfg,multis, ras, decs)#,num_procs=6)
 
         #grid_n = 3  # n x n so 3 = a 3x3 grid
         #grid_step = 0.5  # grid step size
-        #print(f"[{cfg.datevshot}] *** test *** set grid_step and grid_n to 0.0 1")
+        #log(f"[{cfg.datevshot}] *** test *** set grid_step and grid_n to 0.0 1")
         #DD 20260627 ... we like 1 and 0, so keep that as the new default
         # grid_n = 1 , grid_step = 0.0
         grid_n = f"{int(cfg.linedet_parms[0])}"
@@ -5373,7 +5373,7 @@ def rdet_rf1(cfg):
                     else:
                         print(f" pass")
             else:
-                print(f"[{cfg.datevshot}] (rdet_rf1) All failed. Will not attempt full re-run.")
+                log(f"[{cfg.datevshot}] (rdet_rf1) All failed. Will not attempt full re-run.")
 
     except:
         print(traceback.format_exc())
@@ -5514,32 +5514,32 @@ def approx_count_at_snr(snr_array, total_exp_time, num_dithers):
 #             #model_snr = int(np.sum(approx_snr(xbins)) * np.sqrt(cfg.total_exp_time / 1080.) * num_ifus / 78)
 #
 #             model_snr = int(np.sum(approx_count_at_snr(xbins,cfg.total_exp_time,cfg.numexp))) * num_ifus
-#             print(f"[{cfg.datevshot}] Line dets for SNR inputs: IFUs = {num_ifus}, exp time = {cfg.total_exp_time},"
+#             log(f"[{cfg.datevshot}] Line dets for SNR inputs: IFUs = {num_ifus}, exp time = {cfg.total_exp_time},"
 #                   f"num exp = {cfg.numexp}, SNR range = [{xbins[0]},{xbins[-1]}], result = {model_snr}")
-#             print(f"[{cfg.datevshot}] Line dets for SNR [{min_snr:0.1f},{max_snr:0.1f}]. Data / Model {data_snr} / {model_snr} ")
+#             log(f"[{cfg.datevshot}] Line dets for SNR [{min_snr:0.1f},{max_snr:0.1f}]. Data / Model {data_snr} / {model_snr} ")
 #
 #             cfg.ratio_line_dets = data_snr / model_snr
 #
 #             if cfg.ratio_line_dets > fail_thresh:
 #                 if not FORCE_CONTINUE:
-#                     print(f"[{cfg.datevshot}] Fail! {cfg.ratio_line_dets:0.1f}x number of expected detections "
+#                     log(f"[{cfg.datevshot}] Fail! {cfg.ratio_line_dets:0.1f}x number of expected detections "
 #                           f"SNR [{min_snr:0.1f},{max_snr:0.1f}]. Will terminate.")
 #                     rc = -1
 #                 else:
-#                     print(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x number of expected detections "
+#                     log(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x number of expected detections "
 #                           f"SNR [{min_snr:0.1f},{max_snr:0.1f}]. "
 #                           f"Force flag set, so will continue")
 #                     rc = 1
 #             elif cfg.ratio_line_dets > warn_thresh:
-#                 print(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x number of expected detections "
+#                 log(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x number of expected detections "
 #                       f"SNR [{min_snr:0.1f},{max_snr:0.1f}]")
 #                 rc = 1
 #             else: # probably fine here
-#                 print(f"[{cfg.datevshot}] (DEBUG) {cfg.ratio_line_dets:0.1f}x number of expected detections "
+#                 log(f"[{cfg.datevshot}] (DEBUG) {cfg.ratio_line_dets:0.1f}x number of expected detections "
 #                       f"SNR [{min_snr:0.1f},{max_snr:0.1f}]")
 #                 rc = 0
 #
-#             print(f"[{cfg.datevshot}] !!! DEBUG !!! for now, force the rc to be zero")
+#             log(f"[{cfg.datevshot}] !!! DEBUG !!! for now, force the rc to be zero")
 #             rc  =0
 #
 #     except:
@@ -5764,7 +5764,7 @@ def check_line_detections_by_ifu(cfg):
 
             else: #NO appropriate data in IFU
                 #zero_ifu.append(os.path.basename(fn))
-                print(f"[{cfg.datevshot}] ***DEBUG*** No detections in range for IFU: {os.path.basename(fn)}")
+                log(f"[{cfg.datevshot}] ***DEBUG*** No detections in range for IFU: {os.path.basename(fn)}")
                 data_ct.append(len(xsnr)) #either 0 or 1 here
                 cfg.ifu_linedet_ct[-1] = data_ct[-1]
                 #xbins = np.arange(min_snr, max_snr + step_snr, step_snr)
@@ -5783,7 +5783,7 @@ def check_line_detections_by_ifu(cfg):
 
         #this will be a stupid long string
         snr_log_str = ", ".join([f"{e:0.1f} ({c})" for e, c in zip(edges, counts)])
-        print(f"[{cfg.datevshot}] Raw *.mc line detects by snr. Total = {total_mc_line_dets} for "
+        log(f"[{cfg.datevshot}] Raw *.mc line detects by snr. Total = {total_mc_line_dets} for "
               f"SNR {min_mc_snr:0.1f} to {max_mc_snr:0.1f}: {snr_log_str}")
 
         #todo: make a suggested SNR cut based on the avg_sky?? or other parameters ...
@@ -5793,7 +5793,7 @@ def check_line_detections_by_ifu(cfg):
         cfg.snr_rescale = snr_rescale(cfg.avg_sky)
 
         if cfg.snr_rescale > 1.0:
-            print(f"[{cfg.datevshot}] Recommend rescale minimum SNR. "
+            log(f"[{cfg.datevshot}] Recommend rescale minimum SNR. "
                   f"Line count @ 4.8 = {np.count_nonzero(all_sn>=4.8)}. "
                   f"Line count @ {4.8 * cfg.snr_rescale:0.1f} = {np.count_nonzero(all_sn>=(4.8*cfg.snr_rescale))}")
 
@@ -5802,7 +5802,7 @@ def check_line_detections_by_ifu(cfg):
 
         #since the SNR range varies from IFU to IFU, cannot report a single range
         #NOR is it correct to just run one estimate and multiply by the number of IFUs
-        print(f"[{cfg.datevshot}] Model line dets for SNR inputs (nominal {min_snr:0.1f} to {max_snr:0.1f}): "
+        log(f"[{cfg.datevshot}] Model line dets for SNR inputs (nominal {min_snr:0.1f} to {max_snr:0.1f}): "
               f"IFUs = {num_ifus}, exp time = {cfg.total_exp_time:0.1f},"
               f"num exp = {cfg.numexp}, total count = {np.sum(model_ct)}")
 
@@ -5821,14 +5821,14 @@ def check_line_detections_by_ifu(cfg):
         warn_ct = np.count_nonzero(data_over_model >= warn_thresh) - fail_ct
         pass_ct = np.count_nonzero(data_over_model < warn_thresh)
 
-        print(f"[{cfg.datevshot}] Downselected line det counts: totals data = {np.sum(data_ct)} vs model = {np.sum(model_ct)}; "
+        log(f"[{cfg.datevshot}] Downselected line det counts: totals data = {np.sum(data_ct)} vs model = {np.sum(model_ct)}; "
               f" by IFU: {fail_ct} Fail, {warn_ct} Warn, {pass_ct} Pass")
 
         if fail_ct > 0 or warn_ct > 0:
             idx_ifu = np.where(data_over_model >= warn_thresh)[0]
             for i in idx_ifu:
                 stat_str = "fail" if cfg.ifu_linedet_ratio[i] >= fail_thresh else "warn"
-                print(f"[{cfg.datevshot}] Line Dets {stat_str}: IFU {cfg.ifu_list[i]} has {cfg.ifu_linedet_ct[i]} dets at "
+                log(f"[{cfg.datevshot}] Line Dets {stat_str}: IFU {cfg.ifu_list[i]} has {cfg.ifu_linedet_ct[i]} dets at "
                       f"{cfg.ifu_linedet_ratio[i]}x the maximum expected.")
 
         #todo: could we flag an IFU as bad for this reason? That its line dets are way too high?
@@ -5838,20 +5838,20 @@ def check_line_detections_by_ifu(cfg):
         if (fail_ct / num_ifus >= 0.5) or \
                 ( (fail_ct / num_ifus >= 0.2) and (2 * fail_ct + warn_ct) / num_ifus >= 1.0):
             if not FORCE_CONTINUE:
-                print(f"[{cfg.datevshot}] Fail! {cfg.ratio_line_dets:0.1f}x nominal maximum total number of"
+                log(f"[{cfg.datevshot}] Fail! {cfg.ratio_line_dets:0.1f}x nominal maximum total number of"
                       f" expected detections SNR [{min_snr:0.1f},{max_snr:0.1f}]. Will terminate.")
                 rc = -1
             else:
-                print(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x nominal maximum total number of"
+                log(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x nominal maximum total number of"
                       f" expected detections SNR [{min_snr:0.1f},{max_snr:0.1f}]. "
                       f"--force flag set, so will continue")
                 rc = 1
         elif warn_ct / num_ifus >= 0.5: #if half or more are warns
-            print(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x nominal maximum total number of"
+            log(f"[{cfg.datevshot}] Warning! {cfg.ratio_line_dets:0.1f}x nominal maximum total number of"
                   f" expected detections SNR [{min_snr:0.1f},{max_snr:0.1f}]")
             rc = 1
         else:
-            print(f"[{cfg.datevshot}] (DEBUG) {cfg.ratio_line_dets:0.1f}x nominal maximum total number of"
+            log(f"[{cfg.datevshot}] (DEBUG) {cfg.ratio_line_dets:0.1f}x nominal maximum total number of"
                   f" expected detections")
             rc = 0
 
@@ -5885,24 +5885,24 @@ def rgetmax(cfg):
         os.chdir(os.path.join(cfg.cwd, "cs"))  # make sure we are in the right directory
         os.makedirs("spec", exist_ok=True)
 
-        print(f"[{cfg.datevshot}] continuum detections (rgetmax) ...")
+        log(f"[{cfg.datevshot}] continuum detections (rgetmax) ...")
 
         mux = linear_exptime_scale(cfg)
         if mux > 1.0:
             mux = np.sqrt(mux)
-            print(f"[{cfg.datevshot}] updating for extended exposure time by x{mux:0.1f}")
+            log(f"[{cfg.datevshot}] updating for extended exposure time by x{mux:0.1f}")
             cutstr = f"cut={20.0 * mux:0.1f}"
             system_command(cfg, f"sed -i s/cut=20./{cutstr}/ rgetmax")
 
 
         if cfg.exp == 0 and cfg.numexp == 3:
-            print(f"[{cfg.datevshot}] using standard 3-dither rgetmax")
+            log(f"[{cfg.datevshot}] using standard 3-dither rgetmax")
             #pass #do nothing, the default of 3 exposures stands
         else:
             #note: technically, this could fail if this is on a --resume and the original
             # string was already replaced, but in that case, the sed just won't do anything
             # and we would already have the correct exposures to (re)run
-            print(f"[{cfg.datevshot}] updating for selected and available exposures")
+            log(f"[{cfg.datevshot}] updating for selected and available exposures")
             #exp_array = ("exp01" "exp02" "exp03")
             #sed -i s#exp_array=\(\"exp01\"\ \"exp02\"\ \"exp03\"\)#exp_array=\(\"exp01\"\)# rgetmax
             cmd = f"sed -i s#exp_array=\(\\\"exp01\\\"\ \\\"exp02\\\"\ \\\"exp03\\\"\)#"
@@ -5916,7 +5916,7 @@ def rgetmax(cfg):
 
             system_command(cfg,cmd)
 
-        print(f"[{cfg.datevshot}] running rgetmax (continuum detection) ...")
+        log(f"[{cfg.datevshot}] running rgetmax (continuum detection) ...")
 
         system_command(cfg,f"rgetmax {cfg.datevshot.split('v')[0]} {cfg.datevshot.split('v')[1]}")
 
@@ -5932,13 +5932,13 @@ def rgetmax(cfg):
         else:
             #a failure, but not fatal
             rc = 1
-            print(f"[{cfg.datevshot}] Continuum detections fail. Not fatal. cs/spec/{cfg.datevshot}cs.tar not created.")
+            log(f"[{cfg.datevshot}] Continuum detections fail. Not fatal. cs/spec/{cfg.datevshot}cs.tar not created.")
 
 
     except:
         #print(traceback.format_exc())
         rc = -1
-        print(f"[{cfg.datevshot}] Fatal exception in rgetmax.",traceback.format_exc())
+        log(f"[{cfg.datevshot}] Fatal exception in rgetmax.",traceback.format_exc())
 
     return rc
 
@@ -5952,7 +5952,7 @@ def build_shot_h5(cfg):
     """
 
     try:
-        print(f"[{cfg.datevshot}] Constructing shot hdf5 file. This will take a while ... ")
+        log(f"[{cfg.datevshot}] Constructing shot hdf5 file. This will take a while ... ")
         rc = 0
 
         #some setup that hetdex_api needs
@@ -6066,12 +6066,12 @@ def build_shot_h5(cfg):
             rc = -1
             return rc
 
-        print(f"[{cfg.datevshot}] Created: {cfg.cwd}/{cfg.datevshot}.h5")
+        log(f"[{cfg.datevshot}] Created: {cfg.cwd}/{cfg.datevshot}.h5")
 
         #########################
         # now append_calfib
         ########################
-        print(f"[{cfg.datevshot}] Appending calibrated fibers ... ")
+        log(f"[{cfg.datevshot}] Appending calibrated fibers ... ")
         cmd = f"python3 {hetdex_api_path}/h5tools/append_calfib.py"
         cmd += f" --date {cfg.datevshot[0:8]}"
         cmd += f" --observation \"{cfg.datevshot[-3:]}\""
@@ -6086,7 +6086,7 @@ def build_shot_h5(cfg):
         #########################
         # now create_fullsky_model
         ########################
-        print(f"[{cfg.datevshot}] Appending fullsky model ... ")
+        log(f"[{cfg.datevshot}] Appending fullsky model ... ")
         cmd = f"python3 {hetdex_api_path}/h5tools/create_fullskymodel_hdf5.py"
         cmd += " --append"
         cmd += f" --date {cfg.datevshot[0:8]}"
@@ -6100,7 +6100,7 @@ def build_shot_h5(cfg):
         #########################
         # now create_cal_hdf5
         ########################
-        print(f"[{cfg.datevshot}] Create cal hdf5  ... ")
+        log(f"[{cfg.datevshot}] Create cal hdf5  ... ")
 
 
         #hetdex_api needs the local fwhm.all in a different format
@@ -6114,10 +6114,10 @@ def build_shot_h5(cfg):
             with open(f"{cfg.cwd}/detect/{cfg.datevshot}/fwhm.all","w") as f:
                 f.write(f"{cfg.datevshot} {fwhm} {err} {int(ns)}\n")
         except:
-            print(f"[{cfg.datevshot}] Fatal. Could not build fwhm.all file from fwhm.detail. fhwm, err, ns = {fwhm} {err} {ns}.")
+            log(f"[{cfg.datevshot}] Fatal. Could not build fwhm.all file from fwhm.detail. fhwm, err, ns = {fwhm} {err} {ns}.")
             #print(traceback.format_exc())
             rc = -1
-            print(f"[{cfg.datevshot}] Could not build hdf5 shot file.",traceback.format_exc())
+            log(f"[{cfg.datevshot}] Could not build hdf5 shot file.",traceback.format_exc())
             return rc
 
 
@@ -6136,7 +6136,7 @@ def build_shot_h5(cfg):
         #########################
         # now create_astrometry_hdf5
         ########################
-        print(f"[{cfg.datevshot}] Create astrometry  ... ")
+        log(f"[{cfg.datevshot}] Create astrometry  ... ")
 
         cmd = f"python3 {hetdex_api_path}/h5tools/create_astrometry_hdf5.py"
         cmd += " --append"
@@ -6152,7 +6152,7 @@ def build_shot_h5(cfg):
         elif os.path.exists(f"{cfg.cwd}/vdrp/shifts/panstarrs/{cfg.datevshot}/all.mch"):
             cmd += f" -r \"{cfg.cwd}/vdrp/shifts/panstarrs\""
         else:
-            print(f"[{cfg.datevshot}] Fatal: cannot find *.dithall file for this shot")
+            log(f"[{cfg.datevshot}] Fatal: cannot find *.dithall file for this shot")
             return -1
 
         system_command(cfg, cmd)
@@ -6178,14 +6178,14 @@ def build_shot_h5(cfg):
             system_command(cfg, f"unlink {shot_link}")
 
         system_command(cfg, f"ln -s {shot_src} {shot_link}")
-        print(f"[{cfg.datevshot}] Created link to shot h5 file: {shot_src} -> {shot_link}")
+        log(f"[{cfg.datevshot}] Created link to shot h5 file: {shot_src} -> {shot_link}")
 
-        print(f"[{cfg.datevshot}] Done: {cfg.cwd}/{cfg.datevshot}.h5")
+        log(f"[{cfg.datevshot}] Done: {cfg.cwd}/{cfg.datevshot}.h5")
 
     except:
         #print(traceback.format_exc())
         rc = -1
-        print(f"[{cfg.datevshot}] Could not build hdf5 shot file.", traceback.format_exc())
+        log(f"[{cfg.datevshot}] Could not build hdf5 shot file.", traceback.format_exc())
 
     return rc
 
@@ -6208,9 +6208,9 @@ def count_amps(cfg):
             cfg.num_all_amps = len(amps_list)
             h5.close()
         else:
-            print(f"[{cfg.datevshot}] Could not load amps_list. shot h5 file not found.")
+            log(f"[{cfg.datevshot}] Could not load amps_list. shot h5 file not found.")
     except:
-        print(f"[{cfg.datevshot}] Could not load amps_list",traceback.format_exc())
+        log(f"[{cfg.datevshot}] Could not load amps_list",traceback.format_exc())
 
     return amps_list,bad_amps_list
 
@@ -6226,7 +6226,7 @@ def amp_stats(cfg,shot_h5_fqfn=None,update=True):
     """
 
     if not update:
-        print(f"[{cfg.datevshot}] Recomputing Amp Stats for internal use only. Will not update recorded tables.")
+        log(f"[{cfg.datevshot}] Recomputing Amp Stats for internal use only. Will not update recorded tables.")
 
     if cfg.amp_stats_problem < 0:
         cfg.amp_stats_problem = 0
@@ -6240,7 +6240,7 @@ def amp_stats(cfg,shot_h5_fqfn=None,update=True):
         if shot_h5_fqfn is None:
             shot_h5_fqfn = os.path.join(cfg.cwd,f"{cfg.datevshot}.h5")
 
-        print(f"[{cfg.datevshot}] Computing amp statistics from: {shot_h5_fqfn} ... ")
+        log(f"[{cfg.datevshot}] Computing amp statistics from: {shot_h5_fqfn} ... ")
         shot_dict = AmpStats.make_stats_for_shot(fqfn=shot_h5_fqfn,save=True,preload=False)
 
         if shot_dict is not None:
@@ -6262,7 +6262,7 @@ def amp_stats(cfg,shot_h5_fqfn=None,update=True):
             sel_failed_amp_stats = t['n_lo'] < 0
             num_failed_amp_stats = np.count_nonzero(sel_failed_amp_stats)
             unexplained_failed_amp_stats = num_failed_amp_stats
-            print(f"[{cfg.datevshot}] Amp status computed for {num_amp_stats} amps, {num_failed_amp_stats} failed.")
+            log(f"[{cfg.datevshot}] Amp status computed for {num_amp_stats} amps, {num_failed_amp_stats} failed.")
 
             #are they failed amp stats okay? that is, is the multifits actually missing?
             if num_failed_amp_stats > 0:
@@ -6275,14 +6275,14 @@ def amp_stats(cfg,shot_h5_fqfn=None,update=True):
                             q_exp = row['expnum']
                             if cfg.mf_file_status[q_slot][q_exp][q_amp] != -1:
                                 #the file DOES exist, so this should have generated an amp status
-                                print(f"[{cfg.datevshot}] WARNING! No Amp Status, but file does exist for "
+                                log(f"[{cfg.datevshot}] WARNING! No Amp Status, but file does exist for "
                                       f"{row['multiframe']} ({row['expnum']})")
                             else:
                                 unexplained_failed_amp_stats -= 1 #makes sense, the multifits is missing
                         except:
-                            print(f"[{cfg.datevshot}] WARNING! Failed mf status check for {row['multiframe']} ({row['expnum']})")
+                            log(f"[{cfg.datevshot}] WARNING! Failed mf status check for {row['multiframe']} ({row['expnum']})")
                 else:
-                    print(f"[{cfg.datevshot}] WARNING! Cannot confirm missing multifits for failed amp status")
+                    log(f"[{cfg.datevshot}] WARNING! Cannot confirm missing multifits for failed amp status")
 
 
             # expectation is, generally, 78 IFUs x 4 amps x # exposures = 936 for full array, 3 exposures
@@ -6293,13 +6293,13 @@ def amp_stats(cfg,shot_h5_fqfn=None,update=True):
 
             if num_failed_amp_stats > 2 * len(stat_exps): #allow up to 2 (* number of exposures)
                 # may be a problem
-                print(f"[{cfg.datevshot}] WARNING! {num_failed_amp_stats} failures to build amp stats."
+                log(f"[{cfg.datevshot}] WARNING! {num_failed_amp_stats} failures to build amp stats."
                       f" This may indicate a problem with the shot.")
                 cfg.amp_stats_problem = 1
 
             if unexplained_failed_amp_stats != 0:
                 # may be a problem
-                print(f"[{cfg.datevshot}] WARNING! {unexplained_failed_amp_stats} unexplained failures to build amp stats."
+                log(f"[{cfg.datevshot}] WARNING! {unexplained_failed_amp_stats} unexplained failures to build amp stats."
                       f" This may indicate a problem with the shot.")
                 cfg.amp_stats_problem = 1
 
@@ -6311,13 +6311,13 @@ def amp_stats(cfg,shot_h5_fqfn=None,update=True):
             except: #some older versions don't have "num_exposures"
                 t = AmpStats.stats_qc(t, extend=True, total_exp_time=cfg.total_exp_time)
 
-            print(f"[{cfg.datevshot}] {np.count_nonzero(t['flag']!=1)} amps marked explicitly 'bad'")
+            log(f"[{cfg.datevshot}] {np.count_nonzero(t['flag']!=1)} amps marked explicitly 'bad'")
 
             #for THIS (single shot reduction) we will ALSO assume the amp to be bad if n_lo < 0
             sel_bad_n_lo = t['n_lo']<0
             if np.count_nonzero(sel_bad_n_lo) > 0:
                 t['flag'][sel_bad_n_lo] = 0 #0 is bad
-                print(f"[{cfg.datevshot}] {np.count_nonzero(sel_bad_n_lo)} additional amps marked bad for failure"
+                log(f"[{cfg.datevshot}] {np.count_nonzero(sel_bad_n_lo)} additional amps marked bad for failure"
                       f" to compute stats.")
 
 
@@ -6339,7 +6339,7 @@ def amp_stats(cfg,shot_h5_fqfn=None,update=True):
 
             #NOTICE: the "flag" key DOES NOT EXIST here ... it is added to table t above, but not to the shot_dict
             if update:
-                print(f"[{cfg.datevshot}] Adding AmpStats table to  {shot_h5_fqfn} ...")
+                log(f"[{cfg.datevshot}] Adding AmpStats table to  {shot_h5_fqfn} ...")
                 h5 = tables.open_file(shot_h5_fqfn,mode="a")
 
                 try:
@@ -6353,7 +6353,7 @@ def amp_stats(cfg,shot_h5_fqfn=None,update=True):
             del t
 
         else:
-            print(f"[{cfg.datevshot}] FAIL. Could not compute amp stats.")
+            log(f"[{cfg.datevshot}] FAIL. Could not compute amp stats.")
             cfg.amp_stats_problem = 2
             rc = -1
 
@@ -6361,7 +6361,7 @@ def amp_stats(cfg,shot_h5_fqfn=None,update=True):
     except:
         #print(traceback.format_exc())
         rc = -1
-        print(f"[{cfg.datevshot}] Could not produce amp statistics.", traceback.format_exc())
+        log(f"[{cfg.datevshot}] Could not produce amp statistics.", traceback.format_exc())
         cfg.amp_stats_problem = 3
 
     return rc
@@ -6383,12 +6383,12 @@ def add_fiber_index(cfg,shot_h5_fqfn=None):
 
         h5 = tables.open_file(shot_h5_fqfn,mode='r')
         if h5.__contains__("/FiberIndex"):
-            print(f"[{cfg.datevshot}] FiberIndex already exists in {shot_h5_fqfn} ... ")
+            log(f"[{cfg.datevshot}] FiberIndex already exists in {shot_h5_fqfn} ... ")
             h5.close()
             return 0
         h5.close() #must close the read handle, since the create_fiber_index_hdf5 will open as append
 
-        print(f"[{cfg.datevshot}] Adding fiber index  to: {shot_h5_fqfn} ... ")
+        log(f"[{cfg.datevshot}] Adding fiber index  to: {shot_h5_fqfn} ... ")
 
         cmd = f"python3 {hetdex_api_path}/h5tools/create_fiber_index_hdf5.py"
         cmd += f" --shot_h5  {shot_h5_fqfn}"
@@ -6400,18 +6400,18 @@ def add_fiber_index(cfg,shot_h5_fqfn=None):
             h5 = tables.open_file(shot_h5_fqfn,mode="r")
             if h5.__contains__("/FiberIndex"):
                 #success
-                print(f"[{cfg.datevshot}] Pass. Successfully added FiberIndex.")
+                log(f"[{cfg.datevshot}] Pass. Successfully added FiberIndex.")
             else:
-                print(f"[{cfg.datevshot}] FAIL! Failed to add FiberIndex.")
+                log(f"[{cfg.datevshot}] FAIL! Failed to add FiberIndex.")
                 rc = -1
             h5.close()
 
         except:
             rc = -1
-            print(f"[{cfg.datevshot}] Could add fiber index to shot h5.", traceback.format_exc())
+            log(f"[{cfg.datevshot}] Could add fiber index to shot h5.", traceback.format_exc())
     except:
         rc = -1
-        print(f"[{cfg.datevshot}] Could add fiber index to shot h5.", traceback.format_exc())
+        log(f"[{cfg.datevshot}] Could add fiber index to shot h5.", traceback.format_exc())
 
     return rc
 
@@ -6427,7 +6427,7 @@ def add_fiber_mask(cfg,shot_h5_fqfn=None):
         if shot_h5_fqfn is None:
             shot_h5_fqfn = os.path.join(cfg.cwd,f"{cfg.datevshot}.h5")
 
-        print(f"[{cfg.datevshot}] Adding fiber masking (CalfibDQ) to: {shot_h5_fqfn} ... ")
+        log(f"[{cfg.datevshot}] Adding fiber masking (CalfibDQ) to: {shot_h5_fqfn} ... ")
 
         cmd = f"python3 {hetdex_api_path}/h5tools/create_fiber_mask_hdf5.py"
         cmd += f" --shot_h5  {shot_h5_fqfn}"
@@ -6439,18 +6439,18 @@ def add_fiber_mask(cfg,shot_h5_fqfn=None):
             h5 = tables.open_file(shot_h5_fqfn,mode="r")
             if h5.__contains__("/CalfibDQ"):
                 #success
-                print(f"[{cfg.datevshot}] Pass. Successfully added CalfibDQ.")
+                log(f"[{cfg.datevshot}] Pass. Successfully added CalfibDQ.")
             else:
-                print(f"[{cfg.datevshot}] FAIL! Failed to add CalfibDQ.")
+                log(f"[{cfg.datevshot}] FAIL! Failed to add CalfibDQ.")
                 rc = -1
             h5.close()
 
         except:
             rc = -1
-            print(f"[{cfg.datevshot}] Could add fiber masking to shot h5.", traceback.format_exc())
+            log(f"[{cfg.datevshot}] Could add fiber masking to shot h5.", traceback.format_exc())
     except:
         rc = -1
-        print(f"[{cfg.datevshot}] Could add fiber masking to shot h5.", traceback.format_exc())
+        log(f"[{cfg.datevshot}] Could add fiber masking to shot h5.", traceback.format_exc())
 
     return rc
 
@@ -6556,7 +6556,7 @@ def shot_analyisis(cfg,ratio=False):
     """
 
     try:
-        print(f"[{cfg.datevshot}] Making basic IFU analysis images ...")
+        log(f"[{cfg.datevshot}] Making basic IFU analysis images ...")
 
         # mf_avg_row = None
         # if residual:
@@ -6567,7 +6567,7 @@ def shot_analyisis(cfg,ratio=False):
         #     mf_avg_row = None
 
         if ratio:
-            print(f"[{cfg.datevshot}] NOTICE: shot_analysis with ratio = True, not corrently supported. "
+            log(f"[{cfg.datevshot}] NOTICE: shot_analysis with ratio = True, not corrently supported. "
                   f"'processed' image not available in shot h5 file.")
             ratio = False
 
@@ -6584,14 +6584,14 @@ def shot_analyisis(cfg,ratio=False):
         # matched is already present in /matched_pngs directory
         # but can make a link
         ######################################################
-        print(f"[{cfg.datevshot}] Linking match_png")
+        log(f"[{cfg.datevshot}] Linking match_png")
         system_command(cfg, "ln -s ../match_pngs/match*.png .")
 
 
         ######################################################
         # coadds ... just put at the top of /analysis
         ######################################################
-        print(f"[{cfg.datevshot}] Making coadd image(s): ... ")
+        log(f"[{cfg.datevshot}] Making coadd image(s): ... ")
 
         try:
             plt.close('all')
@@ -6631,7 +6631,7 @@ def shot_analyisis(cfg,ratio=False):
         # there are many, so make a subdir
         ##################################################
         if cfg.made_amp_images:
-            print(f"[{cfg.datevshot}] Diagnostic IFU+amp images already created. Will not re-run here.")
+            log(f"[{cfg.datevshot}] Diagnostic IFU+amp images already created. Will not re-run here.")
         else:
             analysis_dir = os.path.join(cfg.cwd,"analysis/ifus/")
             Path(analysis_dir).mkdir(parents=True, exist_ok=True)
@@ -6676,7 +6676,7 @@ def shot_analyisis(cfg,ratio=False):
                 #not sure we want to shift ... maybe just scale with time
 
 
-                #print(f"[{cfg.datevshot}] Shifting IFU diagnostic plot scaling by +{vmax_scale:0.1f}")
+                #log(f"[{cfg.datevshot}] Shifting IFU diagnostic plot scaling by +{vmax_scale:0.1f}")
                 applied_vmin = int(DIAG_AMP_IMG_VMIN_VMAX[0])
                 applied_vmax = int(DIAG_AMP_IMG_VMIN_VMAX[1] * vmax_scale)
                 cmap_norm = TwoSlopeNorm(vmin=applied_vmin, vcenter=0, vmax=applied_vmax)
@@ -6691,9 +6691,9 @@ def shot_analyisis(cfg,ratio=False):
             #there are a few that have 4 or more exposures and we will just ignore that
             for ii, mf_base in enumerate(ifus_in_shot):
                 if ratio:
-                    print(f"[{cfg.datevshot}] Making ratio IFU analysis images: {mf_base.decode()}")
+                    log(f"[{cfg.datevshot}] Making ratio IFU analysis images: {mf_base.decode()}")
                 else:
-                    print(f"[{cfg.datevshot}] Making basic IFU analysis images: {mf_base.decode()}")
+                    log(f"[{cfg.datevshot}] Making basic IFU analysis images: {mf_base.decode()}")
 
                 plt.close('all')
                 fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(9, 12))
@@ -6739,12 +6739,12 @@ def shot_analyisis(cfg,ratio=False):
                             ax.set_xticks([])
                             ax.set_yticks([])
                             #not uncommon ... could be just a single exposure by user selection, and not exp 1
-                            #print(f"[{cfg.datevshot}] No data found for {mf_base.decode()} exp 1")
+                            #log(f"[{cfg.datevshot}] No data found for {mf_base.decode()} exp 1")
 
                     except:
                         ax.set_xticks([])
                         ax.set_yticks([])
-                        print(f"[{cfg.datevshot}] Exception in shot_analysis on {mf_base.decode()}", traceback.format_exc())
+                        log(f"[{cfg.datevshot}] Exception in shot_analysis on {mf_base.decode()}", traceback.format_exc())
 
                     sel = exp == 2
                     ax = axes[ai, ei]
@@ -6771,12 +6771,12 @@ def shot_analyisis(cfg,ratio=False):
                             ax.set_xticks([])
                             ax.set_yticks([])
                             #not uncommon ... could be just a single exposure for this observation or by user selection
-                            #print(f"[{cfg.datevshot}] No data found for {mf_base.decode()} exp 2")
+                            #log(f"[{cfg.datevshot}] No data found for {mf_base.decode()} exp 2")
 
                     except:
                         ax.set_xticks([])
                         ax.set_yticks([])
-                        print(f"[{cfg.datevshot}] Exception in shot_analysis on {mf_base.decode()}",
+                        log(f"[{cfg.datevshot}] Exception in shot_analysis on {mf_base.decode()}",
                               traceback.format_exc())
 
                     sel = exp == 3
@@ -6801,12 +6801,12 @@ def shot_analyisis(cfg,ratio=False):
                             ax.set_xticks([])
                             ax.set_yticks([])
                             #not uncommon ... could be just a single exposure for this observation or by user selection
-                            #print(f"[{cfg.datevshot}] No data found for {mf_base.decode()} exp 3")
+                            #log(f"[{cfg.datevshot}] No data found for {mf_base.decode()} exp 3")
 
                     except:
                         ax.set_xticks([])
                         ax.set_yticks([])
-                        print(f"[{cfg.datevshot}] Exception in shot_analysis on {mf_base.decode()}",
+                        log(f"[{cfg.datevshot}] Exception in shot_analysis on {mf_base.decode()}",
                               traceback.format_exc())
 
                 plt.tight_layout()
@@ -6823,7 +6823,7 @@ def shot_analyisis(cfg,ratio=False):
     except:
         #print(traceback.format_exc())
         rc = -1
-        print(f"[{cfg.datevshot}] Could complete basic shot analysis.",traceback.format_exc())
+        log(f"[{cfg.datevshot}] Could complete basic shot analysis.",traceback.format_exc())
 
     try:
         h5.close()
@@ -6843,7 +6843,7 @@ def get_multifits_file_status(cfg):
     """
     d = {}
     try:
-        print(f"[{cfg.datevshot}] Getting multi*fits file status ...")
+        log(f"[{cfg.datevshot}] Getting multi*fits file status ...")
 
         #slotids, show 010 to 109, noting only 78 of them actually exist
         dkeys = {
@@ -6984,7 +6984,7 @@ def get_multifits_file_status(cfg):
         #any remaing -1 are missing
         cfg.mf_file_status = d
     except:
-        print(f"[{cfg.datevshot}] Could not get multi*fits file status",traceback.format_exc())
+        log(f"[{cfg.datevshot}] Could not get multi*fits file status",traceback.format_exc())
 
     return d
 
@@ -6999,7 +6999,7 @@ def make_amp_images(cfg,ratio=False):
     """
 
     try:
-        print(f"[{cfg.datevshot}] Making color-coded IFU+amp images ...")
+        log(f"[{cfg.datevshot}] Making color-coded IFU+amp images ...")
 
         # mf_avg_row = None
         # if residual:
@@ -7082,7 +7082,7 @@ def make_amp_images(cfg,ratio=False):
             # vmin_vmax_shift = 0.0 #we do not want to shift ... only scale (stretch) the vmax (positive) side
             # not sure we want to shift ... maybe just scale with time
 
-            # print(f"[{cfg.datevshot}] Shifting IFU diagnostic plot scaling by +{vmax_scale:0.1f}")
+            # log(f"[{cfg.datevshot}] Shifting IFU diagnostic plot scaling by +{vmax_scale:0.1f}")
             # print(f"*** DEBUG *** vmin = {int(DIAG_AMP_IMG_VMIN_VMAX[0])}, "
             #       f"vmax = {int(DIAG_AMP_IMG_VMIN_VMAX[1] * vmax_scale)}, vmax_scale = {vmax_scale}, "
             #       f"exptime = {cfg.total_exp_time}, expnum = {cfg.numexp}")
@@ -7103,9 +7103,9 @@ def make_amp_images(cfg,ratio=False):
             handy_ax = None
 
             if ratio:
-                print(f"[{cfg.datevshot}] Making ratio IFU analysis images: {mf_base}")
+                log(f"[{cfg.datevshot}] Making ratio IFU analysis images: {mf_base}")
             else:
-                print(f"[{cfg.datevshot}] Making basic IFU analysis images: {mf_base}")
+                log(f"[{cfg.datevshot}] Making basic IFU analysis images: {mf_base}")
             plt.close('all')
             fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(9, 12))
            # plot_config = list(np.arange(431, 443, 1))
@@ -7173,17 +7173,17 @@ def make_amp_images(cfg,ratio=False):
                             except:
                                 ax.set_xticks([])
                                 ax.set_yticks([])
-                                print(f"[{cfg.datevshot}] Exception in make_amp_images on {mf_base}", traceback.format_exc())
+                                log(f"[{cfg.datevshot}] Exception in make_amp_images on {mf_base}", traceback.format_exc())
                     except:
                         if os.path.exists(os.path.join(expdir, mf_fn)):
-                            print(f"[{cfg.datevshot}] Exception in make_amp_images on {mf_base}",
+                            log(f"[{cfg.datevshot}] Exception in make_amp_images on {mf_base}",
                                   traceback.format_exc())
                         else:
                             if len(expdir) > 1:
                                 #the multifits does not exist, probably a pre-defined bad amp like 095RU
                                 #if expdir is an empty string, then it is just there to clean up the
                                 #  image frames and was not to be printed
-                                print(f"[{cfg.datevshot}] omitting {mf_base}{amp} x{exp}. Does not exist.")
+                                log(f"[{cfg.datevshot}] omitting {mf_base}{amp} x{exp}. Does not exist.")
                             try:
                                 ax = axes[ai, ei]
                                 if amp == '_LU':
@@ -7231,7 +7231,7 @@ def make_amp_images(cfg,ratio=False):
     except:
         #print(traceback.format_exc())
         rc = -1
-        print(f"[{cfg.datevshot}] Could not complete amp images.",traceback.format_exc())
+        log(f"[{cfg.datevshot}] Could not complete amp images.",traceback.format_exc())
 
 
     if rc >= 0:
@@ -7269,15 +7269,15 @@ def check_detid_counter(cfg,cont,nominal_max):
                 else:
                     rc = 0
             else:
-                print(f"[{cfg.datevshot}] Warning! No detections found in {cfg.datevshot}_{which}.h5")
+                log(f"[{cfg.datevshot}] Warning! No detections found in {cfg.datevshot}_{which}.h5")
                 rc = -1 #it is not reasonable that there should not be any detections
                         #this is not fatal, but it will print an error
         else:
-            print(f"[{cfg.datevshot}] Warning! File does not exist: {cfg.datevshot}_{which}.h5")
+            log(f"[{cfg.datevshot}] Warning! File does not exist: {cfg.datevshot}_{which}.h5")
             return -1 #the file should exist
     except:
         rc = -1
-        print(f"[{cfg.datevshot}] Exception in check_detid_counter()",traceback.format_exc())
+        log(f"[{cfg.datevshot}] Exception in check_detid_counter()",traceback.format_exc())
 
     try:
         h5.close()
@@ -7309,7 +7309,7 @@ def build_detection_hdf5(cfg):
             #note: 9xxxx is reserved for continuum sources
             #detectid_base = np.int64(cfg.datevshot[2:].replace('v', '', )) * np.int64(1e5) # + 1000000
             detectid_base = np.int64(cfg.datevshot[2:].replace('v', '', )) * np.int64(str(1).ljust(id_base+1,'0'))  # + 1000000
-            print(f"[{cfg.datevshot}] Building detections hdf5 ... ")
+            log(f"[{cfg.datevshot}] Building detections hdf5 ... ")
 
             os.chdir(os.path.join(cfg.cwd))
 
@@ -7327,7 +7327,7 @@ def build_detection_hdf5(cfg):
                 #NOTE: the HETDEX_API minimum value is configured at 4.5 NOT 4.8
                 # which is the defulat for HETDEX_API_SNR_Thresh
                 cmd += f" --sn_min {HETDEX_API_SNR_Thresh * cfg.snr_rescale:0.1f}"
-                print(f"[{cfg.datevshot}] Rescaled minimum SNR for inclusion from "
+                log(f"[{cfg.datevshot}] Rescaled minimum SNR for inclusion from "
                       f"{HETDEX_API_SNR_Thresh:0.1f} to {HETDEX_API_SNR_Thresh * cfg.snr_rescale:0.1f}.")
             #else, using HETDEX_API default if or 1
 
@@ -7338,11 +7338,11 @@ def build_detection_hdf5(cfg):
             id_ct = check_detid_counter(cfg,cont=False,nominal_max= detectid_base + np.int64(str(8).ljust(id_base ,'9')))
             if id_ct > 0:
                 #this is a problem and we need to re-run with a different base
-                print(f"[{cfg.datevshot}] More than expected ({id_ct}) number of line detections. Must reset counter and rebuild.")
+                log(f"[{cfg.datevshot}] More than expected ({id_ct}) number of line detections. Must reset counter and rebuild.")
                 id_base = len(str(id_ct)) + 1
             elif id_ct < 0:
                 #this is an error
-                print(f"[{cfg.datevshot}] Error ({id_ct}) checking number of line detections. ")
+                log(f"[{cfg.datevshot}] Error ({id_ct}) checking number of line detections. ")
                 id_ct = 0
 
 
@@ -7369,18 +7369,18 @@ def build_detection_hdf5(cfg):
             id_ct = check_detid_counter(cfg,cont=True,nominal_max=detectid_base + np.int64(str(9).ljust(id_base ,'9')))
             if id_ct > 0:
                 #this is a problem and we need to re-run with a different base
-                print(f"[{cfg.datevshot}] More than expected ({id_ct}) number of continuum detections. Must reset counter and rebuild.")
+                log(f"[{cfg.datevshot}] More than expected ({id_ct}) number of continuum detections. Must reset counter and rebuild.")
                 id_base = len(str(id_ct)) + 1
             elif id_ct < 0:
                 #this is an error
-                print(f"[{cfg.datevshot}] Error ({id_ct}) checking number of continuum detections. ")
+                log(f"[{cfg.datevshot}] Error ({id_ct}) checking number of continuum detections. ")
                 id_ct = 0
 
 
     except:
         #print(traceback.format_exc())
         rc = -1
-        print(f"[{cfg.datevshot}] Exception building detections hdf5 files",traceback.format_exc())
+        log(f"[{cfg.datevshot}] Exception building detections hdf5 files",traceback.format_exc())
 
     return rc
 
@@ -7403,7 +7403,7 @@ def diagnose(cfg):
         rc = 0
         num_spectra = 0
 
-        print(f"[{cfg.datevshot}] Building Diagnose input (emission lines)  ...")
+        log(f"[{cfg.datevshot}] Building Diagnose input (emission lines)  ...")
         name = f"{cfg.datevshot}_line_sourcecat.tab"
         line_tab = Table.read(name,format="ascii")
 
@@ -7430,12 +7430,12 @@ def diagnose(cfg):
             if ra is not None and dec is not None:
                 dust_corr = deredden_spectra(G.CALFIB_WAVEGRID,
                                          SkyCoord(ra=ra * u.deg, dec=dec * u.deg))
-                print(f"[{cfg.datevshot}] MW dust correction for Diagnose:  {dust_corr[0]:0.2f} to {dust_corr[-1]:0.2f}")
+                log(f"[{cfg.datevshot}] MW dust correction for Diagnose:  {dust_corr[0]:0.2f} to {dust_corr[-1]:0.2f}")
             else:
-                print(f"[{cfg.datevshot}] Could not buil MW dust correction for Diagnose."
+                log(f"[{cfg.datevshot}] Could not buil MW dust correction for Diagnose."
                       f". RA, Dec = ({ra},{dec})")
         except:
-            print(f"[{cfg.datevshot}] Exception building MW dust correction for Diagnose."
+            log(f"[{cfg.datevshot}] Exception building MW dust correction for Diagnose."
                   f". RA, Dec = ({ra},{dec}){traceback.format_exc()}")
             dust_corr = np.ones(len(G.CALFIB_WAVEGRID))
 
@@ -7443,14 +7443,14 @@ def diagnose(cfg):
 
         if len(line_tab) == 0: #there are no entries
             del line_tab
-            print(f"[{cfg.datevshot}] WARNING! No line sources recored. Moving on to continuum.")
+            log(f"[{cfg.datevshot}] WARNING! No line sources recored. Moving on to continuum.")
             rc = 1 #not fatal, but not a success
         else:
             line_h5 = tables.open_file(os.path.join(cfg.cwd, f"{cfg.datevshot}_line.h5"))
 
             #reminder: if fof clustering re-runs (the step before this one), the gmag will be wiped out
             if cfg.resume or 'gmag' not in line_tab.columns:
-                print(f"[{cfg.datevshot}] Computing {len(line_tab)} line det gmags for Diagnose sub-selection ...")
+                log(f"[{cfg.datevshot}] Computing {len(line_tab)} line det gmags for Diagnose sub-selection ...")
                 # subselect ... these do not currently have a gmag, so need to make one (since ELiXer has not run yet)
                 line_tab['gmag'] = 99.0 #not-computed or failed compute value
 
@@ -7459,23 +7459,23 @@ def diagnose(cfg):
                 # will match to detectid
                 # !!! Remember. line_tab (from the line_sourcat.tab) is downselected from line.h5
                 #   ... line.h5 will have equal or MORE detections than are in line_tab
-                print(f"[{cfg.datevshot}] Preloading emission line spectra ...")
+                log(f"[{cfg.datevshot}] Preloading emission line spectra ...")
                 all_detid = list(line_h5.root.Spectra.read(field="detectid"))
                 all_spec1d = line_h5.root.Spectra.read(field="spec1d")
                 all_spec1d_err = line_h5.root.Spectra.read(field="spec1d_err")
                 all_apcor = line_h5.root.Spectra.read(field="apcor")
                 all_approx_gmag = np.nansum(all_spec1d,axis=1)
 
-                #print(f"[{cfg.datevshot}] DEBUG: all_approx_gmag shape = {np.shape(all_approx_gmag)}")
+                #log(f"[{cfg.datevshot}] DEBUG: all_approx_gmag shape = {np.shape(all_approx_gmag)}")
 
-                print(f"[{cfg.datevshot}] Evaluating pseudo gmags ... ")
+                log(f"[{cfg.datevshot}] Evaluating pseudo gmags ... ")
                 #for i in tqdm(range(len(line_tab))):
                 for i in range(len(line_tab)):
                     d = line_tab[i]['detectid']
                     try:
                         j = all_detid.index(d) #match line_tab detectid to line.h5 detectid
                     except:
-                        print(f"[{cfg.datevshot}] Warning! detectid: {d} not found in *_line.h5 file?")
+                        log(f"[{cfg.datevshot}] Warning! detectid: {d} not found in *_line.h5 file?")
                         continue
 
                     if all_approx_gmag[j] < 640.0: #too faint (fainter than about 23 in g)
@@ -7490,7 +7490,7 @@ def diagnose(cfg):
 
                     # rows = line_h5.root.Spectra.read_where("detectid==d")
                     # if len(rows) != 1:
-                    #     print(f"[{cfg.datevshot}] Diagnose preselection gmag failure for {d}")
+                    #     log(f"[{cfg.datevshot}] Diagnose preselection gmag failure for {d}")
                     #     continue
                     # row = rows[0]
                     # gmag, gmag_unc, *_ = SU.get_best_gmag(row['spec1d'] * 1e-17, row['spec1d_err'] * 1e-17,
@@ -7499,7 +7499,7 @@ def diagnose(cfg):
                     #reading less but using two reads: overall time cost is about the same
                     # spec1d = line_h5.root.Spectra.read_where("detectid==d",field="spec1d")
                     # if len(spec1d) != 1:
-                    #     print(f"[{cfg.datevshot}] Diagnose preselection gmag failure for {d}")
+                    #     log(f"[{cfg.datevshot}] Diagnose preselection gmag failure for {d}")
                     #     continue
                     # spec1d_err = line_h5.root.Spectra.read_where("detectid==d",field="spec1d_err")
                     # gmag, gmag_unc, *_ = SU.get_best_gmag(spec1d[0]*1e-17,spec1d_err[0]*1e-17,G.CALFIB_WAVEGRID)
@@ -7512,13 +7512,13 @@ def diagnose(cfg):
 
                 #update
                 line_tab.write(name, format="ascii", overwrite=True)
-                print(f"[{cfg.datevshot}] Updated lines table with gmag: {os.getcwd()}/{name}")
+                log(f"[{cfg.datevshot}] Updated lines table with gmag: {os.getcwd()}/{name}")
 
             # now select on gmag < 23
             sel = np.array(line_tab['gmag'] > 0.0) & np.array(line_tab['gmag'] <= 23.0)
             line_tab = line_tab[sel]
             #redundant comment to one just below this section
-            #print(f"[{cfg.datevshot}] Reduced Diagnose examination to {len(line_tab)} emission line detections.")
+            #log(f"[{cfg.datevshot}] Reduced Diagnose examination to {len(line_tab)} emission line detections.")
 
 
             totN = np.sum(sel)
@@ -7565,7 +7565,7 @@ def diagnose(cfg):
                 try:
                     j = all_detid.index(d)  # match line_tab detectid to line.h5 detectid
                 except:
-                    print(f"[{cfg.datevshot}] Warning! detectid: {d} not found in *_line.h5 file?")
+                    log(f"[{cfg.datevshot}] Warning! detectid: {d} not found in *_line.h5 file?")
                     continue
 
                 spec_2D.append(all_spec1d[j] * dust_corr)
@@ -7615,31 +7615,31 @@ def diagnose(cfg):
             # python3 /work/05350/ecooper/stampede2/Diagnose/diagnose.py diagnose_spectra.fits -li 0 -hi 5 -s 1 -q
 
             #Diagnose path is: {cfg.scriptdir}/Diagnose/diagnose.py
-            print(f"[{cfg.datevshot}] Running Diagnose on {num_spectra} gmag bright emission line sources ...")
+            log(f"[{cfg.datevshot}] Running Diagnose on {num_spectra} gmag bright emission line sources ...")
             cmd = f"python3 {cfg.scriptdir}/Diagnose/diagnose.py"
             cmd += f" {outname} -li 0 -hi {num_spectra} -s 0 -q"
 
             system_command(cfg, cmd)
         #end bright emission line Diagnose
 
-        print(f"[{cfg.datevshot}] Building Diagnose input (continuum)  ...")
+        log(f"[{cfg.datevshot}] Building Diagnose input (continuum)  ...")
         name = f"{cfg.datevshot}_cont_sourcecat.tab"
         cont_tab = Table.read(name, format="ascii")
 
         if len(cont_tab) == 0:
             del cont_tab
-            print(f"[{cfg.datevshot}] WARNING! No continuum sources recored. ")
+            log(f"[{cfg.datevshot}] WARNING! No continuum sources recored. ")
             if rc == 0: #there was not a previous problem
                 rc = 1 # not fatal, but not a success
             else:
                 rc = -1  #already a problem, so Diagnose fails
-                print(f"[{cfg.datevshot}] WARNING! Cannot run Diagnose.")
+                log(f"[{cfg.datevshot}] WARNING! Cannot run Diagnose.")
         else:
             cont_h5 = tables.open_file(os.path.join(cfg.cwd, f"{cfg.datevshot}_cont.h5"))
 
             if cfg.resume or 'gmag' not in cont_tab.columns:
-                #print(f"[{cfg.datevshot}] Computing gmags for Diagnose ...")
-                print(f"[{cfg.datevshot}] Computing {len(cont_tab)} continuum det gmags for Diagnose sub-selection ...")
+                #log(f"[{cfg.datevshot}] Computing gmags for Diagnose ...")
+                log(f"[{cfg.datevshot}] Computing {len(cont_tab)} continuum det gmags for Diagnose sub-selection ...")
                 # subselect ... these do not currently have a gmag, so need to make one (since ELiXer has not run yet)
                 cont_tab['gmag'] = 99.0
 
@@ -7648,21 +7648,21 @@ def diagnose(cfg):
                 # will match to detectid
                 # !!! Remember. cont_tab (from the cont_sourcat.tab) is downselected from cont.h5
                 #   ... cont.h5 will have equal or MORE detections than are in cont_tab
-                print(f"[{cfg.datevshot}] Preloading continuum spectra ...")
+                log(f"[{cfg.datevshot}] Preloading continuum spectra ...")
                 all_detid = list(cont_h5.root.Spectra.read(field="detectid"))
                 all_spec1d = cont_h5.root.Spectra.read(field="spec1d")
                 all_spec1d_err = cont_h5.root.Spectra.read(field="spec1d_err")
                 # No. If already marked as a continuum source, use Diagnose and need the real gmag
                 #all_approx_gmag = np.nansum(all_spec1d,axis=1)
 
-                print(f"[{cfg.datevshot}] Evaluating pseudo gmags ... ")
+                log(f"[{cfg.datevshot}] Evaluating pseudo gmags ... ")
                 for i in range(len(cont_tab)):
                     d = cont_tab[i]['detectid']
 
                     try:
                         j = all_detid.index(d) #match cont_tab detectid to cont.h5 detectid
                     except:
-                        print(f"[{cfg.datevshot}] Warning! detectid: {d} not found in *_line.h5 file?")
+                        log(f"[{cfg.datevshot}] Warning! detectid: {d} not found in *_line.h5 file?")
                         continue
 
                     #No. If already marked as a continuum source, use Diagnose and need the real gmag
@@ -7673,7 +7673,7 @@ def diagnose(cfg):
 
                     # rows = cont_h5.root.Spectra.read_where("detectid==d")
                     # if len(rows) != 1:
-                    #     print(f"[{cfg.datevshot}] Diagnose preselection gmag failure for {d}")
+                    #     log(f"[{cfg.datevshot}] Diagnose preselection gmag failure for {d}")
                     #     continue
                     # row=rows[0]
                     # gmag, gmag_unc, *_ = SU.get_best_gmag(row['spec1d']*1e-17,row['spec1d_err']*1e-17,G.CALFIB_WAVEGRID)
@@ -7681,7 +7681,7 @@ def diagnose(cfg):
 
                     # spec1d = cont_h5.root.Spectra.read_where("detectid==d",field="spec1d")
                     # if len(spec1d) != 1:
-                    #     print(f"[{cfg.datevshot}] Diagnose preselection gmag failure for {d}")
+                    #     log(f"[{cfg.datevshot}] Diagnose preselection gmag failure for {d}")
                     #     continue
                     #
                     # spec1d_err = cont_h5.root.Spectra.read_where("detectid==d",field="spec1d_err")
@@ -7694,7 +7694,7 @@ def diagnose(cfg):
 
                 #update
                 cont_tab.write(name, format="ascii", overwrite=True)
-                print(f"[{cfg.datevshot}] Updated lines table with gmag: {os.getcwd()}/{name}")
+                log(f"[{cfg.datevshot}] Updated lines table with gmag: {os.getcwd()}/{name}")
 
             totN = len(cont_tab)
             DETECTID = np.array(cont_tab['detectid'])
@@ -7720,7 +7720,7 @@ def diagnose(cfg):
             #
             #     rows = cont_h5.root.Spectra.read_where("detectid==d")
             #     if len(rows) != 1:
-            #         print(f"[{cfg.datevshot}] Diagnose preselection spectra failure for {d}")
+            #         log(f"[{cfg.datevshot}] Diagnose preselection spectra failure for {d}")
             #         spec_2D.append(np.zeros(1036))
             #         error_2D.append(np.zeros(1036))
             #         apcor.append(np.zeros(1036))
@@ -7738,7 +7738,7 @@ def diagnose(cfg):
                     j = all_detid.index(d)  # match cont_tab detectid to cont.h5 detectid
                 except:
                     #already checked in previous loop, so this should neverl trigger
-                    print(f"[{cfg.datevshot}] Warning! detectid: {d} not found in *_cont.h5 file?")
+                    log(f"[{cfg.datevshot}] Warning! detectid: {d} not found in *_cont.h5 file?")
                     continue
 
                 spec_2D.append(all_spec1d[j] * dust_corr)
@@ -7779,7 +7779,7 @@ def diagnose(cfg):
             # call Diagnose' needs sklearn
 
             # Diagnose path is: {cfg.scriptdir}/Diagnose/diagnose.py
-            print(f"[{cfg.datevshot}] Running Diagnose on {num_spectra} continuum sources ...")
+            log(f"[{cfg.datevshot}] Running Diagnose on {num_spectra} continuum sources ...")
             cmd = f"python3 {cfg.scriptdir}/Diagnose/diagnose.py"
             cmd += f" {outname} -li 0 -hi {num_spectra} -s 1 -q"
 
@@ -7788,7 +7788,7 @@ def diagnose(cfg):
     except:
         #print(traceback.format_exc())
         rc = -1
-        print(f"[{cfg.datevshot}] Exception in Diagnose.",traceback.format_exc())
+        log(f"[{cfg.datevshot}] Exception in Diagnose.",traceback.format_exc())
 
     return rc
 
@@ -7805,7 +7805,7 @@ def diagnose_output_to_table(cfg):
 
     try:
 
-        print(f"[{cfg.datevshot}] Converting Diagnose output to table...")
+        log(f"[{cfg.datevshot}] Converting Diagnose output to table...")
         os.chdir(os.path.join(cfg.cwd))
 
         rc = 0
@@ -7828,7 +7828,7 @@ def diagnose_output_to_table(cfg):
             N = fits.open(filenames[0])[2].shape[0] + fits.open(filenames[1])[2].shape[0]
             t = fits.open(filenames[0])[6].data
         except:
-            print(f"[{cfg.datevshot}] Error! diagnose_output_to_table : cannot read {filenames[0]}")
+            log(f"[{cfg.datevshot}] Error! diagnose_output_to_table : cannot read {filenames[0]}")
             return -1
 
         detectid, RA, Dec, shotid, gmag, rmag = [[t[name][0]] * N for name in
@@ -7892,12 +7892,12 @@ def diagnose_output_to_table(cfg):
 
         Td.write("diagnose_classifications.tab",format="ascii",overwrite=True)
 
-        print(f"[{cfg.datevshot}] Wrote: diagnose_classifications.tab")
+        log(f"[{cfg.datevshot}] Wrote: diagnose_classifications.tab")
 
     except:
         #print(traceback.format_exc())
         rc = -1
-        print(f"[{cfg.datevshot}] Exception in Diagnose_output_to_table.", traceback.format_exc())
+        log(f"[{cfg.datevshot}] Exception in Diagnose_output_to_table.", traceback.format_exc())
 
 
     return rc
@@ -7917,7 +7917,7 @@ def prep_elixer(cfg):
         rc = 0
         os.chdir(os.path.join(cfg.cwd))
 
-        print(f"[{cfg.datevshot}] Preparing detctions lists for ELiXer ...")
+        log(f"[{cfg.datevshot}] Preparing detctions lists for ELiXer ...")
         #make subdirs elixer/line, elixer/cont
         elixdir = os.path.join(cfg.cwd,"elixer/")
 
@@ -7935,10 +7935,10 @@ def prep_elixer(cfg):
                     ct += 1
                     outdir = os.path.join(cfg.cwd,f"elixer.backup_{ct}")
                 #now move
-                print(f"[{cfg.datevshot}] Old elixer directory found. Moving it to: {outdir}")
+                log(f"[{cfg.datevshot}] Old elixer directory found. Moving it to: {outdir}")
                 Path(elixdir).rename(Path(outdir))
             else: #wipe out the directory and start over
-                print(f"[{cfg.datevshot}] Old elixer directory found. Unused. Will remove and rebuild.")
+                log(f"[{cfg.datevshot}] Old elixer directory found. Unused. Will remove and rebuild.")
                 shutil.rmtree(elixdir)
 
         Path(elixdir).mkdir(parents=True, exist_ok=True)
@@ -7949,13 +7949,13 @@ def prep_elixer(cfg):
                     #we are in the shot working dir
                     h5 = tables.open_file(f"{cfg.datevshot}.h5",mode='r')
                     bad_amps_list = list(h5.root.AmpStats.read_where("flag==0", field="multiframe").astype(str))
-                    print(f"[{cfg.datevshot}] Loaded {len(bad_amps_list)} bad amps ...")
+                    log(f"[{cfg.datevshot}] Loaded {len(bad_amps_list)} bad amps ...")
                     h5.close()
                 except:
-                    print(f"[{cfg.datevshot}] Could not load bad_amps_list")
+                    log(f"[{cfg.datevshot}] Could not load bad_amps_list")
                     bad_amps_list = []
             else:
-                print(f"[{cfg.datevshot}] --force specified. Will not restrict bad amps.")
+                log(f"[{cfg.datevshot}] --force specified. Will not restrict bad amps.")
                 bad_amps_list = []
         else:
             bad_amps_list = []
@@ -7965,30 +7965,30 @@ def prep_elixer(cfg):
         tab = Table.read(f"{cfg.datevshot}_line_sourcecat.tab",format="ascii")
         line_ct = -1
         if len(tab) == 0:
-            print(f"[{cfg.datevshot}] Error! no line sources recorded. ")
+            log(f"[{cfg.datevshot}] Error! no line sources recorded. ")
             make_lines = False
         else:
             sel = np.array([x['multiframe'] not in bad_amps_list for x in tab])
-            print(f"[{cfg.datevshot}] Excluding {len(sel)-np.count_nonzero(sel)} / {len(sel)} line detections as residing on bad amps.")
+            log(f"[{cfg.datevshot}] Excluding {len(sel)-np.count_nonzero(sel)} / {len(sel)} line detections as residing on bad amps.")
             line_dets = list(tab['detectid'][sel])
             line_ct = len(line_dets)
             np.savetxt(os.path.join(elixdir, "line.dets"), line_dets, fmt="%d")
-            print(f"[{cfg.datevshot}] Wrote {len(line_dets)} emission line detections for ELiXer to examine.")
+            log(f"[{cfg.datevshot}] Wrote {len(line_dets)} emission line detections for ELiXer to examine.")
             del tab
 
         make_conts = True
         tab = Table.read(f"{cfg.datevshot}_cont_sourcecat.tab",format="ascii")
         cont_ct = -1
         if len(tab) == 0:
-            print(f"[{cfg.datevshot}] Error! no continuum sources recorded. ")
+            log(f"[{cfg.datevshot}] Error! no continuum sources recorded. ")
             make_conts = False
         else:
             sel = np.array([x['multiframe'] not in bad_amps_list for x in tab])
-            print(f"[{cfg.datevshot}] Excluding {len(sel) - np.count_nonzero(sel)} / {len(sel)} continuum detections as residing on bad amps.")
+            log(f"[{cfg.datevshot}] Excluding {len(sel) - np.count_nonzero(sel)} / {len(sel)} continuum detections as residing on bad amps.")
             cont_dets = list(tab['detectid'][sel])
             cont_ct = len(cont_dets)
             np.savetxt(os.path.join(elixdir, "cont.dets"), cont_dets, fmt="%d")
-            print(f"[{cfg.datevshot}] Wrote {len(cont_dets)} continuum detections for ELiXer to examine.")
+            log(f"[{cfg.datevshot}] Wrote {len(cont_dets)} continuum detections for ELiXer to examine.")
             del tab
 
 
@@ -8010,7 +8010,7 @@ def prep_elixer(cfg):
             try:
                 slurm_alloc = os.getenv('SLURM_TACC_ACCOUNT')
             except:
-                print(f"[{cfg.datevshot}] Could not get SLURM allocation account.")
+                log(f"[{cfg.datevshot}] Could not get SLURM allocation account.")
             elixer_base_cmd = f" -f --slurm 0 --nodes 1 --log info --shot_h5 {shot_h5} --diagnose {diagnose_tab} " \
                               f" --png --error 3.0 --neighborhood 10.0 --ntasks_per_node {tasks_per_node} " \
                               f" --timex 0.8 --post_merge 2  --merge_name {merge_name} --cnn"
@@ -8053,7 +8053,7 @@ def prep_elixer(cfg):
                 with open(os.path.join("elixer_line_cmd.txt"),"w") as f:
                     f.write(f"{which_elixer} {elixer_base_cmd} {elixer_line_cmd} \n")
 
-                print(f"[{cfg.datevshot}] Preparing ELiXer (line) SLURM ... ")
+                log(f"[{cfg.datevshot}] Preparing ELiXer (line) SLURM ... ")
                 system_command(cfg, "source elixer_line_cmd.txt")
 
                 try:
@@ -8069,8 +8069,8 @@ def prep_elixer(cfg):
                                         if "day" in line: #this is a problem (could be day or days)
                                             #example: #SBATCH -t 2 days, 1:54:00            # Run time (hh:mm:ss)
 
-                                            print(f"[{cfg.datevshot}] WARNING!!! Excessive ELiXer run time {line.rstrip()}")
-                                            print(f"[{cfg.datevshot}] You may need to manually configure.")
+                                            log(f"[{cfg.datevshot}] WARNING!!! Excessive ELiXer run time {line.rstrip()}")
+                                            log(f"[{cfg.datevshot}] You may need to manually configure.")
 
                                             toks = line.split()
 
@@ -8094,19 +8094,19 @@ def prep_elixer(cfg):
                         #make a copy of the elixer.run as elixer_lines.run so can prepend
                         system_command(cfg,"cp elixer.run elixer_line.run")
                 except:
-                    print(f"[{cfg.datevshot}] Error bulding elixer.slurm file(s) ...", traceback.format_exc())
+                    log(f"[{cfg.datevshot}] Error bulding elixer.slurm file(s) ...", traceback.format_exc())
 
             os.chdir(elixdir)
             if make_conts:
                 # is there a line slurm already set up?
-                print(f"[{cfg.datevshot}] Extra time ({minutes}) and dispatch start ({dispatch_base})")
+                log(f"[{cfg.datevshot}] Extra time ({minutes}) and dispatch start ({dispatch_base})")
                 if minutes > 0 and dispatch_base > 0:
                     elixer_cont_cmd += f" --time_add {minutes}  --dispatch_base {dispatch_base} "
 
                 with open(os.path.join("elixer_cont_cmd.txt"), "w") as f:
                     f.write(f"{which_elixer} {elixer_base_cmd} {elixer_cont_cmd} \n")
 
-                print(f"[{cfg.datevshot}] Preparing ELiXer (cont) SLURM ... ")
+                log(f"[{cfg.datevshot}] Preparing ELiXer (cont) SLURM ... ")
                 system_command(cfg, "source elixer_cont_cmd.txt")
 
                 # make a copy of the elixer.run as elixer_lines.run so can prepend
@@ -8123,7 +8123,7 @@ def prep_elixer(cfg):
                                 for line in elixer_cont:
                                     elixer_run.write(line)
 
-            #print(f"[{cfg.datevshot}]Preparing ELiXer SLURMS ... ")
+            #log(f"[{cfg.datevshot}]Preparing ELiXer SLURMS ... ")
             #os.chdir(elixdir)
             #system_command(cfg,"source elixer_cmd.txt")
 
@@ -8169,7 +8169,7 @@ if prep_compress > -1:
     exit(0)
 
 if cfg.clean_only:
-    print(f"[{cfg.datevshot}] Performing only the CLEAN, level : {cfg.clean} ...")
+    log(f"[{cfg.datevshot}] Performing only the CLEAN, level : {cfg.clean} ...")
     post_clean(cfg)
     Quit(cfg,0,"Clean complete. Exiting",do_write_status=False,do_post_clean=False,do_write_summary=False) #just ran post_clean, don't need it twice
 
@@ -8184,7 +8184,7 @@ do_initial_setup = True
 if cfg.numexp <= 0: # and not cfg.multifits_only:
     # might not be fatal ... could be a newer observation that is not in the gettars yet, but is still accessible
     #Quit(cfg, -1, f"FATAL! Could not find shot {cfg.datevshot}",do_write_status=False)
-    print(f"[{cfg.datevshot}] Did not find shot in standard gettar location. Not necessarily fatal. Will attempt to proceed ...")
+    log(f"[{cfg.datevshot}] Did not find shot in standard gettar location. Not necessarily fatal. Will attempt to proceed ...")
     #try the initial setup anyway
     rc = initial_setup(cfg)
     do_initial_setup = False
@@ -8206,18 +8206,18 @@ if cfg.numexp <= 0: # and not cfg.multifits_only:
 if cfg.exp <= 0 and cfg.multifits_only:
     pass #this is fine
 elif cfg.exp <= 0 and not cfg.multifits_only:
-    print(f"[{cfg.datevshot}] Working on {cfg.datevshot} with {cfg.numexp} exposure(s) ...")
+    log(f"[{cfg.datevshot}] Working on {cfg.datevshot} with {cfg.numexp} exposure(s) ...")
     if cfg.numexp == 1 or cfg.numexp == 3: #okay
         pass
     elif not cfg.multifits_only:
-        #print(f"[{cfg.datevshot}] !!! bad !!! Unusual number of exposures ({cfg.numexp}).")
+        #log(f"[{cfg.datevshot}] !!! bad !!! Unusual number of exposures ({cfg.numexp}).")
         print(f"********************************************************************************************")
         print(f"!!! WARNING !!! Unusual number of exposures ({cfg.numexp}) for {cfg.datevshot} !!! Reduction may be problematic.")
         print(f"                You may want to consider reducing each exposure individually. ")
         print(f"********************************************************************************************")
 else:
     if cfg.exp <= cfg.numexp:
-        print(f"[{cfg.datevshot}] Working on {cfg.datevshot} exposure #{cfg.exp} ...")
+        log(f"[{cfg.datevshot}] Working on {cfg.datevshot} exposure #{cfg.exp} ...")
         if int(cfg.datevshot[0:8]) < 20240800 and cfg.numexp == 3:
             try:
                 dex_dvs = np.loadtxt("/corral-repl/utexas/Hobby-Eberly-Telesco/detect/fwhm.all",dtype=str,usecols=0)
@@ -8262,12 +8262,12 @@ if cfg.special == 1:
 
 if not cfg.multifits_only and (cfg.numexp < 3 or not cfg.hetdex_original):
     #print(f"Fewer than 3 exposures (assume dithers). Checking guider for seeing FWHM...")
-    #print(f"[{cfg.datevshot}] Checking guider for seeing FWHM (this can take a while) ...")
+    #log(f"[{cfg.datevshot}] Checking guider for seeing FWHM (this can take a while) ...")
     cfg.guider_fwhm = get_guider_fwhm(cfg) #this also gets the exposure times
     if cfg.guider_fwhm is not None:
-        print(f"[{cfg.datevshot}] Using guider FWHM = {cfg.guider_fwhm}")
+        log(f"[{cfg.datevshot}] Using guider FWHM = {cfg.guider_fwhm}")
     else:
-        print(f"[{cfg.datevshot}] Unable to obtain guider seeing FWHM. Will measure as best can be from available data.")
+        log(f"[{cfg.datevshot}] Unable to obtain guider seeing FWHM. Will measure as best can be from available data.")
 
 if not cfg.multifits_only and (cfg.total_exp_time is None or cfg.total_exp_time == 0):
     get_exposure_times(cfg)
@@ -8301,7 +8301,7 @@ if not cfg.multifits_only and (cfg.total_exp_time is None or cfg.total_exp_time 
 #cfg.orig_stdout = sys.stdout
 #cfg.orig_stderr = sys.stderr
 cfg.file_stdout = open(f"{cfg.datevshot}.log","a")
-print(f"[{cfg.datevshot}] Logging redirected to: {cfg.cwd}/{cfg.file_stdout.name}")
+log(f"[{cfg.datevshot}] Logging redirected to: {cfg.cwd}/{cfg.file_stdout.name}")
 #sys.stderr = cfg.file_stdout
 #sys.stdout = cfg.file_stdout
 
@@ -8337,7 +8337,7 @@ if s01_run1s and not dtprog["s01_run1s"]:
 
     progress_update(cfg,dtprog,"s01_run1s")
 else:
-    print(f"[{cfg.datevshot}] Skipping s01_run1s run1s")
+    log(f"[{cfg.datevshot}] Skipping s01_run1s run1s")
 
     #However, still need this later for vdrp pathing
     if not os.path.exists("./reductions"):
@@ -8346,20 +8346,20 @@ else:
 
 if s01b_amp_images and not dtprog["s01b_amp_images"]:
     if make_amp_images(cfg) < 0: #this is non-fatal if it fails
-        print(f"[{cfg.datevshot}] creation of IFU+amp diagnostic images failed. Non-fatal. Will continue.")
+        log(f"[{cfg.datevshot}] creation of IFU+amp diagnostic images failed. Non-fatal. Will continue.")
     else:
         if make_amp_images(cfg,ratio=True) < 0:  # this is non-fatal if it fails
-            print(f"[{cfg.datevshot}] creation of IFU+amp diagnostic RATIO images failed. Non-fatal. Will continue.")
+            log(f"[{cfg.datevshot}] creation of IFU+amp diagnostic RATIO images failed. Non-fatal. Will continue.")
         else:
             progress_update(cfg,dtprog,"s01b_amp_images")
 
 else:
-    print(f"[{cfg.datevshot}] Skipping s01b_amp_images")
+    log(f"[{cfg.datevshot}] Skipping s01b_amp_images")
 
 if cfg.multifits_only:
-    print(f"[{cfg.datevshot}] multi*fits files generated. "
+    log(f"[{cfg.datevshot}] multi*fits files generated. "
           f"Check paths under ./reductions/{cfg.datevshot[0:8]}/virus/virus*{cfg.datevshot[-3]}/")
-    print(f"[{cfg.datevshot}] Also look for diagnostic IFU+amp images under sci{cfg.datevshot}/analysis/ifus")
+    log(f"[{cfg.datevshot}] Also look for diagnostic IFU+amp images under sci{cfg.datevshot}/analysis/ifus")
     Quit(cfg, 0, f"Done. Enforcing --multifits_only switch. {cfg.datevshot}", do_write_status=False)
 
 
@@ -8384,7 +8384,7 @@ if s02_vdrp and not dtprog["s02_vdrp"]:
     progress_update(cfg,dtprog, "s02_vdrp")
 
 else:
-    print(f"[{cfg.datevshot}] Skipping s02_vdrp vdrp")
+    log(f"[{cfg.datevshot}] Skipping s02_vdrp vdrp")
 
 
 
@@ -8440,7 +8440,7 @@ if s03_fluxcal and not dtprog["s03_fluxcal"]:
         if os.path.exists(os.path.join(cfg.cwd,f"vdrp/shifts/dithall.sdss")):
             star_cat_list.append("sdss")
     else: #shold not happen
-        print(f"[{cfg.datevshot}] flux calibration: unexpected value in cfg.starcat_cal {cfg.starcat_cal}. Using SDSS default.")
+        log(f"[{cfg.datevshot}] flux calibration: unexpected value in cfg.starcat_cal {cfg.starcat_cal}. Using SDSS default.")
 
         if os.path.exists(os.path.join(cfg.cwd, f"vdrp/shifts/dithall.sdss")):
             star_cat_list.append("sdss")
@@ -8455,13 +8455,13 @@ if s03_fluxcal and not dtprog["s03_fluxcal"]:
     if len(star_cat_list) == 0:
         Quit(cfg, -1, "FATAL. Something wrong. No star catalogs available under vdrp/shifts.")
 
-    print(f"[{cfg.datevshot}] attemping flux calibrations in this order: {star_cat_list} ...")
+    log(f"[{cfg.datevshot}] attemping flux calibrations in this order: {star_cat_list} ...")
     for star_cat in star_cat_list:
-        #print(f"[{cfg.datevshot}] flux calibration: {star_cat}")
+        #log(f"[{cfg.datevshot}] flux calibration: {star_cat}")
         run_fluxcalibration(cfg,star_cat)
 
         if check_fluxcalibration(cfg) < 0:
-            print(f"[{cfg.datevshot}] flux calibration: {star_cat} failed. Trying next ... ")
+            log(f"[{cfg.datevshot}] flux calibration: {star_cat} failed. Trying next ... ")
         else:
             break #this one was good
 
@@ -8474,8 +8474,8 @@ if s03_fluxcal and not dtprog["s03_fluxcal"]:
     #could be that none worked
 
     if cfg.hetdex_original:
-        print(f"[{cfg.datevshot}] If replacing, update /corral and /scratch/projects   detect/tp/<datevshot>sedtp_f.dat")
-        print(f"[{cfg.datevshot}] If replacing, update /scratch/projects/hetdex/detect/fwhm.all and norm.all ... see update_fwhm_norm script")
+        log(f"[{cfg.datevshot}] If replacing, update /corral and /scratch/projects   detect/tp/<datevshot>sedtp_f.dat")
+        log(f"[{cfg.datevshot}] If replacing, update /scratch/projects/hetdex/detect/fwhm.all and norm.all ... see update_fwhm_norm script")
 
     #update the fwhm.out with the cfg.guider_fwhm, if it is set
     if cfg.guider_fwhm is not None and cfg.guider_fwhm > 0:
@@ -8490,17 +8490,17 @@ if s03_fluxcal and not dtprog["s03_fluxcal"]:
             out = np.loadtxt(fwhm_fn) #should just be a single line
 
             #have to write out as file since not all floats
-            print(f"[{cfg.datevshot}] Updating measured seeing FWHM {out[0]} with guider reported FWHM {cfg.guider_fwhm}")
+            log(f"[{cfg.datevshot}] Updating measured seeing FWHM {out[0]} with guider reported FWHM {cfg.guider_fwhm}")
             with open(fwhm_fn,"w") as f:
                 f.write(f"{cfg.guider_fwhm}\t{out[1]}\t{int(out[2])}\n")
 
         except:
-            print(f"[{cfg.datevshot}] Could not update fwhm.out with guider.fwhm")
+            log(f"[{cfg.datevshot}] Could not update fwhm.out with guider.fwhm")
             print(traceback.format_exc())
 
     progress_update(cfg,dtprog,"s03_fluxcal")
 else:
-    print(f"[{cfg.datevshot}] Skipping s03_fluxcal flux calibration")
+    log(f"[{cfg.datevshot}] Skipping s03_fluxcal flux calibration")
 
 
 ###########
@@ -8512,16 +8512,16 @@ else:
 if s04_make_shot and not dtprog["s04_make_shot"]:
 
     if s04a_get_ifucens and not dtprog["s04a_get_ifucens"]:
-        print(f"[{cfg.datevshot}] Getting IFU centers ...")
+        log(f"[{cfg.datevshot}] Getting IFU centers ...")
         if run_make_ifucen(cfg) != 0:
             Quit(cfg,-1,"FATAL. Failed to get IFU centers.")
         else:
             progress_update(cfg,dtprog, "s04a_get_ifucens")
     else:
-        print(f"[{cfg.datevshot}] Skipping s04a_get_ifucens IFU centers ...")
+        log(f"[{cfg.datevshot}] Skipping s04a_get_ifucens IFU centers ...")
 
     if s04b_rfft and not dtprog["s04b_rfft"]:
-        print(f"[{cfg.datevshot}] Running rfft (this may take a while) ...")
+        log(f"[{cfg.datevshot}] Running rfft (this may take a while) ...")
         if run_rfft(cfg) != 0:
             if cfg.avg_sky >= FAIL_AVG_SKY:
                 Quit(cfg,-1,f"[{cfg.datevshot}] Average Sky is catastrophically large and/or unable to be fit: {cfg.avg_sky:0.1f}.")
@@ -8530,7 +8530,7 @@ if s04_make_shot and not dtprog["s04_make_shot"]:
         else:
             progress_update(cfg,dtprog, "s04b_rfft")
     else:
-        print(f"[{cfg.datevshot}] Skipping s04b_rfft rfft")
+        log(f"[{cfg.datevshot}] Skipping s04b_rfft rfft")
 
 
     if s04c_rcal_all and not dtprog["s04c_rcal_all"]:
@@ -8539,13 +8539,13 @@ if s04_make_shot and not dtprog["s04_make_shot"]:
         if rc < 0:
             Quit(cfg, -1, "FATAL. rcal_all fail.")
         elif rc > 0:
-            print(f"[{cfg.datevshot}] rcal_all: Limited success. Non-fatal. Will continue")
+            log(f"[{cfg.datevshot}] rcal_all: Limited success. Non-fatal. Will continue")
 
         progress_update(cfg,dtprog, "s04c_rcal_all")
         #else keep going
 
     else:
-        print(f"[{cfg.datevshot}] Skipping s04c_rcal_all rcal_all")
+        log(f"[{cfg.datevshot}] Skipping s04c_rcal_all rcal_all")
 
     if s04d_shot_h5 and not dtprog["s04d_shot_h5"]:
         rc = build_shot_h5(cfg)
@@ -8553,41 +8553,41 @@ if s04_make_shot and not dtprog["s04_make_shot"]:
             Quit(cfg, -1, "FATAL. Could not build shot h5 file. Cannot continue with catalog creation.")
         progress_update(cfg,dtprog, "s04d_shot_h5")
     else:
-        print(f"[{cfg.datevshot}] Skipping s04d_shot_h5 build of shot HDF5 file.")
+        log(f"[{cfg.datevshot}] Skipping s04d_shot_h5 build of shot HDF5 file.")
 
     # check stats
     if s04e_amp_stats and not dtprog["s04e_amp_stats"]:
         rc = amp_stats(cfg)
         if rc < 0:
-            print(f"[{cfg.datevshot}] Non-fatal. Could not compute amp stats from shot h5 file. Will continue anyway with catalog creation.")
+            log(f"[{cfg.datevshot}] Non-fatal. Could not compute amp stats from shot h5 file. Will continue anyway with catalog creation.")
 
         #need to add the index first
         rc = add_fiber_index(cfg)
         if rc < 0:
-            print(f"[{cfg.datevshot}] Severe, but non-fatal. Could not add fiber index. Will continue anyway with catalog creation.")
+            log(f"[{cfg.datevshot}] Severe, but non-fatal. Could not add fiber index. Will continue anyway with catalog creation.")
         else:
             #then can add the mask
             rc = add_fiber_mask(cfg)
             if rc < 0:
-                print(f"[{cfg.datevshot}] Non-fatal. Could not update shot h5 file with fiber level masking. Will continue anyway with catalog creation.")
+                log(f"[{cfg.datevshot}] Non-fatal. Could not update shot h5 file with fiber level masking. Will continue anyway with catalog creation.")
 
         progress_update(cfg,dtprog, "s04e_amp_stats")
     else:
-        print(f"[{cfg.datevshot}] Skipping s04e_amp_stats compute and appending of per-amp diagnostic info.")
+        log(f"[{cfg.datevshot}] Skipping s04e_amp_stats compute and appending of per-amp diagnostic info.")
 
     #basic shot analysis (mostly images for review)
     if s04f_analysis and not dtprog["s04f_analysis"] and not cfg.multifits_only:
         rc = shot_analyisis(cfg)
         if rc < 0:
-            print(f"[{cfg.datevshot}] Non-fatal. Could not complete basic shot analysis output.")
+            log(f"[{cfg.datevshot}] Non-fatal. Could not complete basic shot analysis output.")
         progress_update(cfg,dtprog, "s04f_analysis")
     else:
-        print(f"[{cfg.datevshot}] Skipping s04f_analysis analysis/creation of diagnostic info.")
+        log(f"[{cfg.datevshot}] Skipping s04f_analysis analysis/creation of diagnostic info.")
 
     if dtprog["s04a_get_ifucens"] and dtprog["s04b_rfft"] and dtprog["s04c_rcal_all"] and dtprog["s04d_shot_h5"] and dtprog["s04e_amp_stats"]:
         progress_update(cfg,dtprog, "s04_make_shot")
 else:
-    print(f"[{cfg.datevshot}] Skipping sky subtraction")
+    log(f"[{cfg.datevshot}] Skipping sky subtraction")
 
 
 ###########
@@ -8617,7 +8617,7 @@ elif cfg.numexp == 3:
     elif rc == 0: #not HETDEX dither (that is okay but we cannot move on to source detection)
         cfg.dither_configuration = 0  # non-standard, assume multiple exposures, but not dithered
         if FORCE_CONTINUE:
-            print(f"[{cfg.datevshot}] Non-standard dither configuration, but --force flag set, so will continue.")
+            log(f"[{cfg.datevshot}] Non-standard dither configuration, but --force flag set, so will continue.")
         else:
             post_clean(cfg)
             Quit(cfg, 0,f"[{cfg.datevshot}] ({cfg.numexp}) exposures not in HETDEX dither configuration and is not "
@@ -8642,7 +8642,7 @@ if s05_detection and not dtprog["s05_detection"]:
 
         progress_update(cfg,dtprog, "s05b_rdet_rf1")
     else:
-        print(f"[{cfg.datevshot}] Skipping s05b_rdet_rf1 rdet_rf1 (line detection)")
+        log(f"[{cfg.datevshot}] Skipping s05b_rdet_rf1 rdet_rf1 (line detection)")
 
 
     #check the line detections for excesses
@@ -8655,16 +8655,16 @@ if s05_detection and not dtprog["s05_detection"]:
 
 
     if s05c_rgetmax  and not dtprog["s05c_rgetmax"]:
-        print(f"[{cfg.datevshot}] Running rgetmax (continuum detection) ...")
+        log(f"[{cfg.datevshot}] Running rgetmax (continuum detection) ...")
         rc = rgetmax(cfg)
         if rc < 0:
             Quit(cfg, -1, "FATAL. rgetmax fail.")
         elif rc > 0:
-            print(f"[{cfg.datevshot}] rgetmax: Limited success. Non-fatal. Will continue")
+            log(f"[{cfg.datevshot}] rgetmax: Limited success. Non-fatal. Will continue")
 
         progress_update(cfg,dtprog, "s05c_rgetmax")
     else:
-        print(f"[{cfg.datevshot}] Skipping s05c_rgetmax rgetmax (continuum detection)")
+        log(f"[{cfg.datevshot}] Skipping s05c_rgetmax rgetmax (continuum detection)")
 
     if s05e_detection_hdf5 and not dtprog["s05e_detection_hdf5"]:
         rc = build_detection_hdf5(cfg)
@@ -8675,7 +8675,7 @@ if s05_detection and not dtprog["s05_detection"]:
         progress_update(cfg,dtprog, "s05_detection")
 
 else:
-    print(f"[{cfg.datevshot}] Skipping detections")
+    log(f"[{cfg.datevshot}] Skipping detections")
 
 
 ##################################################
@@ -8687,7 +8687,7 @@ else:
 
 if s06_catalogs and not dtprog["s06_catalogs"]:
 
-    print(f"[{cfg.datevshot}] Catalog creation ... ")
+    log(f"[{cfg.datevshot}] Catalog creation ... ")
 
     if s06b_fof and not dtprog["s06b_fof"]:
         try:
@@ -8704,12 +8704,12 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
                 norm_obs_ew[np.isinf(norm_obs_ew)] = 1.0
                 np.seterr(**original_settings)
             except:
-                print(f"[{cfg.datevshot}] Exception computing normed Obs EW. {traceback.format_exc()}")
+                log(f"[{cfg.datevshot}] Exception computing normed Obs EW. {traceback.format_exc()}")
                 norm_obs_ew = None
 
             #subselect "nominal" good
             if cfg.linedet_filter == 0:
-                print(f"[{cfg.datevshot}] Standard extra restriction on line detections. "
+                log(f"[{cfg.datevshot}] Standard extra restriction on line detections. "
                       f"Includes SNR >= {DEFAULT_MIN_SNR_FOR_ELIXER}")
                 esel = np.array(line_tab['continuum'] >= -3)
                 esel = esel & np.array(line_tab['sn'] >= DEFAULT_MIN_SNR_FOR_ELIXER)
@@ -8727,26 +8727,26 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
                     # should not be any in the base set that are less than that level, but just to be
                     # consistent, apply it anyway
                     esel = esel & np.array(line_tab['sn'] >= cfg.linedet_filter)
-                    print(f"[{cfg.datevshot}] Limited extra restriction on line detections. "
+                    log(f"[{cfg.datevshot}] Limited extra restriction on line detections. "
                           f"Includes SNR >= {cfg.linedet_filter}")
                 else:
-                    print(f"[{cfg.datevshot}] Limited extra restriction on line detections.")
+                    log(f"[{cfg.datevshot}] Limited extra restriction on line detections.")
 
             if norm_obs_ew is not None:
                 #from a bit above, try to limit the many false lines found on top of positive continuum
                 try:
                     reject_obs_ew = np.array(norm_obs_ew < 0.5) * np.array(line_tab['continuum'] > 0.35)
                     esel = esel * ~reject_obs_ew
-                    print(f"[{cfg.datevshot}] Removing {np.count_nonzero(reject_obs_ew)} / {len(esel)} line detections for out of range normed Obs EW.")
+                    log(f"[{cfg.datevshot}] Removing {np.count_nonzero(reject_obs_ew)} / {len(esel)} line detections for out of range normed Obs EW.")
                 except:
-                    print(f"[{cfg.datevshot}] Exception applying normed Obs EW. {traceback.format_exc()}")
+                    log(f"[{cfg.datevshot}] Exception applying normed Obs EW. {traceback.format_exc()}")
 
             line_tab = line_tab[esel]
 
             if line_tab is not None:
                 tname = f"{cfg.datevshot}_line_sourcecat.tab"
                 line_tab.write(tname, format="ascii", overwrite=True)
-                print(f"[{cfg.datevshot}] Initial lines source table, {len(line_tab)} rows: {os.getcwd()}/{tname}")
+                log(f"[{cfg.datevshot}] Initial lines source table, {len(line_tab)} rows: {os.getcwd()}/{tname}")
 
                 fof_3d_lines_tab = make_3d_friend_table_for_shot(line_tab, dsky_3D=6.0, dwave=4.0)
                 if fof_3d_lines_tab is not None:
@@ -8800,19 +8800,19 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
                         tname = f"{cfg.datevshot}_line_sourcecat.tab"
                         line_tab.write(tname, format="ascii", overwrite=True)
                         cfg.num_line_dets = len(line_tab)
-                        print(f"[{cfg.datevshot}] Updated lines source table, {cfg.num_line_dets} rows: {os.getcwd()}/{tname}")
+                        log(f"[{cfg.datevshot}] Updated lines source table, {cfg.num_line_dets} rows: {os.getcwd()}/{tname}")
 
                         #esel = np.array(line_tab['sel_det'] == True)
                         #np.savetxt('elixer_line.dets',line_tab['detectid'][esel],fmt="%d")
 
                     else:
-                        print(f"[{cfg.datevshot}] Notice! (1) Could not combine lines detections by FoF or no lines qualified to cluster.")
+                        log(f"[{cfg.datevshot}] Notice! (1) Could not combine lines detections by FoF or no lines qualified to cluster.")
                 else:
-                    print(f"[{cfg.datevshot}] Notice! (2) Could not combine lines detections by FoF or no lines qualified to cluster.")
+                    log(f"[{cfg.datevshot}] Notice! (2) Could not combine lines detections by FoF or no lines qualified to cluster.")
             else:
-                print(f"[{cfg.datevshot}] Error! Could not combine lines detections. Lines table not found.")
+                log(f"[{cfg.datevshot}] Error! Could not combine lines detections. Lines table not found.")
         except:
-            print(f"[{cfg.datevshot}] Error! Could not combine lines detections by FoF.")
+            log(f"[{cfg.datevshot}] Error! Could not combine lines detections by FoF.")
             print(traceback.format_exc())
 
         try:
@@ -8827,7 +8827,7 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
             if cont_tab is not None:
                 tname = f"{cfg.datevshot}_cont_sourcecat.tab"
                 cont_tab.write(tname, format="ascii", overwrite=True)
-                print(f"[{cfg.datevshot}] Initial continuum source table, {len(cont_tab)} rows: {os.getcwd()}/{tname}")
+                log(f"[{cfg.datevshot}] Initial continuum source table, {len(cont_tab)} rows: {os.getcwd()}/{tname}")
 
                 fof_3d_cont_tab = make_3d_friend_table_for_shot(cont_tab, dsky_3D=6.0, dwave=4.0)
                 if fof_3d_cont_tab is not None:
@@ -8854,7 +8854,7 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
                                     continue #this is okay, this has no group, so stands on its own
                                 else:
                                     #print(f"Error! Unexpected matches ({np.count_nonzero(sel)}) for {cont_tab['cont_detectid'][i]}")
-                                    print(f"[{cfg.datevshot}] Error! Unexpected matches ({np.count_nonzero(sel)}) for {cont_tab['detectid'][i]}")
+                                    log(f"[{cfg.datevshot}] Error! Unexpected matches ({np.count_nonzero(sel)}) for {cont_tab['detectid'][i]}")
                                     continue
                             except:
                                 print(traceback.format_exc())
@@ -8880,7 +8880,7 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
                         tname = f"{cfg.datevshot}_cont_sourcecat.tab"
                         cont_tab.write(tname, format="ascii", overwrite=True)
                         cfg.num_cont_dets = len(cont_tab)
-                        print(f"[{cfg.datevshot}] Updated continuum source table, {cfg.num_cont_dets} rows: {os.getcwd()}/{tname}")
+                        log(f"[{cfg.datevshot}] Updated continuum source table, {cfg.num_cont_dets} rows: {os.getcwd()}/{tname}")
                         #lastly sub select based on some minimum contflux ??
 
                         #now done elsewhere
@@ -8889,18 +8889,18 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
 
 
                     else:
-                        print(f"[{cfg.datevshot}] Notice! (1) Could not combine continuum detections by FoF or no continuum sources qualified to cluster.")
+                        log(f"[{cfg.datevshot}] Notice! (1) Could not combine continuum detections by FoF or no continuum sources qualified to cluster.")
                 else:
-                    print(f"[{cfg.datevshot}] Notice! (2) Could not combine continuum detections by FoF or no continuum sources qualified to cluster.")
+                    log(f"[{cfg.datevshot}] Notice! (2) Could not combine continuum detections by FoF or no continuum sources qualified to cluster.")
             else:
-                print(f"[{cfg.datevshot}] Error! Could not combine continuum detections. Continuum table not found.")
+                log(f"[{cfg.datevshot}] Error! Could not combine continuum detections. Continuum table not found.")
         except:
-            print(f"[{cfg.datevshot}] Error! Could not combine continuum detections by FoF.")
+            log(f"[{cfg.datevshot}] Error! Could not combine continuum detections by FoF.")
             print(traceback.format_exc())
 
         progress_update(cfg,dtprog, "s06b_fof")
     else:
-        print(f"[{cfg.datevshot}] Skipping s06b_fof Friends of Friends clustering.")
+        log(f"[{cfg.datevshot}] Skipping s06b_fof Friends of Friends clustering.")
     #end if s06b_fof
 
     #we now have clustered lines and continuum
@@ -8917,15 +8917,15 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
         rc = diagnose(cfg)
 
         if rc != 0:
-            print(f"[{cfg.datevshot}] Diagnose: Limited success. Non-fatal. Will continue")
+            log(f"[{cfg.datevshot}] Diagnose: Limited success. Non-fatal. Will continue")
 
         rc = diagnose_output_to_table(cfg)
         if rc != 0:
-            print(f"[{cfg.datevshot}] Diagnose conversion: Limited success. Non-fatal. Will continue")
+            log(f"[{cfg.datevshot}] Diagnose conversion: Limited success. Non-fatal. Will continue")
 
         progress_update(cfg,dtprog, "s06c_diagnose")
     else:
-        print(f"[{cfg.datevshot}] Skipping s06c_diagnose Diagnose.")
+        log(f"[{cfg.datevshot}] Skipping s06c_diagnose Diagnose.")
 
     if s06d_elixer and not dtprog["s06d_elixer"]:
 
@@ -8933,7 +8933,7 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
 
         progress_update(cfg,dtprog, "s06d_elixer")
     else:
-        print(f"[{cfg.datevshot}] Skipping s06d_elixer ELiXer prep.")
+        log(f"[{cfg.datevshot}] Skipping s06d_elixer ELiXer prep.")
 
     #s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
     if dtprog["s06b_fof"] and dtprog["s06c_diagnose"] and dtprog["s06d_elixer"]:

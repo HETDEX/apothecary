@@ -27,8 +27,9 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 # 0.1.9 add NeighborID table
 # 0.1.10 add healpix IDs to shot table and Detections (already in Fibers)
 # 0.1.11 add reduction_date,  reduction_status, and reduction_status_ext to VIRUSShot table
+# 0.1.12 add plog as print/logging variant
 
-__version__ = '0.1.11'
+__version__ = '0.1.12'
 
 
 import numpy as np
@@ -99,14 +100,19 @@ class PrintLog:
         self.logfile =logfile
 
     def log(self,msg,exc_info=False):
-        print(msg,flush=True)
+
+        d = datetime.now()
+        logmsg = "%s:%s:%s.%s -- %s" % (str(d.hour).zfill(2), str(d.minute).zfill(2), str(d.second).zfill(2),
+                                     str(d.microsecond).zfill(6), msg)
+
+        print(logmsg,flush=True)
         if self.logfile:
             try:
                 with open(self.logfile,"a") as f:
                     if exc_info:
-                        f.write(msg + traceback.format_exc() + "\n")
+                        f.write(logmsg + traceback.format_exc() + "\n")
                     else:
-                        f.write(msg+"\n")
+                        f.write(logmsg+"\n")
             except:
                 pass
 
@@ -126,6 +132,25 @@ class PrintLog:
         self.log(msg,exc_info)
 # end class def
 
+log = PrintLog('h5_merge.log')
+
+
+def plog(logstr,flush=False):
+    """
+    ugh, ... mixed logging and printing, so use this as the alternate
+
+    :param logstr:
+    :return:
+    """
+
+    try:
+        d = datetime.now()
+        msg = "%s:%s:%s.%s -- %s" % (str(d.hour).zfill(2), str(d.minute).zfill(2), str(d.second).zfill(2),
+                                     str(d.microsecond).zfill(6), logstr)
+        print(msg,flush=flush)
+        log(msg)
+    except:
+        print(f"Log Exception!", traceback.format_exc(),flush=True)
 
 def check_version():
     """
@@ -168,7 +193,7 @@ def check_version():
     except:
         print(f"Could not check version. Exception!",traceback.format_exc())
 
-log = PrintLog('h5_merge.log')
+
 
 Lock_tmp_mutex_fn = "tmp_ssrcompress.mutex"
 Lock_tmp_ct_fn = "tmp_ssrcompress.ct"
@@ -193,9 +218,9 @@ def wait_to_run(max_procs=3,datevshot="???",clean_up=False): #,safelimit=0):
         if max_procs > 0:
             redlight = True
             if clean_up:
-                print(f"[{datevshot}] cleaning up ...")
+                plog(f"[{datevshot}] cleaning up ...")
             else:
-                print(f"[{datevshot}] checking if safe to start ...")
+                plog(f"[{datevshot}] checking if safe to start ...")
 
             while redlight:
                 with lock:
@@ -209,7 +234,7 @@ def wait_to_run(max_procs=3,datevshot="???",clean_up=False): #,safelimit=0):
                             ct = 0
 
                         if ct < 0 and not clean_up: #this is the signal to abort and exit
-                            print(f"[{datevshot}] recieved mutex count abort. Exiting ...")
+                            plog(f"[{datevshot}] recieved mutex count abort. Exiting ...")
                             abort = True
 
 
@@ -232,17 +257,17 @@ def wait_to_run(max_procs=3,datevshot="???",clean_up=False): #,safelimit=0):
 
                 if not redlight:
                     if clean_up:
-                        print(f"[{datevshot}] Done.")
+                        plog(f"[{datevshot}] Done.")
                     elif not abort:
-                        print(f"[{datevshot}] cleared to start.")
+                        plog(f"[{datevshot}] cleared to start.")
                     else:
                         exit(-1)
                 else:
-                    #print(f"[{datevshot}] too many active shots. Must wait ...")
+                    #plog(f"[{datevshot}] too many active shots. Must wait ...")
                     time.sleep(sleep_secs)
         # lock auto releases
     except:
-        print(f"[{datevshot}] Exception! in wait_to_run()",traceback.format_exc())
+        plog(f"[{datevshot}] Exception! in wait_to_run()",traceback.format_exc())
 
 #make a class for each table
 class Version(tables.IsDescription):
@@ -1132,7 +1157,7 @@ def read_shot_status_file(basepath="./"):
     except:
         log.minor(f"[{datevshot}] Exception! read_shot_status_file", exc_info=True)
 
-    log.debug(f"[{datevshot}] status file read: {status} : {status_str}")
+    log.debug(f"[{datevshot}] status file read: {status} : \"{status_str}\"")
 
     if resume_status is not None:
         if status is not None:
@@ -1368,10 +1393,10 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                         pngim[0] = [pngimarr]
                         pngim.flush()
                     else:
-                        pass #print(f"[{datevshot}] Non fatal. Will ignore. tp_png not found in root.Calibration.Throughput")
+                        pass #plog(f"[{datevshot}] Non fatal. Will ignore. tp_png not found in root.Calibration.Throughput")
 
                 except:
-                    pass #print(f"[{datevshot}] Non fatal. Will ignore. Fail on Calibration/Throughput/tp_png: {traceback.format_exc()}")
+                    pass #plog(f"[{datevshot}] Non fatal. Will ignore. Fail on Calibration/Throughput/tp_png: {traceback.format_exc()}")
 
 
                 # TP_All (e.g. /sci<datevshot>/detect/<datevshot>/res/tp.all)
@@ -1414,7 +1439,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
             except:
                 #log.debug("Non fatal. Will ignore. Fail on Calibration/Throughput/throughput table", exc_info=True)
-                print(f"[{datevshot}] Non fatal. Will ignore. Fail on Calibration/Throughput: {traceback.format_exc()}")
+                plog(f"[{datevshot}] Non fatal. Will ignore. Fail on Calibration/Throughput: {traceback.format_exc()}")
 
 
 
@@ -1427,7 +1452,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         # the array is wave (which needs float32) and counts (which could be float16 and be okay)
         #  but we can't mix types this way unless we change the format
 
-        print(f"[{datevshot}] Importing FullSkyModels ... ", flush=True)
+        plog(f"[{datevshot}] Importing FullSkyModels ... ", flush=True)
 
         groupFullSkyModel = fileh.create_group(fileh.root, 'FullSkyModel', 'FullSkyModel')
         #node_names = [node.name for node in shot_h5.root.FullSkyModel._f_list_nodes()]
@@ -1444,7 +1469,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         # Fibers
         #######################################
 
-        print(f"[{datevshot}] Importing Fiber data ... ", flush=True)
+        plog(f"[{datevshot}] Importing Fiber data ... ", flush=True)
 
         #put under "Data" for some compatibility with pathing in HETDEX_API
         _ = fileh.create_group(fileh.root, "Data", "VIRUS Fiber Data") # was assigned to group_data previously
@@ -1455,11 +1480,11 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             use32 = False
             #in order of most likely to need float32
             f16_check_fields = ["calfib","calfib_ffsky","spectrum","sky_subtracted","sky_spectrum","trace"]
-            print(f"[{datevshot}] Checking for float16 compatibility ... ")
+            plog(f"[{datevshot}] Checking for float16 compatibility ... ")
             for fd in f16_check_fields:
                 mx = np.max(shot_h5.root.Data.Fibers.read(field=fd))
                 if mx > threshold_16:
-                    print(f"[{datevshot}] {fd} (at least) requires float32: mx {mx}")
+                    plog(f"[{datevshot}] {fd} (at least) requires float32: mx {mx}")
                     use32 = True
                     #print(f"{fd} : min {np.min(shot_h5.root.Data.Fibers.read(field=fd))} , max {np.max(shot_h5.root.Data.Fibers.read(field=fd))}")
                     break #for a test, don't break ... want to see them all
@@ -1489,10 +1514,10 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         #note: turning on fitlers=COMPRESSION_FITLER can save about 500MB per file BUT
         #      reading the fibers is 1.5 to 3x longer and fibers are what are hit most
         if use32:
-            print(f"[{datevshot}] Using Float32 for VIRUSFibers",flush=True)
+            plog(f"[{datevshot}] Using Float32 for VIRUSFibers",flush=True)
             fileh.create_table(fileh.root, 'Fibers', VIRUSFiber32, 'Fiber Summary Table')#,filters=COMPRESSION_FILTER)
         else:
-            print(f"[{datevshot}] Using Float16 for VIRUSFibers",flush=True)
+            plog(f"[{datevshot}] Using Float16 for VIRUSFibers",flush=True)
             fileh.create_table(fileh.root, 'Fibers', VIRUSFiber16, 'Fiber Summary Table')#,filters=COMPRESSION_FILTER)
 
         #this will also be softlinked to root.Data.Fibers
@@ -1622,7 +1647,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
         # many for fibers, so iterate
         # root.Data.FiberIndex or root.FiberIndex  (root.Data.FiberIndex Does not have the flags)
-        print(f"[{datevshot}] Importing Fiber data ... ", flush=True)
+        plog(f"[{datevshot}] Importing Fiber data ... ", flush=True)
         for row in tqdm(shot_h5.root.FiberIndex.read(),disable=not SHOW_TQDM):
             # for row in shot_h5.root.Data.Fibers.read():
             new_row = fileh.root.FiberIndex.row
@@ -1652,7 +1677,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         fileh.root.FiberIndex.flush()
 
         #create a softlink for compatibility ????
-        print(f"[{datevshot}] Trying softlink to FiberIndex....")
+        plog(f"[{datevshot}] Trying softlink to FiberIndex....")
         shot_h5.create_soft_link(fileh.root.Data, 'FiberIndex', target=fileh.root.FiberIndex)
 
 
@@ -1666,7 +1691,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         #                    and without other data.
         ##################################
         if not minimum_h5:
-            print(f"[{datevshot}] Importing VIRUS CCD image data ... ", flush=True)
+            plog(f"[{datevshot}] Importing VIRUS CCD image data ... ", flush=True)
 
             if StdFloatCol == FullFloatCol:
                 use32 = True
@@ -1695,10 +1720,10 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                             log.debug(f"[{datevshot}] Data.Images.error clipping to {clip_error} : mx {mx}")
 
             if use32:
-                print(f"[{datevshot}] Using Float32 for VIRUSImages")
+                plog(f"[{datevshot}] Using Float32 for VIRUSImages")
                 fileh.create_table(fileh.root.Data, 'Images', VIRUSImage32, 'VIRUS CCD Image Data',filters=COMPRESSION_FILTER)
             else:
-                print(f"[{datevshot}] Using Float16 for VIRUSImages")
+                plog(f"[{datevshot}] Using Float16 for VIRUSImages")
                 fileh.create_table(fileh.root.Data, 'Images', VIRUSImage16, 'VIRUS CCD Image Data',filters=COMPRESSION_FILTER)
 
             for row in tqdm(shot_h5.root.Data.Images.read(),disable=not SHOW_TQDM):
@@ -1740,7 +1765,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         ######################################
 
         fileh.create_table(fileh.root, 'CalfibDQ', CalfibDQ, 'Fiber per-Wavelength Flags Table')
-        print(f"[{datevshot}] Importing CalfibDQ (Fiber per-wavelength flags) data ...",flush=True)
+        plog(f"[{datevshot}] Importing CalfibDQ (Fiber per-wavelength flags) data ...",flush=True)
         copy_cols = fileh.root.CalfibDQ.colnames
 
         for row in tqdm(shot_h5.root.CalfibDQ.read(),disable=not SHOW_TQDM):
@@ -1768,7 +1793,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         ######################################
 
         fileh.create_table(fileh.root, 'AmpStats', AmpStats, 'Amp Stats Table')
-        print(f"[{datevshot}] Importing AmpStats data ...",flush=True)
+        plog(f"[{datevshot}] Importing AmpStats data ...",flush=True)
         copy_cols = fileh.root.AmpStats.colnames
         copy_cols.remove('expnum')
 
@@ -1805,7 +1830,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             groupAstrometry = fileh.create_group(fileh.root, 'Astrometry', 'Astrometry Info')
 
             try:
-                print(f"[{datevshot}] Importing Collapsed Images ...", flush=True)
+                plog(f"[{datevshot}] Importing Collapsed Images ...", flush=True)
                 #create the group with compression
                 groupCoadd = fileh.create_group(groupAstrometry, 'CoaddImages', 'Coadd Images',filters=COMPRESSION_FILTER)
 
@@ -1826,7 +1851,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
 
             try:
-                print(f"[{datevshot}] Astrometry.NominalVals")
+                plog(f"[{datevshot}] Astrometry.NominalVals")
                 fileh.create_table(groupAstrometry, 'NominalVals', NominalVals, 'Nominal Values')
                 copy_cols = fileh.root.Astrometry.NominalVals.colnames
                 for row in tqdm(shot_h5.root.Astrometry.NominalVals.read()):#, disable=not SHOW_TQDM):
@@ -1843,7 +1868,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 log.debug(f"[{datevshot}] Exception adding Astrometry.NominalVals", exc_info=True)
 
             try:
-                print(f"[{datevshot}] Astrometry.QA")
+                plog(f"[{datevshot}] Astrometry.QA")
                 fileh.create_table(groupAstrometry, 'QA', QualityAssessment, 'Quality Assessment')
                 copy_cols = fileh.root.Astrometry.QA.colnames
                 for row in tqdm(shot_h5.root.Astrometry.QA.read()):#, disable=not SHOW_TQDM):
@@ -1859,10 +1884,10 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             except:
                 log.debug(f"[{datevshot}] Exception adding Astrometry.QA", exc_info=True)
 
-            #print(f"[{datevshot}] Deliberately skipping Astrometry.ShuffleCfg. This is by design.")
+            #plog(f"[{datevshot}] Deliberately skipping Astrometry.ShuffleCfg. This is by design.")
 
             try:
-                print(f"[{datevshot}] Astrometry.ShuffleCfg")
+                plog(f"[{datevshot}] Astrometry.ShuffleCfg")
                 blob = shot_h5.root.Astrometry.ShuffleCfg.read()
                 if len(blob) > 0:
                     fileh.create_array(groupAstrometry, 'ShuffleCfg', blob)
@@ -1872,7 +1897,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
 
             try:
-                print(f"[{datevshot}] Astrometry.StarCatalog")
+                plog(f"[{datevshot}] Astrometry.StarCatalog")
                 fileh.create_table(groupAstrometry, 'StarCatalog', StarCatalog, 'StarCatalog')
                 copy_cols = fileh.root.Astrometry.StarCatalog.colnames
                 for row in tqdm(shot_h5.root.Astrometry.StarCatalog.read()):#, disable=not SHOW_TQDM):
@@ -1890,7 +1915,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
 
             try:
-                print(f"[{datevshot}] Astrometry.fplane")
+                plog(f"[{datevshot}] Astrometry.fplane")
                 fileh.create_table(groupAstrometry, 'fplane', Fplane, 'fplane')
                 int_cols = ['ifuslot','specid','specslot','ifuid']
                 float_cols = ['fpx','fpy','ifurot','platesc']
@@ -1912,7 +1937,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
             #CatalogMatches ... depends on the number of exposures
             try:
-                print(f"[{datevshot}] Astrometry.CatalogMatches.expXX")
+                plog(f"[{datevshot}] Astrometry.CatalogMatches.expXX")
                 subgroup = fileh.create_group(fileh.root.Astrometry, 'CatalogMatches', 'Match Catalog Info')
 
                 #notice: there is redundant info IFUSLOT_det vs ifuslot_det
@@ -1940,7 +1965,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
             # Dithall ... depends on the number of exposures
             try:
-                print(f"[{datevshot}] Astrometry.Dithall.expXX")
+                plog(f"[{datevshot}] Astrometry.Dithall.expXX")
                 subgroup = fileh.create_group(fileh.root.Astrometry, 'Dithall', 'Fiber Astrometry Info')
 
                 for node in shot_h5.root.Astrometry.Dithall:  # this is "exp01", "exp02", ...
@@ -1959,7 +1984,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
             # PositionOffsets ... depends on the number of exposures
             try:
-                print(f"[{datevshot}] Astrometry.PositionOffsets.expXX")
+                plog(f"[{datevshot}] Astrometry.PositionOffsets.expXX")
                 subgroup = fileh.create_group(fileh.root.Astrometry, 'PositionOffsets', 'Offset in star matches')
                 int_cols = ['ifuslot']
                 float_cols = ['xoffset','yoffset','ra_dex','dec_dex','ra_cat','dec_cat']
@@ -1997,7 +2022,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 T = Table.read(diagnose_path,format="ascii")
 
                 if len(T) > 0:
-                    print(f"[{datevshot}] Importing Diagnose Classification data ... ", flush=True)
+                    plog(f"[{datevshot}] Importing Diagnose Classification data ... ", flush=True)
                     fileh.create_table(fileh.root, 'DiagnoseClassifications', DiagnoseClassifications,
                                        'Diagnose Classifications Summary Table')
 
@@ -2031,11 +2056,11 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
                     del T
                 else:
-                    print(f"[{datevshot}] No Diagnose Classification data found. ", flush=True)
+                    plog(f"[{datevshot}] No Diagnose Classification data found. ", flush=True)
             except:
                 log.info(f"[{datevshot}] Diagnose import fail", exc_info=True)
         else:
-            print(f"[{datevshot}] No Diagnose Classification data provided. ", flush=True)
+            plog(f"[{datevshot}] No Diagnose Classification data provided. ", flush=True)
 
 
 
@@ -2047,7 +2072,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         ##############################################
 
         if elixer_h5 is not None:
-            print(f"[{datevshot}] Importing ELiXer data ... ",flush=True)
+            plog(f"[{datevshot}] Importing ELiXer data ... ",flush=True)
 
             fileh.create_table(fileh.root, 'Detections', Detections,
                                'Detection Summary Table')
@@ -2177,9 +2202,9 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 lx = len(elixer_h5.root.CalibratedSpectra)
                 if lx == 0:
                     load_table = False
-                    print(f"[{datevshot}] ERROR!!! CalibratedSpectra has zero length in ELiXer HDF5 file!!!")
+                    plog(f"[{datevshot}] ERROR!!! CalibratedSpectra has zero length in ELiXer HDF5 file!!!")
             except:
-                print(f"[{datevshot}] ERROR!!! CalibratedSpectra not found in ELiXer HDF5 file!!!")
+                plog(f"[{datevshot}] ERROR!!! CalibratedSpectra not found in ELiXer HDF5 file!!!")
                 load_table = False
 
             if load_table:
@@ -2197,11 +2222,11 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                             use32 = True
 
                 if use32:
-                    print(f"[{datevshot}] Using float32 for CalibratedSpectra",flush=True)
+                    plog(f"[{datevshot}] Using float32 for CalibratedSpectra",flush=True)
                     fileh.create_table(fileh.root, 'CalibratedSpectra', CalibratedSpectra32,
                                    'PSF Weighted Spectra Table')
                 else:
-                    print(f"[{datevshot}] Using float16 for CalibratedSpectra",flush=True)
+                    plog(f"[{datevshot}] Using float16 for CalibratedSpectra",flush=True)
                     fileh.create_table(fileh.root, 'CalibratedSpectra', CalibratedSpectra16,
                                    'PSF Weighted Spectra Table')
 
@@ -2451,7 +2476,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             elixer_h5.close()
 
     except:
-        print(f"[{datevshot}] Exception building new h5 file. {traceback.format_exc()}")
+        plog(f"[{datevshot}] Exception building new h5 file. {traceback.format_exc()}")
 
 
 
@@ -2478,7 +2503,7 @@ def get_max_image(image_path,datevshot="???"):
     # t3 = []
 
     try:
-        print(f"[{datevshot}] Checking image sizes ...",flush=True)
+        plog(f"[{datevshot}] Checking image sizes ...",flush=True)
         image_fns = sorted(glob.glob(image_path))
         for img_path in tqdm(image_fns,disable=not SHOW_TQDM):
             x1,x2,x3  = np.array(Image.open(img_path)).shape
@@ -2492,7 +2517,7 @@ def get_max_image(image_path,datevshot="???"):
             # t3.append(x3)
 
     except:
-        print(f"[{datevshot}] Exception: {traceback.format_exc()}")
+        plog(f"[{datevshot}] Exception: {traceback.format_exc()}")
 
     # print(f"x1: {np.unique(t1)}")
     # print(f"x2: {np.unique(t2)}")
@@ -2516,14 +2541,14 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
     try:
 
         datevshot = os.path.basename(shot_h5fn).replace(".h5", "").replace("ssr_","")
-        print(f"[{datevshot}] Importing images: {image_path} to root.{group_name}.{earray_name}*",flush=True)
+        plog(f"[{datevshot}] Importing images: {image_path} to root.{group_name}.{earray_name}*",flush=True)
 
         #max_shape, unique_d1, unique_ct = get_max_image(image_path,datevshot)
 
         max_shape, img_dict = get_image_dict(image_path,datevshot)
         unique_d1 = img_dict.keys()
         if unique_d1 is None or len(unique_d1) < 1:
-            print(f"[{datevshot}] No matching report images found.")
+            plog(f"[{datevshot}] No matching report images found.")
             return
         unique_ct = np.array([len(img_dict[k]) for k in img_dict.keys()])
 
@@ -2550,7 +2575,7 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
                 img_group = h5.root.elixer_reports
 
             if add_neighbor_table:
-                print(f"[{datevshot}] Adding NeighborID table")
+                plog(f"[{datevshot}] Adding NeighborID table")
                 ntb = h5.create_table(img_group, "NeighborID", NeighborID, 'NeighborIDs')
             else:
                 ntb = None
@@ -2587,11 +2612,11 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
                         e1 = traceback.format_exc()
                         image_array = h5.get_node(img_group)._f_get_child(name)
                     except:
-                        print(f"[{datevshot}] Cannot import images.\nException #1: {e1}\nException #2: {traceback.format_exc()}")
+                        plog(f"[{datevshot}] Cannot import images.\nException #1: {e1}\nException #2: {traceback.format_exc()}")
 
             # Iterate through all image files, resize if needed, and append to the eArray
             total_images = len(image_fns)
-            print(f"[{datevshot}] Importing {total_images} images ... ",flush=True)
+            plog(f"[{datevshot}] Importing {total_images} images ... ",flush=True)
             for img_path in tqdm(image_fns,disable=not SHOW_TQDM):
                 try:
                     img = Image.open(img_path)
@@ -2622,7 +2647,7 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
                                     new_row['neighborid'] = nei_id
                                     new_row.append()
                             except:
-                                print(f"[{datevshot}] Exception! Cannot import neighbors for {img_path}; {traceback.format_exc()}")
+                                plog(f"[{datevshot}] Exception! Cannot import neighbors for {img_path}; {traceback.format_exc()}")
 
                             ntb.flush()
 
@@ -2650,13 +2675,16 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
                     try:
                         idx = dtb.get_where_list("detectid==did")
                     except:
-                        print(f"[{datevshot}] Error in imoprt_images_erray(). Could not locate index for detectid = {did}."
+                        plog(f"[{datevshot}] Error in imoprt_images_erray(). Could not locate index for detectid = {did}."
                               f"Cannot update Detecttions table entry. None found.")
                         continue
 
                     #*SHOULD* be exactly one, but may be some weirdness ?
                     if len(idx) != 1:
-                        print(f"[{datevshot}] Dupicate detectids: {len(idx)} for id = {did}; must skip.")
+                        if len(idx) == 0:
+                            plog(f"[{datevshot}] Detectid {did} not found in Detection table; will skip.")
+                        else:
+                            plog(f"[{datevshot}] Dupicate detectids: {len(idx)} for id = {did}; must skip.")
                         continue
                     else:
                         idx = idx[0]
@@ -2676,18 +2704,18 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
                     try:
                         dtb.modify_rows(start=idx, stop=idx + 1, step=1, rows=row)
                     except:
-                        print(f"[{datevshot}] Unable to update {did}, {traceback.format_exc()}")
+                        plog(f"[{datevshot}] Unable to update {did}, {traceback.format_exc()}")
                 except:
-                    print(f"[{datevshot}] Unable to update {img_path}, {traceback.format_exc()}")
+                    plog(f"[{datevshot}] Unable to update {img_path}, {traceback.format_exc()}")
 
             dtb.flush()
             if ntb is not None:
                 ntb.flush()
 
-            print(f"[{datevshot}] Stored {total_images} images in {shot_h5fn}.")
+            plog(f"[{datevshot}] Stored {total_images} images in {shot_h5fn}.")
 
     except:
-        print(f"[{datevshot}] Exception in add_report_images(): {traceback.format_exc()}")
+        plog(f"[{datevshot}] Exception in add_report_images(): {traceback.format_exc()}")
 
 
 def get_image_dict(image_path,datevshot="???"):
@@ -2704,9 +2732,9 @@ def get_image_dict(image_path,datevshot="???"):
     img_dict = {}
 
     try:
-        print(f"[{datevshot}] Checking image sizes for {image_path}...",flush=True)
+        plog(f"[{datevshot}] Checking image sizes for {image_path}...",flush=True)
         image_fns = sorted(glob.glob(image_path))
-        print(f"[{datevshot}] Checking image sizes for {len(image_fns)} matching image names ...", flush=True)
+        plog(f"[{datevshot}] Checking image sizes for {len(image_fns)} matching image names ...", flush=True)
         for img_path in tqdm(image_fns,disable=not SHOW_TQDM):
             x1,x2,x3  = np.array(Image.open(img_path)).shape
 
@@ -2720,7 +2748,7 @@ def get_image_dict(image_path,datevshot="???"):
                 img_dict[x1] = [img_path]
 
     except:
-        print(f"[{datevshot}] Exception: {traceback.format_exc()}",flush=True)
+        plog(f"[{datevshot}] Exception: {traceback.format_exc()}",flush=True)
 
     return (max1,max2,max3), img_dict
 
@@ -2736,7 +2764,7 @@ def import_images_carray(shot_h5fn,image_path,group_name,carray_name="image_data
     datevshot = shot_h5fn
     try:
         datevshot = os.path.basename(shot_h5fn).replace(".h5", "").replace("ssr_", "")
-        print(f"[{datevshot}] Importing images: {image_path} to root.{group_name}.{carray_name}*",flush=True)
+        plog(f"[{datevshot}] Importing images: {image_path} to root.{group_name}.{carray_name}*",flush=True)
 
         max_shape, img_dict = get_image_dict(image_path,datevshot)
 
@@ -2763,7 +2791,7 @@ def import_images_carray(shot_h5fn,image_path,group_name,carray_name="image_data
 
             #iterate (in decending order of 1D size) over the img_dict and pre-allocate carrays and then populate
             total_images = sum(len(img_dict[k]) for k in img_dict.keys())
-            print(f"[{datevshot}] Importing {total_images} images ... ",flush=True)
+            plog(f"[{datevshot}] Importing {total_images} images ... ",flush=True)
             for key in sorted(img_dict.keys())[::-1]:
                 name = carray_name + "_" + str(key)
                 img_shape = (key, max_shape[1], max_shape[2])
@@ -2776,7 +2804,7 @@ def import_images_carray(shot_h5fn,image_path,group_name,carray_name="image_data
                         e1 = traceback.format_exc()
                         image_array = h5.get_node(img_group)._f_get_child(name)
                     except:
-                        print(f"[{datevshot}] Cannot import images.\nException #1: {e1}\nException #2: {traceback.format_exc()}",flush=True)
+                        plog(f"[{datevshot}] Cannot import images.\nException #1: {e1}\nException #2: {traceback.format_exc()}",flush=True)
 
                 #print(f"Importing ID:{key} ...")
                 for i, img_path in enumerate(tqdm(img_dict[key],disable=not SHOW_TQDM)):
@@ -2804,10 +2832,10 @@ def import_images_carray(shot_h5fn,image_path,group_name,carray_name="image_data
 
             dtb.flush()
 
-            print(f"[{datevshot}] Stored {total_images} images in {shot_h5fn}.")
+            plog(f"[{datevshot}] Stored {total_images} images in {shot_h5fn}.")
 
     except:
-        print(f"[{datevshot}] Exception in add_report_images(): {traceback.format_exc()}")
+        plog(f"[{datevshot}] Exception in add_report_images(): {traceback.format_exc()}")
 
 ########################################################################
 ########################################################################
@@ -2909,11 +2937,11 @@ else:
         diagnose_path = os.path.join(os.path.dirname(shot_h5_path),"diagnose_classifications.tab")
         if not os.path.exists(diagnose_path):
             diagnose_path = None
-            print(f"[{datevshot}] Could not locate Diagnose table, will skip.")
+            plog(f"[{datevshot}] Could not locate Diagnose table, will skip.")
         else:
-            print(f"[{datevshot}] Using Diagnose Classification : {diagnose_path}", flush=True)
+            plog(f"[{datevshot}] Using Diagnose Classification : {diagnose_path}", flush=True)
     except:
-        print(f"[{datevshot}] Could not locate Diagnose table, will skip.")
+        plog(f"[{datevshot}] Could not locate Diagnose table, will skip.")
 
 
 elixer_h5_path = None
@@ -2987,33 +3015,33 @@ if "-compression" in args:
             #around 3.3 GB
             #yes, this one should be at level 9 (basically same time as level1 and a good bit better compression)
             COMPRESSION_FILTER = tables.Filters(complevel=9, complib='blosc2', bitshuffle=False, shuffle=False)
-            print(f"[{datevshot}] Using type 1 compression: blosc2 at complvl 9 . Limited compression (lossless), low CPU + time")
+            plog(f"[{datevshot}] Using type 1 compression: blosc2 at complvl 9 . Limited compression (lossless), low CPU + time")
         elif compression == 2: #standard
             # around 6.0 minutes (360s) for typical ELiXer data ~ 1000 detects and Neighbors
             # around 2.6 GB
             # leave at complevel 1 (increasing is huge time cost for very little compression improvement)
             COMPRESSION_FILTER = tables.Filters(complevel=1, complib='zlib', bitshuffle=False, shuffle=False)
-            print(f"[{datevshot}] Using type 2 compression: zlib at complvl 1 . Good compression, moderate CPU + time")
+            plog(f"[{datevshot}] Using type 2 compression: zlib at complvl 1 . Good compression, moderate CPU + time")
         elif compression == 3: #maximum
             # around 17 minutes (1000s) for typical ELiXer data ~ 1000 detects and Neighbors
             # around 1.9 GB (1.8Gb at level 9 and 18 minutes)
             # 1 vs 9 is arund 1015s vs 1080s (e.g. +1 minute) for about 5% better compression
             COMPRESSION_FILTER = tables.Filters(complevel=9, complib='bzip2', bitshuffle=False, shuffle=False)
-            print(f"[{datevshot}] Using type 3 compression: bzip2 at complvl 9 . Maximum compression, maximum CPU + time")
+            plog(f"[{datevshot}] Using type 3 compression: bzip2 at complvl 9 . Maximum compression, maximum CPU + time")
         else:
-            print(f"[{datevshot}] Unexpected --compression value {compression}: Must be in [1,2,3], least compression to most and shortest to longest time cost")
+            plog(f"[{datevshot}] Unexpected --compression value {compression}: Must be in [1,2,3], least compression to most and shortest to longest time cost")
             exit(-1)
     except:
-        print(f"[{datevshot}] Invalid -compression specified: {args[i+1]}")
+        plog(f"[{datevshot}] Invalid -compression specified: {args[i+1]}")
         exit(-1)
 
     del args[i+1]  # args.pop(0) #remove THIS file
     args.remove("-compression")
 else:
-    print(f"[{datevshot}] Using [default] type 2 compression: zlib at complvl 1 . Good compression, moderate CPU + time")
+    plog(f"[{datevshot}] Using [default] type 2 compression: zlib at complvl 1 . Good compression, moderate CPU + time")
 
 if len(args) > 0:
-    print(f"[{datevshot}] Unknown remainting args: {args}")
+    plog(f"[{datevshot}] Unknown remainting args: {args}")
 
 
 wait_to_run(Max_Simultaneous_Shots, datevshot=datevshot,clean_up=False)
