@@ -93,6 +93,7 @@ matplotlib.use('agg')
 
 from matplotlib.colors import TwoSlopeNorm
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 #from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 plt.style.use('default')
 
@@ -276,7 +277,7 @@ s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_sour
 ########################################################################
 
 
-def log(logstr,flush=False):
+def log(logstr,*args,**kwargs):
     """
 
     :param logstr:
@@ -287,7 +288,19 @@ def log(logstr,flush=False):
         d = datetime.now()
         msg = "%s:%s:%s.%s -- %s" % (str(d.hour).zfill(2), str(d.minute).zfill(2), str(d.second).zfill(2),
                                      str(d.microsecond).zfill(6), logstr)
-        print(msg,flush=flush)
+
+        for arg in args:
+            msg += " " + arg
+
+        flush = False
+        end = None
+        for key, value in kwargs.items():
+            if key == 'flush':
+                flush = value
+            elif key == 'end':
+                end = value
+
+        print(msg,flush=flush,end=end)
     except:
         print(f"Log Exception!", traceback.format_exc(),flush=True)
 
@@ -2177,6 +2190,9 @@ def get_guider_fwhm(cfg):
                     if not os.path.exists(base_tarfn):
                         base_tarfn = f"./{which_gc}.tar" #last chance, check locally
 
+                        if not os.path.exists(base_tarfn):
+                            base_tarfn = ""
+
         return base_tarfn
 
     def which_dither_time(curr_time="",dither_starts=[]):
@@ -2238,6 +2254,7 @@ def get_guider_fwhm(cfg):
 
         date = cfg.datevshot[0:8]
         path = os.path.join(HET_by_date,date)
+        base_guider_tarfn = path
 
         #first what is the virus shot(s) we need
         #the guider filenames will not be the same, but will be close
@@ -2246,7 +2263,12 @@ def get_guider_fwhm(cfg):
         if cfg.virus_tar_path is not None:
             base_tarfn = cfg.virus_tar_path
             if os.path.isdir(base_tarfn):
+                base_guider_tarfn = copy.copy(cfg.virus_tar_path) + f"{cfg.datevshot[0:8]}"
                 base_tarfn = os.path.join(cfg.virus_tar_path,f"{cfg.datevshot[0:8]}/virus/{virus_shot}.tar")
+            elif os.path.isfile(base_tarfn):
+                base_guider_tarfn = os.path.dirname(base_tarfn) # + f"{cfg.datevshot[0:8]}"
+                if base_guider_tarfn[-5:] == "virus":
+                    base_guider_tarfn = os.path.dirname(base_guider_tarfn)
         else:
             base_tarfn = os.path.join(path, f"virus/{virus_shot}.tar")
 
@@ -2312,7 +2334,10 @@ def get_guider_fwhm(cfg):
 
         log(f"[{cfg.datevshot}] Computing guider for seeing FWHM (this can take a while) ...")
 
-        base_tarfn = get_gc_path(cfg,"gc1",path)
+
+        base_tarfn = get_gc_path(cfg,"gc1",base_guider_tarfn)
+        if len(base_tarfn) < 1:
+            base_tarfn = get_gc_path(cfg,"gc1",path)
         if os.path.exists(base_tarfn):
             log(f"[{cfg.datevshot}] Getting gc1 from {base_tarfn}")
             with tar.open(base_tarfn, "r") as tarfh:
@@ -2334,7 +2359,11 @@ def get_guider_fwhm(cfg):
         #     #try based on the virus_tar_path, up two levels
         #     base_tarfn = os.path.join(cfg.virus_tar_path.rstrip(".tar"),"gc2.tar")
 
-        base_tarfn = get_gc_path(cfg, "gc2", path)
+
+        base_tarfn = get_gc_path(cfg,"gc2",base_guider_tarfn)
+        if len(base_tarfn) < 1:
+            base_tarfn = get_gc_path(cfg,"gc2",path)
+
         if os.path.exists(base_tarfn):
             log(f"[{cfg.datevshot}] Getting gc2 from {base_tarfn}")
             with tar.open(base_tarfn, "r") as tarfh:
@@ -2435,7 +2464,10 @@ def get_guider_fwhm(cfg):
             #     # try based on the virus_tar_path, up two levels
             #     base_tarfn = os.path.join(cfg.virus_tar_path.rstrip(".tar"), "gc1.tar")
 
-            base_tarfn = get_gc_path(cfg, "gc1", path)
+
+            base_tarfn = get_gc_path(cfg, "gc1",base_guider_tarfn)
+            if len(base_tarfn) < 1:
+                base_tarfn = get_gc_path(cfg, "gc1", path)
 
             excessive_time_count = 0
             iq_idx_start =0
@@ -2466,10 +2498,10 @@ def get_guider_fwhm(cfg):
 
                         fh.close()
                         t1.close()
-                        elapsed = (time.perf_counter_ns() - start_time) // 1e9
+                        elapsed = (time.perf_counter_ns() - start_time) / 1e9
                         if elapsed > 5.0: #5 seconds is excessive
                             if excessive_time_count > 2:
-                                log(f"[{cfg.datevshot}] Excessive time collecting gc1 data. Aborting collection.")
+                                log(f"[{cfg.datevshot}] Excessive time (last = {elapsed:0.4f}s) collecting gc1 data. Aborting collection.")
                                 iq = iq[0:iq_idx_start + 1]
                                 iq_time = iq_time[0:iq_idx_start + 1]
                                 iq_dither = iq_dither[0:iq_idx_start + 1]
@@ -2488,7 +2520,11 @@ def get_guider_fwhm(cfg):
             #     # try based on the virus_tar_path, up two levels
             #     base_tarfn = os.path.join(cfg.virus_tar_path.rstrip(".tar"), "gc2.tar")
 
-            base_tarfn = get_gc_path(cfg, "gc2", path)
+
+            base_tarfn = get_gc_path(cfg, "gc2",base_guider_tarfn)
+            if len(base_tarfn) < 1:
+                base_tarfn = get_gc_path(cfg, "gc2", path)
+
             excessive_time_count = 0
             iq_idx_start = len(iq)
             if os.path.exists(base_tarfn) and gc2_near is not None and len(gc2_near) > 0:
@@ -2516,10 +2552,10 @@ def get_guider_fwhm(cfg):
 
                         fh.close()
                         t1.close()
-                        elapsed = (time.perf_counter_ns() - start_time) // 1e9
+                        elapsed = (time.perf_counter_ns() - start_time) / 1e9
                         if elapsed > 5.0: #5 seconds is excessive
                             if excessive_time_count > 2:
-                                log(f"[{cfg.datevshot}] Excessive time collecting gc2 data. Aborting collection.")
+                                log(f"[{cfg.datevshot}] Excessive time (last = {elapsed:0.4f}s) collecting gc2 data. Aborting collection.")
                                 iq = iq[0:iq_idx_start + 1]
                                 iq_time = iq_time[0:iq_idx_start + 1]
                                 iq_dither = iq_dither[0:iq_idx_start + 1]
@@ -2538,7 +2574,10 @@ def get_guider_fwhm(cfg):
             #     # try based on the virus_tar_path, up two levels
             #     base_tarfn = os.path.join(cfg.virus_tar_path.rstrip(".tar"), "gc1.tar")
 
-            base_tarfn = get_gc_path(cfg, "gc1", path)
+            base_tarfn = get_gc_path(cfg, "gc1",base_guider_tarfn)
+            if len(base_tarfn) < 1:
+                base_tarfn = get_gc_path(cfg, "gc1", path)
+
             gc1_active=False
             if os.path.exists(base_tarfn):
                 try:
@@ -2557,7 +2596,11 @@ def get_guider_fwhm(cfg):
             #     # try based on the virus_tar_path, up two levels
             #     base_tarfn = os.path.join(cfg.virus_tar_path.rstrip(".tar"), "gc2.tar")
 
-            base_tarfn = get_gc_path(cfg, "gc2", path)
+
+            base_tarfn = get_gc_path(cfg, "gc2",base_guider_tarfn)
+            if len(base_tarfn) < 1:
+                base_tarfn = get_gc_path(cfg, "gc2", path)
+
             gc2_active=False
             if os.path.exists(base_tarfn):
                 try:
@@ -2576,7 +2619,10 @@ def get_guider_fwhm(cfg):
                 #     # try based on the virus_tar_path, up two levels
                 #     base_tarfn = os.path.join(cfg.virus_tar_path.rstrip(".tar"), "gc1.tar")
 
-                base_tarfn = get_gc_path(cfg, "gc1", path)
+                base_tarfn = get_gc_path(cfg, "gc1",base_guider_tarfn)
+                if len(base_tarfn) < 1:
+                    base_tarfn = get_gc_path(cfg, "gc1", path)
+
                 gc_near = gc1_near
 
             elif gc2_active:
@@ -2584,7 +2630,11 @@ def get_guider_fwhm(cfg):
                 # if not os.path.exists(base_tarfn) and cfg.virus_tar_path is not None:
                 #     # try based on the virus_tar_path, up two levels
                 #     base_tarfn = os.path.join(cfg.virus_tar_path.rstrip(".tar"), "gc2.tar")
-                base_tarfn = get_gc_path(cfg, "gc2", path)
+
+                base_tarfn = get_gc_path(cfg, "gc2",base_guider_tarfn)
+                if len(base_tarfn) < 1:
+                    base_tarfn = get_gc_path(cfg, "gc2", path)
+
                 gc_near = gc2_near
             else:
                 print(f"No active guider. Cannot get seeing fwhm.")
@@ -3724,6 +3774,7 @@ def add_text_to_image(cfg, image_path: str, text: str):
 
 
     try:
+
         # Open the image
         img = Image.open(image_path).convert("RGBA")
         draw = ImageDraw.Draw(img)
@@ -6592,39 +6643,74 @@ def shot_analyisis(cfg,ratio=False):
         # coadds ... just put at the top of /analysis
         ######################################################
         log(f"[{cfg.datevshot}] Making coadd image(s): ... ")
+#
+        #old
+        # try:
+        #     plt.close('all')
+        #     plt.figure(figsize=(8, 8))
+        #     plt.title(f"{cfg.datevshot} x1")
+        #     plt.imshow(h5.root.Astrometry.CoaddImages.png_exp01.read())  # ,origin="upper")
+        #     plt.tight_layout()
+        #     plt.savefig(f"coadd_{cfg.datevshot}_exp01.png", dpi=96)
+        #     plt.close('all')
+        # except:
+        #     pass
+        #
+        # try:
+        #     plt.close('all')
+        #     plt.figure(figsize=(8, 8))
+        #     plt.title(f"{cfg.datevshot} x2")
+        #     plt.imshow(h5.root.Astrometry.CoaddImages.png_exp02.read())  # ,origin="upper")
+        #     plt.tight_layout()
+        #     plt.savefig(f"coadd_{cfg.datevshot}_exp02.png", dpi=96)
+        #     plt.close('all')
+        # except:
+        #     pass
+        #
+        # try:
+        #     plt.close('all')
+        #     plt.figure(figsize=(8, 8))
+        #     plt.title(f"{cfg.datevshot} x3")
+        #     plt.imshow(h5.root.Astrometry.CoaddImages.png_exp03.read())  # ,origin="upper")
+        #     plt.tight_layout()
+        #     plt.savefig(f"coadd_{cfg.datevshot}_exp03.png", dpi=96)
+        #     plt.close('all')
+        # except:
+        #     pass
+
+        #new, try just using Figure to avoid matplotlib global config issues ("changed" exception)
+        try:
+            fig = Figure(figsize=(8, 8))
+            ax = fig.subplots()
+            ax.set_tile(f"{cfg.datevshot} x1")
+            ax.imshow(h5.root.Astrometry.CoaddImages.png_exp01.read())  # ,origin="upper")
+            fig.tight_layout()
+            fig.savefig(f"coadd_{cfg.datevshot}_exp01.png", dpi=96)
+        except:
+            log(f"[{cfg.datevshot}] Exception in shot_analysis on CoaddImages exp1",
+                traceback.format_exc())
 
         try:
-            plt.close('all')
-            plt.figure(figsize=(8, 8))
-            plt.title(f"{cfg.datevshot} x1")
-            plt.imshow(h5.root.Astrometry.CoaddImages.png_exp01.read())  # ,origin="upper")
-            plt.tight_layout()
-            plt.savefig(f"coadd_{cfg.datevshot}_exp01.png", dpi=96)
-            plt.close('all')
+            fig = Figure(figsize=(8, 8))
+            ax = fig.subplots()
+            ax.set_tile(f"{cfg.datevshot} x2")
+            ax.imshow(h5.root.Astrometry.CoaddImages.png_exp02.read())  # ,origin="upper")
+            fig.tight_layout()
+            fig.savefig(f"coadd_{cfg.datevshot}_exp02.png", dpi=96)
         except:
-            pass
+            log(f"[{cfg.datevshot}] Exception in shot_analysis on CoaddImages exp2",
+                traceback.format_exc())
 
         try:
-            plt.close('all')
-            plt.figure(figsize=(8, 8))
-            plt.title(f"{cfg.datevshot} x2")
-            plt.imshow(h5.root.Astrometry.CoaddImages.png_exp02.read())  # ,origin="upper")
-            plt.tight_layout()
-            plt.savefig(f"coadd_{cfg.datevshot}_exp02.png", dpi=96)
-            plt.close('all')
+            fig = Figure(figsize=(8, 8))
+            ax = fig.subplots()
+            ax.set_tile(f"{cfg.datevshot} x3")
+            ax.imshow(h5.root.Astrometry.CoaddImages.png_exp03.read())  # ,origin="upper")
+            fig.tight_layout()
+            fig.savefig(f"coadd_{cfg.datevshot}_exp03.png", dpi=96)
         except:
-            pass
-
-        try:
-            plt.close('all')
-            plt.figure(figsize=(8, 8))
-            plt.title(f"{cfg.datevshot} x3")
-            plt.imshow(h5.root.Astrometry.CoaddImages.png_exp03.read())  # ,origin="upper")
-            plt.tight_layout()
-            plt.savefig(f"coadd_{cfg.datevshot}_exp03.png", dpi=96)
-            plt.close('all')
-        except:
-            pass
+            log(f"[{cfg.datevshot}] Exception in shot_analysis on CoaddImages exp3",
+                traceback.format_exc())
 
         ##################################################
         # 4amp x 3dither (normally) pngs for each IFU
@@ -6695,8 +6781,11 @@ def shot_analyisis(cfg,ratio=False):
                 else:
                     log(f"[{cfg.datevshot}] Making basic IFU analysis images: {mf_base.decode()}")
 
-                plt.close('all')
-                fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(9, 12))
+                #plt.close('all')
+                #fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(9, 12))
+                fig = Figure(figsize=(9, 12))
+                axes = fig.subplots(nrows=4, ncols=3)
+
                 #plot_config = list(np.arange(431, 443, 1))
                 if ratio is False:
                     fig.suptitle(f"{cfg.datevshot} {mf_base} {img} counts, cmap scale: "
@@ -6724,7 +6813,7 @@ def shot_analyisis(cfg,ratio=False):
                     try:
                         if np.count_nonzero(sel) == 1:
                             ax.set_title(f"{amp.decode()} x1")
-                            vmin, vmax = Utils.get_vrange(data[sel][0], contrast=0.25)
+                            #vmin, vmax = Utils.get_vrange(data[sel][0], contrast=0.25)
                             #cmap_norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
                             if amp != b'_LU':
                                 ax.set_xticks([])
@@ -6753,7 +6842,7 @@ def shot_analyisis(cfg,ratio=False):
                         if np.count_nonzero(sel) == 1:
 
                             ax.set_title(f"{amp.decode()} x2")
-                            vmin, vmax = Utils.get_vrange(data[sel][0], contrast=0.25)
+                            #vmin, vmax = Utils.get_vrange(data[sel][0], contrast=0.25)
                             #cmap_norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
                             # ax.yaxis.label.set_visible(False)
 
@@ -6810,14 +6899,25 @@ def shot_analyisis(cfg,ratio=False):
                               traceback.format_exc())
 
                 plt.tight_layout()
-                if ratio is False:
-                    plt.savefig(f"i{mf_base.decode()[10:13]}_{cfg.datevshot}_{mf_base.decode()}.png",
-                                dpi=DIAG_AMP_IMG_DPI)
-                    plt.close('all')
-                else:
-                    plt.savefig(f"i{mf_base.decode()[10:13]}_{cfg.datevshot}_{mf_base.decode()}_ratio.png",
-                                dpi=DIAG_AMP_IMG_DPI)
-                    plt.close('all')
+                try:
+                    if ratio is False:
+                        fig.savefig(f"i{mf_base.decode()[10:13]}_{cfg.datevshot}_{mf_base.decode()}.png",
+                                    dpi=DIAG_AMP_IMG_DPI)
+                        #plt.close('all')
+                    else:
+                        fig.savefig(f"i{mf_base.decode()[10:13]}_{cfg.datevshot}_{mf_base.decode()}_ratio.png",
+                                    dpi=DIAG_AMP_IMG_DPI)
+                        #plt.close('all')
+                except KeyError as ke:
+                    if "changed" in str(ke):
+                        log(f"[{cfg.datevshot}] Ignored matplotlib \"changed\" issue {mf_base.decode()}")
+                    else:
+                        log(f"[{cfg.datevshot}] Exception (2) in shot_analysis on {mf_base.decode()}",
+                              traceback.format_exc())
+                except:
+                    log(f"[{cfg.datevshot}] Exception (3) in shot_analysis on {mf_base.decode()}",
+                        traceback.format_exc())
+
 
                 cfg.made_amp_images = True
     except:
@@ -7106,8 +7206,10 @@ def make_amp_images(cfg,ratio=False):
                 log(f"[{cfg.datevshot}] Making ratio IFU analysis images: {mf_base}")
             else:
                 log(f"[{cfg.datevshot}] Making basic IFU analysis images: {mf_base}")
-            plt.close('all')
-            fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(9, 12))
+            #plt.close('all')
+            #fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(9, 12))
+            fig = Figure(figsize=(9, 12))
+            axes = fig.subplots(nrows=4, ncols=3)
            # plot_config = list(np.arange(431, 443, 1))
             if ratio:
                 fig.suptitle(f"{cfg.datevshot} {mf_base} {img}/(processed-{img}), cmap scale: "
@@ -7133,7 +7235,6 @@ def make_amp_images(cfg,ratio=False):
                     exp = int(expdir.split("/exp")[1][:2])
                 except:
                     exp = ei + 1
-
 
                 # images should be under the reduction directory
                 for ai, amp in enumerate(['_RU', '_RL', '_LL', '_LU']):
@@ -7221,12 +7322,22 @@ def make_amp_images(cfg,ratio=False):
             #anchor=(0.0,0.0),, pad=0.15)  # ,
 
             plt.tight_layout()
-            if ratio:
-                plt.savefig(f"i{mf_base[10:13]}_{cfg.datevshot}_{mf_base}_ratio.png", dpi=DIAG_AMP_IMG_DPI)
-                plt.close('all')
-            else:
-                plt.savefig(f"i{mf_base[10:13]}_{cfg.datevshot}_{mf_base}.png", dpi=DIAG_AMP_IMG_DPI)
-                plt.close('all')
+            try:
+                if ratio:
+                    fig.savefig(f"i{mf_base[10:13]}_{cfg.datevshot}_{mf_base}_ratio.png", dpi=DIAG_AMP_IMG_DPI)
+                    #plt.close('all')
+                else:
+                    fig.savefig(f"i{mf_base[10:13]}_{cfg.datevshot}_{mf_base}.png", dpi=DIAG_AMP_IMG_DPI)
+                   # plt.close('all')
+            except KeyError as ke:
+                if "changed" in str(ke):
+                    log(f"[{cfg.datevshot}] Ignored matplotlib \"changed\" issue {mf_base}")
+                else:
+                    log(f"[{cfg.datevshot}] Exception (2) in make_amp_images on {mf_base}",
+                        traceback.format_exc())
+            except:
+                log(f"[{cfg.datevshot}] Exception (3) in make_amp_images on {mf_base}",
+                    traceback.format_exc())
 
     except:
         #print(traceback.format_exc())

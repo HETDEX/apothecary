@@ -135,9 +135,9 @@ class PrintLog:
 log = PrintLog('h5_merge.log')
 
 
-def plog(logstr,flush=False):
+
+def plog(logstr,*args,**kwargs):
     """
-    ugh, ... mixed logging and printing, so use this as the alternate
 
     :param logstr:
     :return:
@@ -147,10 +147,39 @@ def plog(logstr,flush=False):
         d = datetime.now()
         msg = "%s:%s:%s.%s -- %s" % (str(d.hour).zfill(2), str(d.minute).zfill(2), str(d.second).zfill(2),
                                      str(d.microsecond).zfill(6), logstr)
-        print(msg,flush=flush)
-        log(msg)
+
+        for arg in args:
+            msg += " " + arg
+
+        flush = False
+        end = None
+        for key, value in kwargs.items():
+            if key == 'flush':
+                flush = value
+            elif key == 'end':
+                end = value
+
+        print(msg,flush=flush,end=end)
     except:
         print(f"Log Exception!", traceback.format_exc(),flush=True)
+
+
+# def plog(logstr,flush=False):
+#     """
+#     ugh, ... mixed logging and printing, so use this as the alternate
+#
+#     :param logstr:
+#     :return:
+#     """
+#
+#     try:
+#         d = datetime.now()
+#         msg = "%s:%s:%s.%s -- %s" % (str(d.hour).zfill(2), str(d.minute).zfill(2), str(d.second).zfill(2),
+#                                      str(d.microsecond).zfill(6), logstr)
+#         print(msg,flush=flush)
+#         log(msg)
+#     except:
+#         print(f"Log Exception!", traceback.format_exc(),flush=True)
 
 def check_version():
     """
