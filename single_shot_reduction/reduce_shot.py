@@ -6682,7 +6682,7 @@ def shot_analyisis(cfg,ratio=False):
         try:
             fig = Figure(figsize=(8, 8))
             ax = fig.subplots()
-            ax.set_tile(f"{cfg.datevshot} x1")
+            ax.set_title(f"{cfg.datevshot} x1")
             ax.imshow(h5.root.Astrometry.CoaddImages.png_exp01.read())  # ,origin="upper")
             fig.tight_layout()
             fig.savefig(f"coadd_{cfg.datevshot}_exp01.png", dpi=96)
@@ -6693,7 +6693,7 @@ def shot_analyisis(cfg,ratio=False):
         try:
             fig = Figure(figsize=(8, 8))
             ax = fig.subplots()
-            ax.set_tile(f"{cfg.datevshot} x2")
+            ax.set_title(f"{cfg.datevshot} x2")
             ax.imshow(h5.root.Astrometry.CoaddImages.png_exp02.read())  # ,origin="upper")
             fig.tight_layout()
             fig.savefig(f"coadd_{cfg.datevshot}_exp02.png", dpi=96)
@@ -6704,7 +6704,7 @@ def shot_analyisis(cfg,ratio=False):
         try:
             fig = Figure(figsize=(8, 8))
             ax = fig.subplots()
-            ax.set_tile(f"{cfg.datevshot} x3")
+            ax.set_title(f"{cfg.datevshot} x3")
             ax.imshow(h5.root.Astrometry.CoaddImages.png_exp03.read())  # ,origin="upper")
             fig.tight_layout()
             fig.savefig(f"coadd_{cfg.datevshot}_exp03.png", dpi=96)
