@@ -6686,6 +6686,7 @@ def shot_analyisis(cfg,ratio=False):
             ax.imshow(h5.root.Astrometry.CoaddImages.png_exp01.read())  # ,origin="upper")
             fig.tight_layout()
             fig.savefig(f"coadd_{cfg.datevshot}_exp01.png", dpi=96)
+            plt.close(fig)
         except:
             log(f"[{cfg.datevshot}] Exception in shot_analysis on CoaddImages exp1",
                 traceback.format_exc())
@@ -6697,6 +6698,7 @@ def shot_analyisis(cfg,ratio=False):
             ax.imshow(h5.root.Astrometry.CoaddImages.png_exp02.read())  # ,origin="upper")
             fig.tight_layout()
             fig.savefig(f"coadd_{cfg.datevshot}_exp02.png", dpi=96)
+            plt.close(fig)
         except:
             log(f"[{cfg.datevshot}] Exception in shot_analysis on CoaddImages exp2",
                 traceback.format_exc())
@@ -6708,6 +6710,7 @@ def shot_analyisis(cfg,ratio=False):
             ax.imshow(h5.root.Astrometry.CoaddImages.png_exp03.read())  # ,origin="upper")
             fig.tight_layout()
             fig.savefig(f"coadd_{cfg.datevshot}_exp03.png", dpi=96)
+            plt.close(fig)
         except:
             log(f"[{cfg.datevshot}] Exception in shot_analysis on CoaddImages exp3",
                 traceback.format_exc())
@@ -6904,10 +6907,12 @@ def shot_analyisis(cfg,ratio=False):
                         fig.savefig(f"i{mf_base.decode()[10:13]}_{cfg.datevshot}_{mf_base.decode()}.png",
                                     dpi=DIAG_AMP_IMG_DPI)
                         #plt.close('all')
+                        plt.close(fig)
                     else:
                         fig.savefig(f"i{mf_base.decode()[10:13]}_{cfg.datevshot}_{mf_base.decode()}_ratio.png",
                                     dpi=DIAG_AMP_IMG_DPI)
                         #plt.close('all')
+                        plt.close(fig)
                 except KeyError as ke:
                     if "changed" in str(ke):
                         log(f"[{cfg.datevshot}] Ignored matplotlib \"changed\" issue {mf_base.decode()}")
@@ -7325,9 +7330,11 @@ def make_amp_images(cfg,ratio=False):
             try:
                 if ratio:
                     fig.savefig(f"i{mf_base[10:13]}_{cfg.datevshot}_{mf_base}_ratio.png", dpi=DIAG_AMP_IMG_DPI)
+                    plt.close(fig)
                     #plt.close('all')
                 else:
                     fig.savefig(f"i{mf_base[10:13]}_{cfg.datevshot}_{mf_base}.png", dpi=DIAG_AMP_IMG_DPI)
+                    plt.close(fig)
                    # plt.close('all')
             except KeyError as ke:
                 if "changed" in str(ke):
@@ -8106,6 +8113,7 @@ def prep_elixer(cfg):
         tasks_per_node = 0 #use the default 40
 
         if line_ct > 500 or cont_ct > 500:
+            #note: maximum allowd current at 32? (in elixer/selixer.py)
             tasks_per_node = 32 #slow it down and conserve memory
 
         if make_lines or make_conts:
