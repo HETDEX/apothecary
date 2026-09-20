@@ -70,6 +70,7 @@ from astropy.coordinates import SkyCoord
 from h5tools import amp_stats as AmpStats
 # noinspection PyUnresolvedReferences
 import hetdex_tools.fof_kdtree as fof
+# noinspection PyUnresolvedReferences
 from hetdex_api.extinction import deredden_spectra
 
 # noinspection PyUnresolvedReferences
@@ -320,7 +321,7 @@ class Config:
     shot_only: bool = False
     resume: bool = False
     repair: bool = False
-    shotid: int = 0
+    shotid = 0
     datevshot: str = ""
     exp: int = 0  #specific exposure number to reduce
     email: str = ""
@@ -886,7 +887,6 @@ def check_lib_calib(cfg):
     NOTE: this is incomplete protection as a calibration could start AFTER a reduction and it would not be
     protected.
 
-    :param yyyymm:
     :return:
     """
 

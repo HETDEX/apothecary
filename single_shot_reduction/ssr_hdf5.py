@@ -249,7 +249,7 @@ def wait_to_run(max_procs=3,datevshot="???",clean_up=False): #,safelimit=0):
             if clean_up:
                 plog(f"[{datevshot}] cleaning up ...")
             else:
-                plog(f"[{datevshot}] checking if safe to start ...")
+                plog(f"[{datevshot}] checking if safe to start. Max simultaneous shots = {max_procs}...")
 
             while redlight:
                 with lock:
@@ -295,6 +295,8 @@ def wait_to_run(max_procs=3,datevshot="???",clean_up=False): #,safelimit=0):
                     #plog(f"[{datevshot}] too many active shots. Must wait ...")
                     time.sleep(sleep_secs)
         # lock auto releases
+        else:
+            plog(f"[{datevshot}] No start delay check. Max simultaneous shots = {max_procs}...")
     except:
         plog(f"[{datevshot}] Exception! in wait_to_run()",traceback.format_exc())
 
@@ -1281,14 +1283,16 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                     return
 
 
+        #if want to use /tmp  update to /tmp HERE (and copy at the end, after the file handle is closed)
+        #HOWEVER, WARNING!!! These files CAN get to be 20GB in size and /tmp (on ls6) is only 120 GB?
+        #so that could be an issue when running at max memory allowance of 10-12 of these
         outfn = "ssr_" + os.path.basename(shot_fn)
 
         log.debug(f"[{datevshot}] ***START*** Creating new SingleShot Reduction HDF5 catalog (%s)" % (outfn))
 
         fileh = tables.open_file(outfn, 'w', 'SingleShot Reduction Catalog')
 
-        vtb = fileh.create_table(fileh.root, 'Version', Version,
-                                 'Version Table')
+        vtb = fileh.create_table(fileh.root, 'Version', Version, 'Version Table')
 
         row = vtb.row
         row['version'] = __version__
@@ -1883,7 +1887,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 plog(f"[{datevshot}] Astrometry.NominalVals")
                 fileh.create_table(groupAstrometry, 'NominalVals', NominalVals, 'Nominal Values')
                 copy_cols = fileh.root.Astrometry.NominalVals.colnames
-                for row in tqdm(shot_h5.root.Astrometry.NominalVals.read()):#, disable=not SHOW_TQDM):
+                for row in tqdm(shot_h5.root.Astrometry.NominalVals.read(), disable=not SHOW_TQDM):
                     new_row = fileh.root.Astrometry.NominalVals.row
                     # go over some columns individual since want to change some types
                     # directy copy columns:
@@ -1900,7 +1904,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 plog(f"[{datevshot}] Astrometry.QA")
                 fileh.create_table(groupAstrometry, 'QA', QualityAssessment, 'Quality Assessment')
                 copy_cols = fileh.root.Astrometry.QA.colnames
-                for row in tqdm(shot_h5.root.Astrometry.QA.read()):#, disable=not SHOW_TQDM):
+                for row in tqdm(shot_h5.root.Astrometry.QA.read(), disable=not SHOW_TQDM):
                     new_row = fileh.root.Astrometry.QA.row
                     # go over some columns individual since want to change some types
                     # directy copy columns:
@@ -1929,7 +1933,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 plog(f"[{datevshot}] Astrometry.StarCatalog")
                 fileh.create_table(groupAstrometry, 'StarCatalog', StarCatalog, 'StarCatalog')
                 copy_cols = fileh.root.Astrometry.StarCatalog.colnames
-                for row in tqdm(shot_h5.root.Astrometry.StarCatalog.read()):#, disable=not SHOW_TQDM):
+                for row in tqdm(shot_h5.root.Astrometry.StarCatalog.read(), disable=not SHOW_TQDM):
                     new_row = fileh.root.Astrometry.StarCatalog.row
                     # go over some columns individual since want to change some types
                     # directy copy columns:
@@ -1948,7 +1952,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 fileh.create_table(groupAstrometry, 'fplane', Fplane, 'fplane')
                 int_cols = ['ifuslot','specid','specslot','ifuid']
                 float_cols = ['fpx','fpy','ifurot','platesc']
-                for row in tqdm(shot_h5.root.Astrometry.fplane.read()):#, disable=not SHOW_TQDM):
+                for row in tqdm(shot_h5.root.Astrometry.fplane.read(), disable=not SHOW_TQDM):
                     new_row = fileh.root.Astrometry.fplane.row
                     # go over some columns individual since want to change some types
                     # directy copy columns:
@@ -2512,6 +2516,9 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
     if fileh is not None:
         fileh.close()
 
+    #if use /tmp, need to copy the file to the cwd and should add wrapper logic to backup if there
+    #are filename collisions ... again, see warning about filesize and limits on /tmp vs memory (RAM) limits
+
     return outfn
 #end build_ssr_shot_h5
 
@@ -2647,6 +2654,9 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
             total_images = len(image_fns)
             plog(f"[{datevshot}] Importing {total_images} images ... ",flush=True)
             for img_path in tqdm(image_fns,disable=not SHOW_TQDM):
+
+                #plog(f"[{datevshot}] *** Importing {img_path} ... ", flush=True)
+
                 try:
                     img = Image.open(img_path)
                     neighbor_list = []
@@ -2657,9 +2667,9 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
                     if 'Neighbors' in img.info.keys():
                         neighbor_list = img.info['Neighbors']
 
-
                         if len(neighbor_list) > 0 and ntb is not None:
                             try:
+                                #plog(f"[{datevshot}] *** begin neighbor_list {img_path} ... ", flush=True)
                                 neighbor_list = [np.int64(n) for n in neighbor_list.split(",")]
                                 detid = np.int64(os.path.basename(img_path).split('_nei.png')[0])
 
@@ -2669,12 +2679,13 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
                                     except:
                                         pass
 
-
                                 for nei_id in neighbor_list:
                                     new_row = ntb.row
                                     new_row['detectid'] = detid
                                     new_row['neighborid'] = nei_id
                                     new_row.append()
+
+                                #plog(f"[{datevshot}] *** end neighbor_list {img_path} ... ", flush=True)
                             except:
                                 plog(f"[{datevshot}] Exception! Cannot import neighbors for {img_path}; {traceback.format_exc()}")
 
@@ -2704,8 +2715,8 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
                     try:
                         idx = dtb.get_where_list("detectid==did")
                     except:
-                        plog(f"[{datevshot}] Error in imoprt_images_erray(). Could not locate index for detectid = {did}."
-                              f"Cannot update Detecttions table entry. None found.")
+                        plog(f"[{datevshot}] Error in import_images_erray(). Could not locate index for detectid = {did}."
+                              f"Cannot update Detections table entry. None found.")
                         continue
 
                     #*SHOULD* be exactly one, but may be some weirdness ?
@@ -2713,7 +2724,7 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
                         if len(idx) == 0:
                             plog(f"[{datevshot}] Detectid {did} not found in Detection table; will skip.")
                         else:
-                            plog(f"[{datevshot}] Dupicate detectids: {len(idx)} for id = {did}; must skip.")
+                            plog(f"[{datevshot}] Duplicate detectids: {len(idx)} for id = {did}; must skip.")
                         continue
                     else:
                         idx = idx[0]
@@ -2731,15 +2742,21 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
                     #print(f"*** DEBUG ***\n{row}")
 
                     try:
+                        #plog(f"[{datevshot}] *** begin modify_rows {img_path} ... ", flush=True)
                         dtb.modify_rows(start=idx, stop=idx + 1, step=1, rows=row)
+                        #plog(f"[{datevshot}] *** end modify_rows  {img_path} ... ", flush=True)
                     except:
                         plog(f"[{datevshot}] Unable to update {did}, {traceback.format_exc()}")
                 except:
                     plog(f"[{datevshot}] Unable to update {img_path}, {traceback.format_exc()}")
 
+            #plog(f"[{datevshot}] *** begin dtb.flush() {img_path} ... ", flush=True)
             dtb.flush()
+            #plog(f"[{datevshot}] *** end dtb.flush() {img_path} ... ", flush=True)
             if ntb is not None:
+                #plog(f"[{datevshot}] *** begin ntb.flush() {img_path} ... ", flush=True)
                 ntb.flush()
+                #plog(f"[{datevshot}] *** end ntb.flush() {img_path} ... ", flush=True)
 
             plog(f"[{datevshot}] Stored {total_images} images in {shot_h5fn}.")
 
@@ -2765,16 +2782,19 @@ def get_image_dict(image_path,datevshot="???"):
         image_fns = sorted(glob.glob(image_path))
         plog(f"[{datevshot}] Checking image sizes for {len(image_fns)} matching image names ...", flush=True)
         for img_path in tqdm(image_fns,disable=not SHOW_TQDM):
-            x1,x2,x3  = np.array(Image.open(img_path)).shape
+            try:
+                x1,x2,x3  = np.array(Image.open(img_path)).shape
 
-            max1 = max(max1, x1)
-            max2 = max(max2, x2)
-            max3 = max(max3, x3)
+                max1 = max(max1, x1)
+                max2 = max(max2, x2)
+                max3 = max(max3, x3)
 
-            if x1 in img_dict.keys():
-                img_dict[x1].append(img_path)
-            else:
-                img_dict[x1] = [img_path]
+                if x1 in img_dict.keys():
+                    img_dict[x1].append(img_path)
+                else:
+                    img_dict[x1] = [img_path]
+            except:
+                plog(f"[{datevshot}] Exception with {img_path}: {traceback.format_exc()}", flush=True)
 
     except:
         plog(f"[{datevshot}] Exception: {traceback.format_exc()}",flush=True)
@@ -2894,9 +2914,10 @@ if "-help" in args:
             The input shot.h5 file to be compressed (includes the filename). Can be a relative path.
 
         --bg [#]            optional
-            Specify the maximum number of simulatenously running hdf5 constructions
+            Specify the maximum number of simultaneously running hdf5 constructions
             Note: for a single vm-small node on lonestar6, this should be 2-3 depending on expected size
                   for a single development or normal node, this can be 15-20 depending on expected size
+                  but 10-12 is perhaps safer, when there are many detects
                   
         --float32           optional
             Override the compression and force float32 where float16 would otherwise be used due to limited range
@@ -3017,10 +3038,11 @@ if "-minimum" in args:
     args.remove("-minimum")
 
 if "-bg" in args:
-    SHOW_TQDM = False
     i = args.index("-bg")
     try:
         Max_Simultaneous_Shots = int(args[i+1])
+        if Max_Simultaneous_Shots > 0:
+            SHOW_TQDM = False
     except:
         print(f"Invalid -bg argument specified: {args[i + 1]}")
         exit(-1)
