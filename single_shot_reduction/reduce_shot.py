@@ -36,7 +36,7 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # 1.0.14 restrict minimum SNR of *.mc raw line detections that make it into HETDEX_API based on avg_sky
 # 1.0.15 fix issue where progress.dat could be overwritten as reset back to start; all progress lost
 # 1.0.16 add --repair switch
-# 1.0.17 add log repalcement
+# 1.0.17 add log replacement
 
 __version__ = '1.0.17'
 
@@ -169,7 +169,7 @@ WARN_NUM_LINE_DETS = 5000
 WARN_NUM_CONT_DETS = 500
 
 #since this is done outside (that is, the SLURM sets this up) it is not useful here, in this code, to know this
-# A way to deal with it here, would be to change the mutex to a sempahore and have a resource count
+# A way to deal with it here, would be to change the mutex to a semaphore and have a resource count
 #   and then throttle any use, regardless of SLURM ... e.g for a given /tmp/ only allow 1 shot to run for vm-small
 #   or 10-12 or so for normal .. any additionals would wait on the semaphore
 AssumedMemFootprint = 20.0  # GB assumption
@@ -853,6 +853,10 @@ if len(args) != 1:
         print(f"Fatal: Problem with remaining args: {args}")
         if "-clear" in args:
             print(f"--clear found ... did you mean --clean ?")
+
+        if "-local_het_raw" in args:
+            print(f"--local_het_raw found ... did you mean --local_het_raw_path ?")
+
         print(f"exiting....")
         exit(-1)
 else:
@@ -1574,7 +1578,11 @@ def write_summary(cfg):
     :param cfg:
     :return:
     """
+
+    log(f"[{cfg.datevshot}] write_summary() ...")
+
     orig_dir = os.getcwd()
+
     try:
         os.chdir(cfg.cwd)
         if not os.path.exists(f"{cfg.datevshot}.h5"):
@@ -1721,6 +1729,7 @@ def write_limited_summary(cfg):
     :param cfg:
     :return:
     """
+    log(f"[{cfg.datevshot}] write_limited_summary() ...")
     orig_dir = os.getcwd()
     try:
         os.chdir(cfg.cwd)
@@ -3849,7 +3858,8 @@ def get_avg_sky(cfg):
         img_exps = [os.path.basename(x).split("exp")[1][:2] for x in img_fns]
 
         if len(fns) == 0:
-            log(f"[{cfg.datevshot}] Can not collect avg_sky. Could not locate: {pattern}")
+            if not cfg.multifits_only:
+                log(f"[{cfg.datevshot}] Can not collect avg_sky. Could not locate: {pattern}")
             return None
         #column headers
         #Spc_slt_iid_am Factor N_c Avg Scale W0 W1 Nlo Avg_orig chi Frac_c2 Frac0
@@ -6259,7 +6269,8 @@ def count_amps(cfg):
             cfg.num_all_amps = len(amps_list)
             h5.close()
         else:
-            log(f"[{cfg.datevshot}] Could not load amps_list. shot h5 file not found.")
+            if not cfg.multifits_only:
+                log(f"[{cfg.datevshot}] Could not load amps_list. shot h5 file not found.")
     except:
         log(f"[{cfg.datevshot}] Could not load amps_list",traceback.format_exc())
 
