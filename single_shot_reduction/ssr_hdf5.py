@@ -28,12 +28,14 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 # 0.1.10 add healpix IDs to shot table and Detections (already in Fibers)
 # 0.1.11 add reduction_date,  reduction_status, and reduction_status_ext to VIRUSShot table
 # 0.1.12 add plog as print/logging variant
+# 0.1.13 add Detections_mc, Detection_cs tables (raw detections for lines and cont)
 
-__version__ = '0.1.12'
+__version__ = '0.1.13'
 
 
 import numpy as np
 import tables
+from astropy.io import ascii
 from astropy.table import Table
 import os
 from pathlib import Path
@@ -65,7 +67,8 @@ UNSET_NAN = np.nan
 SUPPORTED_ELIXER_H5_VERSIONS = [b"0.9.2",b"0.10.0",b"0.10.1",b"0.10.2",b"0.10.3",b"0.10.4"]
 SHOW_TQDM = True
 
-
+ADD_MC_DETECTIONS = True #raw line detections from *.mc files
+ADD_CS_DETECTIONS = True #raw contiuum detections from cs/*.list files
 
 HalfFloatCol = tables.Float16Col
 FullFloatCol = tables.Float32Col
@@ -244,7 +247,7 @@ def wait_to_run(max_procs=3,datevshot="???",clean_up=False): #,safelimit=0):
         lock = FileLock(Lock_tmp_mutex_fn)
         abort = False
 
-        if max_procs > 0:
+        if max_procs >= 0:
             redlight = True
             if clean_up:
                 plog(f"[{datevshot}] cleaning up ...")
@@ -275,6 +278,15 @@ def wait_to_run(max_procs=3,datevshot="???",clean_up=False): #,safelimit=0):
                             redlight = False
                         else:
                             if ct < max_procs and not abort:
+                                #if there is room to start this runner and an abort is not signaled
+                                ct +=1
+                                f.truncate()
+                                f.write(f"{ct}\n")
+                                redlight = False
+                            elif max_procs == 0:
+                                #we are not enforcing a limit on THIS runner, but it still
+                                #counts on the total so it can impact another that does have limits
+                                #(since this is an immediate start, do not need to check "abort")
                                 ct +=1
                                 f.truncate()
                                 f.write(f"{ct}\n")
@@ -282,7 +294,6 @@ def wait_to_run(max_procs=3,datevshot="???",clean_up=False): #,safelimit=0):
                             else:
                                 #still need to wait
                                 pass
-
 
                 if not redlight:
                     if clean_up:
@@ -295,8 +306,6 @@ def wait_to_run(max_procs=3,datevshot="???",clean_up=False): #,safelimit=0):
                     #plog(f"[{datevshot}] too many active shots. Must wait ...")
                     time.sleep(sleep_secs)
         # lock auto releases
-        else:
-            plog(f"[{datevshot}] No start delay check. Max simultaneous shots = {max_procs}...")
     except:
         plog(f"[{datevshot}] Exception! in wait_to_run()",traceback.format_exc())
 
@@ -1104,6 +1113,90 @@ class NeighborID(tables.IsDescription):
     # can be 0 rows (if no neighbors) or many rows if the detectid has many neighbors
     detectid = tables.Int64Col(pos=0)
     neighborid = tables.Int64Col(pos=1)
+
+
+####################################
+# raw detections
+###################################
+class Detections_mc(tables.IsDescription):
+
+    mc_file = tables.StringCol((32),pos=0)
+    #mc_file_idx = tables.Int32Col(pos=1) #same as the source index? no, this points to the hetdex_api index
+    #shotid = tables.Int64Col(pos=2) #redundant
+    #date = tables.Int32Col(pos=5) #redundant
+    #obsid = tables.Int32Col(pos=6) #redundant
+    #fiber_id = tables.StringCol((38)) #redundant
+    #detectname = tables.StringCol((40)) #redundant
+
+    wave = tables.Float32Col(pos=1)
+    wave_err = tables.Float32Col(pos=2)
+    flux = tables.Float32Col(pos=3)
+    flux_err = tables.Float32Col(pos=4)
+    linewidth = tables.Float32Col(pos=5)
+    linewidth_err = tables.Float32Col(pos=6)
+    continuum = tables.Float32Col(pos=7)
+    continuum_err = tables.Float32Col(pos=8)
+    sn = tables.Float32Col(pos=9)
+    sn_err = tables.Float32Col(pos=10)
+    chi2 = tables.Float32Col(pos=11)
+    chi2_err = tables.Float32Col(pos=12)
+    ra = tables.Float32Col(pos=13)
+    dec = tables.Float32Col(pos=14)
+    #datevshot (redundant)
+    noise_ratio = tables.Float32Col(pos=15)
+    linewidth_fix = tables.Float32Col(pos=16) #in mc file, not in hetdex_api
+    chi2_fix = tables.Float32Col(pos=17) #in mc file, not in hetdex_api
+    chi2fib = tables.Float32Col(pos=18)
+    src_index = tables.Int32Col(pos=19) #similar but not the same as the mc_file_idx ??
+    #multiname (redundant) with broken out spec, ifuslid, ifuid, amp, fibernum later
+    expnum = tables.Int8Col(pos=20)
+    x_ifu = tables.Float32Col(pos=21)
+    y_ifu = tables.Float32Col(pos=22)
+    x_raw = tables.Int32Col(pos=23)
+    y_raw = tables.Int32Col(pos=24)
+    weight = tables.Float32Col(pos=25)
+    apcor = tables.Float32Col(pos=26)
+    sn_cen = tables.Float32Col(pos=27)
+    flux_noise_1sigma = tables.Float32Col(pos=28)
+    sn_3fib = tables.Float32Col(pos=29)
+    sn_3fib_cen = tables.Float32Col(pos=30)
+    mc_col33 = tables.Float32Col(pos=31) #aka dummy
+
+    specid = tables.StringCol((3),pos=32)
+    ifuslot = tables.StringCol((3),pos=33)
+    ifuid = tables.StringCol((3),pos=34)
+    amp = tables.StringCol((2),pos=35)
+    fibnum = tables.Int32Col(pos=36)
+    detectid = tables.Int64Col(pos=37,dflt=0)  # not to be a key ... about 2/3 will not have a detectid
+
+
+
+class Detections_cs(tables.IsDescription):
+    list_file = tables.StringCol((32), pos=0)
+
+    ra = tables.Float32Col(pos=1)
+    dec = tables.Float32Col(pos=2)
+    x_ifu = tables.Float32Col(pos=3)
+    y_ifu = tables.Float32Col(pos=4)
+    expnum = tables.Int8Col(pos=5)
+    distance = tables.Float32Col(pos=6)
+    #wavein #always 4505.0
+    #timesampe #not useful?
+    #date #redundant
+    #obsid #redundant
+    x_raw = tables.Int32Col(pos=7)
+    y_raw = tables.Int32Col(pos=8)
+    weight = tables.Float32Col(pos=9)
+    flag = tables.Int8Col(pos=10)
+    cs_col16 = tables.Int8Col(pos=11)
+
+    detectid = tables.Int64Col(pos=12,dflt=0)  #not to be a key ... not all will have a detectid
+
+
+
+
+
+
 
 def get_healpix_id(ra,dec,Nside=32768):
     """
@@ -2046,6 +2139,286 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
 
         ##############################################
+        # Optional add raw *.mc line detections
+        #
+        ##############################################
+        if ADD_MC_DETECTIONS:
+            try:
+                try:
+                    line_h5 = tables.open_file(os.path.join(os.path.dirname(shot_h5_path), f"{datevshot}_line.h5"))
+                    hetdex_api_lines = Table(line_h5.root.Detections.read())
+                    line_h5.close()
+                except:
+                    hetdex_api_lines = None
+
+                mc_fns = sorted(glob.glob(os.path.join(os.path.dirname(shot_h5_path), "alldet/detect_out/*.mc")))
+
+                plog(f"[{datevshot}] Importing raw *.mc detections from {len(mc_fns)} files ... ", flush=True)
+                plog(f"[{datevshot}] {os.path.join(os.path.dirname(shot_h5_path), 'alldet/detect_out/*.mc')}",flush=True)
+                fileh.create_table(fileh.root, 'Detections_mc', Detections_mc,
+                                   'Raw mc line detections Table')
+
+                # recall, .mc has the 1 line per detction (.spec has the spectra, .list has all the involved fibers)
+                # recall, .mc has the 1 line per detction (.spec has the spectra, .list has all the involved fibers)
+                mc_colnames = ['wave', 'wave_err', 'flux', 'flux_err', 'linewidth', 'linewidth_err',
+                               'continuum', 'continuum_err', 'sn', 'sn_err', 'chi2', 'chi2_err', 'ra', 'dec',
+                               'datevshot', 'noise_ratio', 'linewidth_fix', 'chi2_fix', 'chi2fib',
+                               'src_index', 'multiname', 'exp', 'xifu', 'yifu', 'xraw', 'yraw', 'weight',
+                               'apcor', 'sn_cen', 'flux_noise_1sigma', 'sn_3fib', 'sn_3fib_cen', 'col33']
+
+                data_types = {
+                    'wave': [ascii.convert_numpy('f4')],
+                    'wave_err': [ascii.convert_numpy('f4')],
+                    'flux': [ascii.convert_numpy('f4')],
+                    'flux_err': [ascii.convert_numpy('f4')],
+                    'linewidth': [ascii.convert_numpy('f4')],
+                    'linewidth_err': [ascii.convert_numpy('f4')],
+                    'continuum': [ascii.convert_numpy('f4')],
+                    'continuum_err': [ascii.convert_numpy('f4')],
+                    'sn': [ascii.convert_numpy('f4')],
+                    'sn_err': [ascii.convert_numpy('f4')],
+                    'chi2': [ascii.convert_numpy('f4')],
+                    'chi2_err': [ascii.convert_numpy('f4')],
+                    'ra': [ascii.convert_numpy('f4')],
+                    'dec': [ascii.convert_numpy('f4')],
+                    'datevshot': [ascii.convert_numpy('S12')],
+                    'noise_ratio': [ascii.convert_numpy('f4')],
+                    'linewidth_fix': [ascii.convert_numpy('f4')],
+                    'chi2_fix': [ascii.convert_numpy('f4')],
+                    'chi2fib': [ascii.convert_numpy('f4')],
+                    'src_index': [ascii.convert_numpy('i4')],
+                    'multiname': [ascii.convert_numpy('S25')],
+                    'exp': [ascii.convert_numpy('S5')],
+                    'xifu': [ascii.convert_numpy('f4')],
+                    'yifu': [ascii.convert_numpy('f4')],
+                    'xraw': [ascii.convert_numpy('i4')],
+                    'yraw': [ascii.convert_numpy('i4')],
+                    'weight': [ascii.convert_numpy('f4')],
+                    'apcor': [ascii.convert_numpy('f4')],
+                    'sn_cen': [ascii.convert_numpy('f4')],
+                    'flux_noise_1sigma': [ascii.convert_numpy('f4')],
+                    'sn_3fib': [ascii.convert_numpy('f4')],
+                    'sn_3fib_cen': [ascii.convert_numpy('f4')],
+                    'col33': [ascii.convert_numpy('f4')]
+                }
+
+                for fn in tqdm(mc_fns,disable=not SHOW_TQDM):
+                    try:
+                        mc = os.path.basename(fn)
+                        t = Table.read(fn,format="ascii",converters=data_types,names=mc_colnames)
+
+                        #need to convert a few (like exp from a string to an integer)
+                        exps = [np.int8(e[-2:]) for e in t['exp']]
+                        t['exp'] = exps
+
+                        #can drop columns we don't need
+                        #no ... just won't copy and we need parts of the multiname
+                        #t.remove_columns(['datevshot', 'multiname'])
+
+                        #add the detectid column (at the end)
+                        t['detectid'] = np.int64(0)
+
+                        #we want to add the detectid from the hetdex_api_lines if there is a match
+                        #NOTICE: mc "src_index" is NOT hetdex_api "mc_file_idx"
+
+                        if hetdex_api_lines is not None:
+                            sel1 = np.array(hetdex_api_lines['mc_file'] == mc)
+
+                            for row in hetdex_api_lines[sel1]:
+                                # notice: exp in table t and  expnum row of hetdex_api_lines
+                                sel2 = np.array(t['xraw'] == row['x_raw']) * np.array(t['yraw'] == row['y_raw'])
+
+                                sel_ct = np.count_nonzero(sel2)
+                                if sel_ct == 0:
+                                    log.debug(f"[{datevshot}] Error adding Detections_mc for file {mc}. "
+                                              f"Matched {np.count_nonzero(sel2)} to raw x,y ({row['x_raw']},{row['y_raw']})")
+                                elif sel_ct == 1:
+                                    t['detectid'][sel2] = row['detectid']
+                                else:
+                                    #sometimes the exp is necessary
+                                    #have also seen on very rare occasion, the hetdex_api exp does not match
+                                    sel2 = sel2 * np.array(t['exp'] == row['expnum'])
+                                    if np.count_nonzero(sel2) != 1:
+                                        log.debug(f"[{datevshot}] Error adding Detections_mc for file {mc}. "
+                                                  f"Matched {np.count_nonzero(sel2)} to raw x,y "
+                                                  f" + exp ({row['x_raw']},{row['y_raw']}) {t['exp']}")
+                                    else:
+                                        t['detectid'][sel2] = row['detectid']
+
+                        #now add to the h5 table
+                        for row in t:
+                            new_row = fileh.root.Detections_mc.row
+
+                            new_row['mc_file'] = mc
+                            new_row['wave'] = row['wave']
+                            new_row['wave_err'] = row['wave_err']
+                            new_row['flux'] = row['flux']
+                            new_row['flux_err'] = row['flux_err']
+                            new_row['linewidth'] = row['linewidth']
+                            new_row['linewidth_err'] = row['linewidth_err']
+                            new_row['continuum'] = row['continuum']
+                            new_row['continuum_err'] = row['continuum_err']
+                            new_row['sn'] = row['sn']
+                            new_row['sn_err'] = row['sn_err']
+                            new_row['chi2'] = row['chi2']
+                            new_row['chi2_err'] = row['chi2_err']
+                            new_row['ra'] = row['ra']
+                            new_row['dec'] = row['dec']
+                            #skip datevshot
+                            new_row['noise_ratio'] = row['noise_ratio']
+                            new_row['linewidth_fix'] = row['linewidth_fix']
+                            new_row['chi2_fix'] = row['chi2_fix']
+                            new_row['chi2fib'] = row['chi2fib']
+                            new_row['src_index'] = row['src_index']
+                            #skip multiname
+                            new_row['expnum'] = row['exp'] #was string(5) now int8
+                            new_row['x_ifu'] = row['xifu'] #note name difference
+                            new_row['y_ifu'] = row['yifu'] #note name difference
+                            new_row['x_raw'] = row['xraw'] #note name difference
+                            new_row['y_raw'] = row['yraw'] #note name difference
+                            new_row['weight'] = row['weight']
+                            new_row['apcor'] = row['apcor']
+                            new_row['sn_cen'] = row['sn_cen']
+                            new_row['flux_noise_1sigma'] = row['flux_noise_1sigma']
+                            new_row['sn_3fib'] = row['sn_3fib']
+                            new_row['sn_3fib_cen'] = row['sn_3fib_cen']
+                            new_row['mc_col33'] = row['col33']
+                            #split out from multiname  i.e. multi_204_087_037_RL_039
+                            toks = row['multiname'].split("_")
+                            new_row['specid'] = toks[1]
+                            new_row['ifuslot'] = toks[2]
+                            new_row['ifuid'] = toks[3]
+                            new_row['amp'] = toks[4]
+                            new_row['fibnum'] = int(toks[5])
+                            new_row['detectid'] = row['detectid'] #might have a legit detectid or might be 0
+
+                            new_row.append()
+
+                        fileh.root.Detections_mc.flush()
+
+                    except:
+                        log.debug(f"[{datevshot}] Exception adding Detections_mc for file: {fn}", exc_info=True)
+
+                fileh.root.Detections_mc.flush()
+                plog(f"[{datevshot}] Added {len(fileh.root.Detections_mc)} records", flush=True)
+                #Notice: right now I am not sure this table needs any indicies?
+
+            except:
+                log.warn(f"[{datevshot}] Exception adding Detections_mc.", exc_info=True)
+
+        ##############################################
+        # Optional add raw cs (*.list) cont detections
+        #
+        ##############################################
+
+        if ADD_CS_DETECTIONS:
+            try:
+                try:
+                    cont_h5 = tables.open_file(os.path.join(os.path.dirname(shot_h5_path), f"{datevshot}_cont.h5"))
+                    hetdex_api_cont = Table(cont_h5.root.Detections.read())
+                    cont_h5.close()
+                except:
+                    hetdex_api_cont = None
+
+                cs_fns = sorted(glob.glob(os.path.join(os.path.dirname(shot_h5_path), "cs/spec/*.list")))
+
+                plog(f"[{datevshot}] Importing raw cs/*.list detections from {len(cs_fns)} files ... ", flush=True)
+                plog(f"[{datevshot}] {os.path.join(os.path.dirname(shot_h5_path), 'cs/spec/*.list')}",flush=True)
+                fileh.create_table(fileh.root, 'Detections_cs', Detections_cs,
+                                   'Raw cs continuum detections Table')
+
+                # recall, .mc has the 1 line per detction (.spec has the spectra, .list has all the involved fibers)
+                cs_colnames = ['ra','dec',"x_ifu","y_ifu","multiname","exp","distance","wavein","timestamp","date",
+                               "obsid","x_raw","y_raw","weight","flag","col16"]
+
+                data_types = {
+                    'ra': [ascii.convert_numpy('f4')],
+                    'dec': [ascii.convert_numpy('f4')],
+                    'x_ifu': [ascii.convert_numpy('f4')],
+                    'y_ifu': [ascii.convert_numpy('f4')],
+                    'multiname': [ascii.convert_numpy('S30')],
+                    'exp': [ascii.convert_numpy('S5')],
+                    'distance': [ascii.convert_numpy('f4')],
+                    'wavein': [ascii.convert_numpy('f4')],
+                    'timestamp': [ascii.convert_numpy('S19')],
+                    'date': [ascii.convert_numpy('i4')],
+                    'obsid': [ascii.convert_numpy('S3')],
+                    'xraw': [ascii.convert_numpy('i4')],
+                    'yraw': [ascii.convert_numpy('i4')],
+                    'weight': [ascii.convert_numpy('f4')],
+                    'flag': [ascii.convert_numpy('i4')],
+                    'col16': [ascii.convert_numpy('i4')],
+                }
+
+                for fn in tqdm(cs_fns,disable=not SHOW_TQDM):
+                    try:
+                        cs = os.path.basename(fn)
+                        t = Table.read(fn,format="ascii",converters=data_types,names=cs_colnames)
+
+                        #need to convert a few (like exp from a string to an integer)
+                        exps = [np.int8(e[-2:]) for e in t['exp']]
+                        t['exp'] = exps #notice: exp here not expnum
+
+                        #add the detectid column (at the end)
+                        t['detectid'] = np.int64(0)
+
+                        #we want to add the detectid from the hetdex_api_lines if there is a match
+                        #NOTICE: mc "src_index" is NOT hetdex_api "mc_file_idx"
+
+                        # unlike the line dets, flip the logic and match the .list read to the hetdex_api_cont
+
+                        if hetdex_api_cont is not None:
+
+                            #assign possible detectid
+                            # NOTICE: since this is by exposure, the same detection should be found in
+                            # each exposure so for a standard 3x dither, the detectid should repeat 3 times
+                            for row in t:
+                                specid = row['multiname'][6:9]
+                                # notice: exp in table t and  expnum hetdex_api_cont
+                                sel1 = np.array(row['x_raw'] == hetdex_api_cont['x_raw']) * \
+                                       np.array(row['y_raw'] == hetdex_api_cont['y_raw']) * \
+                                       np.array(row['exp'] == hetdex_api_cont['expnum']) * \
+                                       np.array(specid == hetdex_api_cont['specid'])
+                                #unlike with the *.mc and lines in the previous code block,
+                                #the continuum are by exp so the expnum must match
+
+                                if np.count_nonzero(sel1) == 1:
+                                    row['detectid'] = hetdex_api_cont['detectid'][sel1]
+                                else:
+                                    pass #not a problem, the match is not 1:1 and there are fewer in hetdex_api_cont
+
+                                #now add to the h5 table
+
+                                new_row = fileh.root.Detections_cs.row
+                                new_row['list_file'] = cs
+
+                                new_row['ra'] = row['ra']
+                                new_row['dec'] = row['dec']
+                                new_row['x_ifu'] = row['x_ifu']
+                                new_row['y_ifu'] = row['y_ifu']
+                                new_row['expnum'] = row['exp']  # was string(5) now int8
+                                new_row['distance'] = row['distance']
+                                new_row['x_raw'] = row['x_raw']
+                                new_row['y_raw'] = row['y_raw']
+                                new_row['weight'] = row['weight']
+                                new_row['flag'] = row['flag']
+                                new_row['cs_col16'] = row['col16']
+
+                                new_row.append()
+
+                            fileh.root.Detections_cs.flush()
+
+                    except:
+                        log.debug(f"[{datevshot}] Exception adding Detections_cs for file: {fn}", exc_info=True)
+
+                fileh.root.Detections_cs.flush()
+                plog(f"[{datevshot}] Added {len(fileh.root.Detections_cs)} records",flush=True)
+
+            except:
+                log.warn(f"[{datevshot}] Exception adding Detections_cs.", exc_info=True)
+
+
+        ##############################################
         # Optional Diagnose Classification table
         #       see --diagnose
         ##############################################
@@ -2522,46 +2895,47 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
     return outfn
 #end build_ssr_shot_h5
 
-
-def get_max_image(image_path,datevshot="???"):
-    """
-
-    :param image_path:
-    :return: 3-tuple of (max) shape, np.array of unique 1st dimensions
-    """
-    # only first dimension is allowed to change
-    max1 = 0
-    max2 = 0
-    max3 = 0
-
-    t1 = []
-    # t2 = []
-    # t3 = []
-
-    try:
-        plog(f"[{datevshot}] Checking image sizes ...",flush=True)
-        image_fns = sorted(glob.glob(image_path))
-        for img_path in tqdm(image_fns,disable=not SHOW_TQDM):
-            x1,x2,x3  = np.array(Image.open(img_path)).shape
-
-            max1 = max(max1, x1)
-            max2 = max(max2, x2)
-            max3 = max(max3, x3)
-
-            t1.append(x1)
-            # t2.append(x2)
-            # t3.append(x3)
-
-    except:
-        plog(f"[{datevshot}] Exception: {traceback.format_exc()}")
-
-    # print(f"x1: {np.unique(t1)}")
-    # print(f"x2: {np.unique(t2)}")
-    # print(f"x3: {np.unique(t3)}")
-
-    unique_d1, unique_ct = np.unique(t1,return_counts=True)
-
-    return (max1,max2,max3), unique_d1, unique_ct
+# [defunct]
+#
+# def get_max_image(image_path,datevshot="???"):
+#     """
+#
+#     :param image_path:
+#     :return: 3-tuple of (max) shape, np.array of unique 1st dimensions
+#     """
+#     # only first dimension is allowed to change
+#     max1 = 0
+#     max2 = 0
+#     max3 = 0
+#
+#     t1 = []
+#     # t2 = []
+#     # t3 = []
+#
+#     try:
+#         plog(f"[{datevshot}] Checking image sizes ...",flush=True)
+#         image_fns = sorted(glob.glob(image_path))
+#         for img_path in tqdm(image_fns,disable=not SHOW_TQDM):
+#             x1,x2,x3  = np.array(Image.open(img_path)).shape
+#
+#             max1 = max(max1, x1)
+#             max2 = max(max2, x2)
+#             max3 = max(max3, x3)
+#
+#             t1.append(x1)
+#             # t2.append(x2)
+#             # t3.append(x3)
+#
+#     except:
+#         plog(f"[{datevshot}] Exception: {traceback.format_exc()}")
+#
+#     # print(f"x1: {np.unique(t1)}")
+#     # print(f"x2: {np.unique(t2)}")
+#     # print(f"x3: {np.unique(t3)}")
+#
+#     unique_d1, unique_ct = np.unique(t1,return_counts=True)
+#
+#     return (max1,max2,max3), unique_d1, unique_ct
 
 
 
@@ -2764,7 +3138,7 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
         plog(f"[{datevshot}] Exception in add_report_images(): {traceback.format_exc()}")
 
 
-def get_image_dict(image_path,datevshot="???"):
+def get_image_dict_ORIGINAL (image_path,datevshot="???"):
     """
 
     :param image_path:
@@ -2781,6 +3155,9 @@ def get_image_dict(image_path,datevshot="???"):
         plog(f"[{datevshot}] Checking image sizes for {image_path}...",flush=True)
         image_fns = sorted(glob.glob(image_path))
         plog(f"[{datevshot}] Checking image sizes for {len(image_fns)} matching image names ...", flush=True)
+
+        #to
+
         for img_path in tqdm(image_fns,disable=not SHOW_TQDM):
             try:
                 x1,x2,x3  = np.array(Image.open(img_path)).shape
@@ -2801,7 +3178,51 @@ def get_image_dict(image_path,datevshot="???"):
 
     return (max1,max2,max3), img_dict
 
+def get_image_dict(image_path,datevshot="???"):
+    """
 
+    :param image_path:
+    :return: 3-tuple of (max) shape, and dictionary of image paths keyed by the image 1st Dimension length
+    """
+
+    max1 = 0
+    max2 = 0
+    max3 = 3
+
+    img_dict = {}
+
+    try:
+        plog(f"[{datevshot}] Checking image sizes for {image_path}...",flush=True)
+        image_fns = sorted(glob.glob(image_path))
+        plog(f"[{datevshot}] Checking image sizes for {len(image_fns)} matching image names ...", flush=True)
+
+        for img_path in tqdm(image_fns,disable=not SHOW_TQDM):
+            try:
+                with Image.open(img_path) as im:
+                    x2, x1 = im.size
+                    x3 = len(im.getbands())
+
+                #x2,x1 = Image.open(img_path).size #flip x1 and x2 as reported
+
+                max1 = max(max1, x1)
+                max2 = max(max2, x2)
+                max3 = max(max3, x3) #always == 3 for my purposes
+
+                if x1 in img_dict.keys():
+                    img_dict[x1].append(img_path)
+                else:
+                    img_dict[x1] = [img_path]
+            except:
+                plog(f"[{datevshot}] Exception with {img_path}: {traceback.format_exc()}", flush=True)
+
+    except:
+        plog(f"[{datevshot}] Exception: {traceback.format_exc()}",flush=True)
+
+    return (max1,max2,max3), img_dict
+
+#
+# note: the default is not this one but the import_images_earray
+#
 def import_images_carray(shot_h5fn,image_path,group_name,carray_name="image_data"):
     """
 
