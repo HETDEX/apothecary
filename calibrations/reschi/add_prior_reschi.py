@@ -16,12 +16,12 @@ from tqdm import tqdm
 from astropy.io import fits
 import traceback
 
-#BASEDIR_reschi = "/scratch/projects/hetdex/lib_calib/reschi" #do not end with /
+BASEDIR_reschi = "/scratch/projects/hetdex/lib_calib/reschi" #do not end with /
 #to use local reschi, copy the per specID contents to reschi/yyyymm/ locally and set BASEDIR_reschi to that path
-BASEDIR_reschi = "/scratch/03261/polonius/parallel/reschi" #do not end with /
+#BASEDIR_reschi = "/scratch/03261/polonius/parallel/reschi" #do not end with /
 
 
-print(f"Using reschi under: {BASEDIR_reschi}")
+
 
 all_dateshot_paths = sorted(glob.glob("20*/virus/virus*"))
 all_dates = [x.split("/")[0] for x in all_dateshot_paths]
@@ -41,6 +41,15 @@ else:
     prior_month = current_month -1
 
 prior_yyyymm = f"{prior_year}{str(prior_month).zfill(2)}"
+
+
+print(f"Using reschi (for previous months) under: {BASEDIR_reschi}")
+print(f"Current month: {current_yyyymm}  Prior month {prior_yyyymm}")
+
+user_input = input("Continue? (y/n)")
+if user_input.lower() != "y":
+    print(f"User aborted.")
+    exit(0)
 
 #I do NOT want these sorted ... the two arrays need to be in the same order
 all_prior_res_files = glob.glob(f"{BASEDIR_reschi}/{prior_yyyymm}/res*.fits")
