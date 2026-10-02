@@ -2163,7 +2163,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 mc_colnames = ['wave', 'wave_err', 'flux', 'flux_err', 'linewidth', 'linewidth_err',
                                'continuum', 'continuum_err', 'sn', 'sn_err', 'chi2', 'chi2_err', 'ra', 'dec',
                                'datevshot', 'noise_ratio', 'linewidth_fix', 'chi2_fix', 'chi2fib',
-                               'src_index', 'multiname', 'exp', 'xifu', 'yifu', 'xraw', 'yraw', 'weight',
+                               'src_index', 'multiname', 'expnum', 'xifu', 'yifu', 'xraw', 'yraw', 'weight',
                                'apcor', 'sn_cen', 'flux_noise_1sigma', 'sn_3fib', 'sn_3fib_cen', 'col33']
 
                 data_types = {
@@ -2188,7 +2188,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                     'chi2fib': [ascii.convert_numpy('f4')],
                     'src_index': [ascii.convert_numpy('i4')],
                     'multiname': [ascii.convert_numpy('S25')],
-                    'exp': [ascii.convert_numpy('S5')],
+                    'expnum': [ascii.convert_numpy('S5')],
                     'xifu': [ascii.convert_numpy('f4')],
                     'yifu': [ascii.convert_numpy('f4')],
                     'xraw': [ascii.convert_numpy('i4')],
@@ -2207,9 +2207,14 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                         mc = os.path.basename(fn)
                         t = Table.read(fn,format="ascii",converters=data_types,names=mc_colnames)
 
-                        #need to convert a few (like exp from a string to an integer)
-                        exps = [np.int8(e[-2:]) for e in t['exp']]
-                        t['exp'] = exps
+                        #need to convert a few (like expnum from a string to an integer)
+                        exps = [np.int8(e[-2:]) for e in t['expnum']]
+                        t['expnum'] = exps
+
+                        #example: multi_307_085_076_LL_081
+                        t['amp'] = [m[18:20] for m in t['multiname']]
+                        #t['fibnum'] = [int(m[-3:]) for m in t['multiname']]
+                        t['fibnum'] = [int(m[21:24]) for m in t['multiname']]
 
                         #can drop columns we don't need
                         #no ... just won't copy and we need parts of the multiname
@@ -2225,23 +2230,46 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                             sel1 = np.array(hetdex_api_lines['mc_file'] == mc)
 
                             for row in hetdex_api_lines[sel1]:
-                                # notice: exp in table t and  expnum row of hetdex_api_lines
-                                sel2 = np.array(t['xraw'] == row['x_raw']) * np.array(t['yraw'] == row['y_raw'])
+                                # notice: expnum in table t and  expnum row of hetdex_api_lines
+                                #sel2 = (np.array(t['xraw'] == row['x_raw']) * np.array(t['yraw'] == row['y_raw']) * \
+                                #        np.array(t['amp'] == row['amp']))
+
+                                # there can apparently be +/- 1 differences in pixel on x,y raw (rare but happens)
+                                # so try again, but cannot use x,y IFU as those are off too
+
+                                #already on the correct specid, so no need to check that too
+                                sel2 =  np.array( (abs(t['wave'] - row['wave'])) < 0.02) * \
+                                        np.array( (abs(t['flux'] - row['flux'])) < 0.02) * \
+                                        np.array( (abs(t['fibnum'] - row['fibnum'])) <= 1) * \
+                                        np.array( (abs(t['xraw'] - row['x_raw'])) <= 1) * \
+                                        np.array( (abs(t['yraw'] - row['y_raw'])) <= 1) * \
+                                        np.array(t['amp'] == row['amp']) #* \
+                                        #np.array(t['expnum'] == row['expnum'])
 
                                 sel_ct = np.count_nonzero(sel2)
                                 if sel_ct == 0:
+
+                                    #log.debug(f"[{datevshot}] Error adding Detections_mc for file {mc}. "
+                                    #          f"Matched {np.count_nonzero(sel2)} to raw x,y ({row['x_raw']},{row['y_raw']})")
+
                                     log.debug(f"[{datevshot}] Error adding Detections_mc for file {mc}. "
-                                              f"Matched {np.count_nonzero(sel2)} to raw x,y ({row['x_raw']},{row['y_raw']})")
+                                         f"Matched {np.count_nonzero(sel2)} "
+                                         f"wave {row['wave']:0.2f}, flux {row['flux']:0.2f}, amp {row['amp']}, "
+                                         f"fiber {row['fibnum']}, "
+                                         f"expnum {row['expnum']}, x,y raw ({row['x_raw']},{row['y_raw']})")
+
                                 elif sel_ct == 1:
                                     t['detectid'][sel2] = row['detectid']
                                 else:
-                                    #sometimes the exp is necessary
-                                    #have also seen on very rare occasion, the hetdex_api exp does not match
-                                    sel2 = sel2 * np.array(t['exp'] == row['expnum'])
+                                    #sometimes the expnum is necessary
+                                    #have also seen on very rare occasion, the hetdex_api expnum does not match
+                                    sel2 = sel2 * np.array(t['expnum'] == row['expnum'])
                                     if np.count_nonzero(sel2) != 1:
-                                        log.debug(f"[{datevshot}] Error adding Detections_mc for file {mc}. "
-                                                  f"Matched {np.count_nonzero(sel2)} to raw x,y "
-                                                  f" + exp ({row['x_raw']},{row['y_raw']}) {t['exp']}")
+                                        plog(f"[{datevshot}] Error adding Detections_mc for file {mc}. "
+                                                  f"Matched {np.count_nonzero(sel2)} "
+                                                  f"wave {row['wave']:0.2f}, flux {row['flux']:0.2f}, amp {row['amp']}, "
+                                                  f"fiber {row['fibnum']}, "
+                                                  f"expnum {row['expnum']}, x,y raw ({row['x_raw']},{row['y_raw']})")
                                     else:
                                         t['detectid'][sel2] = row['detectid']
 
@@ -2271,7 +2299,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                             new_row['chi2fib'] = row['chi2fib']
                             new_row['src_index'] = row['src_index']
                             #skip multiname
-                            new_row['expnum'] = row['exp'] #was string(5) now int8
+                            new_row['expnum'] = row['expnum'] #was string(5) now int8
                             new_row['x_ifu'] = row['xifu'] #note name difference
                             new_row['y_ifu'] = row['yifu'] #note name difference
                             new_row['x_raw'] = row['xraw'] #note name difference
@@ -2297,14 +2325,16 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                         fileh.root.Detections_mc.flush()
 
                     except:
-                        log.debug(f"[{datevshot}] Exception adding Detections_mc for file: {fn}", exc_info=True)
+                        plog(f"[{datevshot}] Exception adding Detections_mc for file: {fn}", exc_info=True)
+                        log.warning(f"[{datevshot}] Exception adding Detections_mc for file: {fn}", exc_info=True)
 
                 fileh.root.Detections_mc.flush()
                 plog(f"[{datevshot}] Added {len(fileh.root.Detections_mc)} records", flush=True)
                 #Notice: right now I am not sure this table needs any indicies?
 
             except:
-                log.warn(f"[{datevshot}] Exception adding Detections_mc.", exc_info=True)
+                plog(f"[{datevshot}] Exception adding Detections_mc.", exc_info=True)
+                log.warning(f"[{datevshot}] Exception adding Detections_mc.", exc_info=True)
 
         ##############################################
         # Optional add raw cs (*.list) cont detections
@@ -2328,7 +2358,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                                    'Raw cs continuum detections Table')
 
                 # recall, .mc has the 1 line per detction (.spec has the spectra, .list has all the involved fibers)
-                cs_colnames = ['ra','dec',"x_ifu","y_ifu","multiname","exp","distance","wavein","timestamp","date",
+                cs_colnames = ['ra','dec',"x_ifu","y_ifu","multiname","expnum","distance","wavein","timestamp","date",
                                "obsid","x_raw","y_raw","weight","flag","col16"]
 
                 data_types = {
@@ -2337,14 +2367,14 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                     'x_ifu': [ascii.convert_numpy('f4')],
                     'y_ifu': [ascii.convert_numpy('f4')],
                     'multiname': [ascii.convert_numpy('S30')],
-                    'exp': [ascii.convert_numpy('S5')],
+                    'expnum': [ascii.convert_numpy('S5')],
                     'distance': [ascii.convert_numpy('f4')],
                     'wavein': [ascii.convert_numpy('f4')],
                     'timestamp': [ascii.convert_numpy('S19')],
                     'date': [ascii.convert_numpy('i4')],
                     'obsid': [ascii.convert_numpy('S3')],
-                    'xraw': [ascii.convert_numpy('i4')],
-                    'yraw': [ascii.convert_numpy('i4')],
+                    'x_raw': [ascii.convert_numpy('i4')],
+                    'y_raw': [ascii.convert_numpy('i4')],
                     'weight': [ascii.convert_numpy('f4')],
                     'flag': [ascii.convert_numpy('i4')],
                     'col16': [ascii.convert_numpy('i4')],
@@ -2355,9 +2385,12 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                         cs = os.path.basename(fn)
                         t = Table.read(fn,format="ascii",converters=data_types,names=cs_colnames)
 
-                        #need to convert a few (like exp from a string to an integer)
-                        exps = [np.int8(e[-2:]) for e in t['exp']]
-                        t['exp'] = exps #notice: exp here not expnum
+                        #need to convert a few (like expnum from a string to an integer)
+                        exps = [np.int8(e[-2:]) for e in t['expnum']]
+                        t['expnum'] = exps
+                        t['amp'] = [m[18:20] for m in t['multiname']]
+                        #this multiname is different (ends in .ixy .... multi_326_082_034_LU_087.ixy)
+                        t['fibnum'] = [int(m[21:24]) for m in t['multiname']]
 
                         #add the detectid column (at the end)
                         t['detectid'] = np.int64(0)
@@ -2374,13 +2407,20 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                             # each exposure so for a standard 3x dither, the detectid should repeat 3 times
                             for row in t:
                                 specid = row['multiname'][6:9]
-                                # notice: exp in table t and  expnum hetdex_api_cont
-                                sel1 = np.array(row['x_raw'] == hetdex_api_cont['x_raw']) * \
-                                       np.array(row['y_raw'] == hetdex_api_cont['y_raw']) * \
-                                       np.array(row['exp'] == hetdex_api_cont['expnum']) * \
-                                       np.array(specid == hetdex_api_cont['specid'])
+                                # notice: expnum in table t and  expnum hetdex_api_cont
+                                #x,y raw can be off by +/- 1 so can't use them
+                                #sel1 = #np.array(row['x_raw'] == hetdex_api_cont['x_raw']) * \
+                                       #np.array(row['y_raw'] == hetdex_api_cont['y_raw']) * \
+                                sel1 = np.array(row['expnum'] == hetdex_api_cont['expnum']) * \
+                                       np.array(row['amp'] == hetdex_api_cont['amp']) * \
+                                       np.array(row['fibnum'] == hetdex_api_cont['fibnum']) * \
+                                       np.array(specid == hetdex_api_cont['specid']) * \
+                                       np.array((abs(row['x_raw'] - hetdex_api_cont['x_raw'])) <= 1) * \
+                                       np.array((abs(row['y_raw'] - hetdex_api_cont['y_raw'])) <= 1)
+
+
                                 #unlike with the *.mc and lines in the previous code block,
-                                #the continuum are by exp so the expnum must match
+                                #the continuum are by expnum so the expnum must match
 
                                 if np.count_nonzero(sel1) == 1:
                                     row['detectid'] = hetdex_api_cont['detectid'][sel1]
@@ -2396,7 +2436,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                                 new_row['dec'] = row['dec']
                                 new_row['x_ifu'] = row['x_ifu']
                                 new_row['y_ifu'] = row['y_ifu']
-                                new_row['expnum'] = row['exp']  # was string(5) now int8
+                                new_row['expnum'] = row['expnum']  # was string(5) now int8
                                 new_row['distance'] = row['distance']
                                 new_row['x_raw'] = row['x_raw']
                                 new_row['y_raw'] = row['y_raw']
@@ -2409,13 +2449,15 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                             fileh.root.Detections_cs.flush()
 
                     except:
-                        log.debug(f"[{datevshot}] Exception adding Detections_cs for file: {fn}", exc_info=True)
+                        plog(f"[{datevshot}] Exception adding Detections_cs for file: {fn}", exc_info=True)
+                        log.warning(f"[{datevshot}] Exception adding Detections_cs for file: {fn}", exc_info=True)
 
                 fileh.root.Detections_cs.flush()
                 plog(f"[{datevshot}] Added {len(fileh.root.Detections_cs)} records",flush=True)
 
             except:
-                log.warn(f"[{datevshot}] Exception adding Detections_cs.", exc_info=True)
+                plog(f"[{datevshot}] Exception adding Detections_cs.", exc_info=True)
+                log.warning(f"[{datevshot}] Exception adding Detections_cs for file: {fn}", exc_info=True)
 
 
         ##############################################
@@ -3513,7 +3555,7 @@ else:
     plog(f"[{datevshot}] Using [default] type 2 compression: zlib at complvl 1 . Good compression, moderate CPU + time")
 
 if len(args) > 0:
-    plog(f"[{datevshot}] Unknown remainting args: {args}")
+    plog(f"[{datevshot}] Unknown remaining args: {args}")
 
 
 wait_to_run(Max_Simultaneous_Shots, datevshot=datevshot,clean_up=False)
