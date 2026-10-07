@@ -37,8 +37,9 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # 1.0.15 fix issue where progress.dat could be overwritten as reset back to start; all progress lost
 # 1.0.16 add --repair switch
 # 1.0.17 add log replacement
+# 1.0.18 add interference pattern analysis
 
-__version__ = '1.0.17'
+__version__ = '1.0.18'
 
 import numpy as np
 import sys
@@ -65,6 +66,10 @@ from astropy.table import Table, join, Column, MaskedColumn # unique, vstack, hs
 from astropy.io import fits
 import astropy.units as u
 from astropy.coordinates import SkyCoord
+
+from scipy.ndimage import median_filter
+from scipy.signal import find_peaks
+from scipy.special import gammaincc
 
 # noinspection PyUnresolvedReferences
 from h5tools import amp_stats as AmpStats
@@ -277,6 +282,8 @@ s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_sour
 #     what you are doing !!!
 ########################################################################
 
+Interference_Bad_SNR_Thresh = 125.0 #interfernce pattern SNR threshold above which to mark an amp "bad"
+#NOTE: look for other use in the code IF you lower this value below 75.0
 
 def log(logstr,*args,**kwargs):
     """
@@ -2072,6 +2079,180 @@ def system_command(cfg,cmd):
         os.system(f"{cmd} &>> {cfg.file_stdout.name}")
     else:
         os.system(f"{cmd}")
+
+
+
+######################################################
+# amp analysis to find interference patterns
+# see apothecary/analysis/amp_interference.py
+######################################################
+
+
+def contiguous_run_mask(a, min_len):
+    """Boolean mask of elements belonging to runs of length >= min_len."""
+    a = np.asarray(a)
+    if a.size == 0:
+        return np.zeros(0, bool)
+    starts = np.r_[0, np.flatnonzero(np.diff(a) != 1) + 1]
+    lengths = np.diff(np.r_[starts, a.size])
+    return np.repeat(lengths >= min_len, lengths)
+
+def contiguous_runs(seq, min_len=5):
+    """Keep only values in runs of consecutive integers (each = previous + 1)
+    of length >= min_len. Edits a list in place and returns it; for NumPy
+    arrays, returns a new filtered array (arrays can't shrink in place)."""
+    if isinstance(seq, np.ndarray):
+        return seq[contiguous_run_mask(seq, min_len)]
+    keep, start = [], 0
+    for i in range(1, len(seq) + 1):
+        if i == len(seq) or seq[i] != seq[i - 1] + 1:     # run ends at i-1
+            if i - start >= min_len:
+                keep.extend(seq[start:i])
+            start = i
+    seq[:] = keep                                         # in-place edit
+    return seq
+
+def select_dark_rows(image, dark_fraction=0.05, trace=None, fiber_clear=6, xslice=slice(None)):
+    """Return indices of rows with little or no fiber light.
+
+    With ``trace`` (n_fibers x nx array of fiber y-positions), rows whose pixels
+    are all more than ``fiber_clear`` px from every fiber are used.  Otherwise the
+    ``dark_fraction`` of rows with the lowest median flux are used.
+    """
+    ny = image.shape[0]
+    if trace is not None:
+        y = np.arange(ny)[:, None]
+        dist = np.min(np.abs(y[None] - np.asarray(trace)[:, None]), axis=0)
+        return np.where((dist > fiber_clear)[:, xslice].mean(axis=1) > 0.95)[0]
+    level = np.nanmedian(image[:, xslice], axis=1)
+    n = max(2, int(round(dark_fraction * ny)))
+    return np.sort(np.argsort(level)[:n])
+
+
+def _harmonic_of(freqs, i, tol):
+    """Index (into freqs) of a stronger peak that freqs[i] is a harmonic/alias of, or -1."""
+    for j in range(i):
+        for n in range(2, 8):
+            h = (n * freqs[j]) % 1.0
+            h = min(h, 1.0 - h)                      # fold about Nyquist
+            if abs(h - freqs[i]) < tol:
+                return j
+    return -1
+
+
+def detect_interference(image, rows=None, trace=None, dark_fraction=0.05, xmin=200, xmax=800,
+                        fmin=0.03, fmax=0.5, snr_threshold=70.0, bg_width=31, clip=5.0):
+    """Search a 2D amp image for periodic interference along the rows.
+
+    Parameters
+    ----------
+    image : 2D array (ny, nx)
+        Amp image, x = readout/wavelength direction.  NaNs are ignored.
+    rows : array of int, optional
+        Rows to analyse.  Default: chosen by `select_dark_rows`.
+    trace : 2D array, optional
+        Fiber traces (n_fibers x nx); if given, dark rows are the fiber-free rows.
+    dark_fraction : float
+        Fraction of darkest rows to use when neither ``rows`` nor ``trace`` is given.
+    xmin, xmax : int
+        Column range to use (default skips the first 100 noisy columns).
+    fmin, fmax : float
+        Frequency search band in cycles/pixel (Nyquist = 0.5).
+    snr_threshold : float
+        A spike is significant if its power exceeds the local median power by this factor.
+    bg_width : int
+        Width (in frequency bins) of the running median used as the noise floor.
+    clip : float
+        Pixels deviating by more than ``clip`` x robust sigma are zeroed (cosmics, hot pixels).
+
+    Returns
+    -------
+    astropy.table.Table
+        One row per significant frequency, strongest first, with columns
+
+        freq             cycles/pixel along the row
+        period           pixels
+        snr              peak power / local median power
+        amplitude        sine amplitude in image units (rms over analysed rows)
+        amp_over_noise   amplitude / robust pixel noise
+        slant            x-shift of the crests per +1 row, in px (nan if no adjacent
+                         rows analysed; ambiguous by +-period/2 when near that value)
+        harmonic_of      row index of a stronger peak this is a harmonic of, else -1
+        fap              false-alarm probability for pure noise (Bonferroni over bins)
+
+        ``meta`` holds: detected (bool), max_snr, n_rows, noise, nx, snr_threshold.
+        The table is empty (with detected=False) if nothing is significant.
+    """
+    image = np.asarray(image, dtype=float)
+    if image.ndim != 2:
+        raise ValueError('image must be 2D')
+    xs = slice(xmin, xmax)
+    if rows is None:
+        rows = select_dark_rows(image, dark_fraction=dark_fraction, trace=trace, xslice=xs)
+        rows = contiguous_runs(rows,5)
+    rows = np.asarray(rows, dtype=int)
+
+    x = image[rows, xs]
+    x = x - np.nanmedian(x, axis=1, keepdims=True)
+    noise = 1.4826 * np.nanmedian(np.abs(x))
+    x = np.where(np.isfinite(x) & (np.abs(x) <= clip * noise), x, 0.0)
+
+    nx = x.shape[1]
+    win = np.hanning(nx)
+    F = np.fft.rfft(x * win, axis=1)
+    P = np.mean(np.abs(F) ** 2, axis=0)
+    freq = np.fft.rfftfreq(nx)
+    bg = median_filter(P, size=bg_width, mode='nearest')
+    snr = P / bg
+
+    band = (freq >= fmin) & (freq <= fmax)
+    peaks, _ = find_peaks(np.where(band, snr, 0.0), height=snr_threshold, distance=3)
+    peaks = peaks[np.argsort(snr[peaks])[::-1]]
+
+    nrow = len(rows)
+    adjacent = np.where(np.diff(rows) == 1)[0]
+    df = freq[1] - freq[0]
+    out = Table(names=('freq', 'period', 'snr', 'amplitude', 'amp_over_noise', 'slant',
+                       'harmonic_of', 'fap'),
+                dtype=(float, float, float, float, float, float, int, float))
+    for i in peaks:
+        # parabolic interpolation of log power for a sub-bin frequency
+        f = freq[i]
+        if 0 < i < len(P) - 1:
+            a, b, c = np.log(P[i - 1:i + 2])
+            den = a - 2 * b + c
+            if den < 0:
+                f = freq[i] + 0.5 * (a - c) / den * df
+        amp = 2 * np.sqrt(max(P[i] - bg[i], 0.0)) / win.sum()
+        if len(adjacent):
+            dph = np.angle(F[adjacent + 1, i] * np.conj(F[adjacent, i]))
+            slant = -np.angle(np.mean(np.exp(1j * dph))) / (2 * np.pi * f)
+        else:
+            slant = np.nan
+        # mean of nrow exponential variates ~ Gamma(nrow, 1/nrow)
+        fap = min(1.0, band.sum() * gammaincc(nrow, snr[i] * nrow))
+        out.add_row((f, 1 / f, snr[i], amp, amp / noise, slant, -1, fap))
+
+    for k in range(1, len(out)):
+        out['harmonic_of'][k] = _harmonic_of(out['freq'], k, tol=1.5 * df)
+
+    for c, fmt in [('freq', '.5f'), ('period', '.3f'), ('snr', '.1f'), ('amplitude', '.3f'),
+                   ('amp_over_noise', '.3f'), ('slant', '.2f'), ('fap', '.2e')]:
+        out[c].format = fmt
+    out['freq'].unit = '1 / pix'
+    out['period'].unit = 'pix'
+    out['slant'].unit = 'pix'
+    out.meta.update(detected=len(out) > 0, max_snr=float(out['snr'][0]) if len(out) else float(snr[band].max()),
+                    n_rows=nrow, noise=float(noise), nx=nx, snr_threshold=snr_threshold)
+    #return out, rows #only want rows if debugging
+    return out
+
+
+
+######################################################
+# end
+# amp analysis to find interference patterns
+######################################################
 
 
 
@@ -6383,6 +6564,54 @@ def amp_stats(cfg,shot_h5_fqfn=None,update=True):
                       f" to compute stats.")
 
 
+
+            #now, check amps for interference patterns ... need the multifits files
+            #we are currently in the top sci<datevshot> directory
+            mfns = glob.glob(f"./reductions/{cfg.datevshot[0:8]}/virus/virus0000{cfg.datevshot[-3:]}/exp0?/virus/multi.fits")
+            cols_idx_min = 200
+            cols_idx_max = 800
+
+            #add new columns, just before date, flag, flag_manual, flag_manual_desc
+            t.add_column(0.0, name='interference_snr', index=-5)
+            t.add_column(0.0, name='interference_period', index=-5)
+
+            for mf in mfns:
+                try:
+                    hdu = fits.open(mf)
+                    mfname = os.path.basename(mf).replace(".fits","")
+                    expnum  = int(os.path.dirname(mf).split("/exp")[1][0:2])
+                    sel_t = np.array(t['multiframe'] == mfname) * np.array(t['expnum'] == expnum)
+                    if np.count_nonzzero(sel_t) != 1: #did not find it?
+                        log(f"[{cfg.datevshot}] Warning. Interference check: could not match {mfname} : exp#{expnum} "
+                            f"to amp_stats table. Found {np.count_nonzero(sel_t)}")
+                        hdu.close()
+                        continue
+
+                    #use hdu[0] (the "processed" image)
+                    mft, _ = detect_interference(hdu[0].data, snr_threshold=10.0, xmin=cols_idx_min,xmax=cols_idx_max)
+                    hdu.close()
+
+                    #for now, at least, just want the highest snr
+                    #maybe also track the period (but the amplitude, and amp/noise, slant, etc are not useful
+                    if len(mft) == 1: #most common or zero
+                        ix = 0
+                    elif len(mft) > 1: #pick highest SNR
+                        ix = np.argmax(np.array(mft['snr']))
+                    else: # ... do nothing ... leave the entry unchanged
+                        ix = None
+
+                    if ix is not None:
+                        t['interference_snr'][sel_t] = round(mft['snr'][ix],1)
+                        t['interference_period'][sel_t] = round(mft['period'][ix],2)
+
+                    #if the interference is bad and the amp is not already marked, then flag it
+                    if t['interference_snr'][sel_t] > Interference_Bad_SNR_Thresh and t['flag'][sel_t] !=0:
+                        t['flag'][sel_t] = 0
+
+                except:
+                    log(f"[{cfg.datevshot}] Exception with detect_interference for {mf}.", traceback.format_exc())
+
+
             if update:
                 t.write(f"{cfg.datevshot}_ampstats.fits",format="fits",overwrite=True)
                 t.write(f"{cfg.datevshot}_ampstats.tab", format="ascii",overwrite=True)
@@ -8071,13 +8300,19 @@ def prep_elixer(cfg):
                 shutil.rmtree(elixdir)
 
         Path(elixdir).mkdir(parents=True, exist_ok=True)
+        amp_stat_table = None
 
         if FilterDetsOnBadAmps:
             if not FORCE_CONTINUE:
                 try:
                     #we are in the shot working dir
                     h5 = tables.open_file(f"{cfg.datevshot}.h5",mode='r')
-                    bad_amps_list = list(h5.root.AmpStats.read_where("flag==0", field="multiframe").astype(str))
+                    #bad_amps_list = list(h5.root.AmpStats.read_where("flag==0", field="multiframe").astype(str))
+
+                    amp_stat_table = Table(h5.root.AmpStats.read)
+                    sel_bad = np.array(amp_stat_table["flag"]==0)
+                    bad_amps_list = amp_stat_table["multiframe"][sel_bad]
+
                     log(f"[{cfg.datevshot}] Loaded {len(bad_amps_list)} bad amps ...")
                     h5.close()
                 except:
@@ -8099,7 +8334,63 @@ def prep_elixer(cfg):
         else:
             sel = np.array([x['multiframe'] not in bad_amps_list for x in tab])
             log(f"[{cfg.datevshot}] Excluding {len(sel)-np.count_nonzero(sel)} / {len(sel)} line detections as residing on bad amps.")
-            line_dets = list(tab['detectid'][sel])
+
+            if amp_stat_table is not None:
+                #point at which we start being careful
+                min_interference_snr_thresh = 30.0
+
+                # now, additional subselect on interference
+                #todo: use linewidth and sn to limit based on the strength (snr) of the interference on the
+                # hosting amps .... use the entry for the top fiber ("multiframe") column and match to amp_stat_table
+
+                #todo what thresholds? maybe 30-50 trigger some limitations and up from there?
+                # either loop over the detectids and get their multiframe, sn, linewidth
+                # or, select from amp_stats_table the multiframes that are in the triggering range(s)
+                # and then select the detectids that are on those multiframes and check there sn, linewidth
+
+                sel_int = amp_stat_table['interference_snr'] >= min_interference_snr_thresh
+                for row in amp_stat_table[sel_int]:
+                    #keep them the same length
+                    sel_mfa = tab['multiframe'] == row['multiframe']
+
+                    #what we want to do is set sel = False where the multiframe matches AND
+                    # the detection sn + linewidth is not sufficient to overcome the interference issue
+
+                    #sel is the top level sel that keeps those detections NOT on the bad_amp list
+                    #sel_mfa are the detections on this multiframe (regardles of bad_amp)
+                    if np.count_nonzero(sel_mfa * sel) > 0:
+
+
+                        #todo: based on the snr_int value, where do we want to restrict the linewidth and snr
+                        # maybe something like for interference snr:
+                        #  < 50   set detect snr and linewidth limits to 5.0 and 2.5
+                        #  > 50   set                                    5.0  and 3.0
+                        #  right now the sigma (linewidth) might be more important
+                        if row['interference_snr'] < 10:
+                            #we do nothing
+                            continue
+                        elif row['interference_snr'] < 50:
+                            min_snr = 5.0
+                            min_linewidth = 2.5 #this is a sigma
+                        elif row['interference_snr'] < 75:
+                            min_snr = 5.2
+                            min_linewidth = 3.0 #this is a sigma
+                        elif row['interference_snr'] < Interference_Bad_SNR_Thresh: #these are probably already marked bad
+                            min_snr = 5.5
+                            min_linewidth = 3.0 #this is a sigma
+                        else: #should already be bad
+                            min_snr = 6.5
+                            min_linewidth = 3.5  # this is a sigma
+
+                        sel_det_int = sel_mfa * np.array(tab['sn'] < min_snr) * np.array(tab['linewidth'] < min_linewidth)
+
+                        #update sel, turn OFF those that failed
+                        sel[sel_det_int] = False
+
+            else:
+                line_dets = list(tab['detectid'][sel])
+
+
             line_ct = len(line_dets)
             np.savetxt(os.path.join(elixdir, "line.dets"), line_dets, fmt="%d")
             log(f"[{cfg.datevshot}] Wrote {len(line_dets)} emission line detections for ELiXer to examine.")
