@@ -8332,17 +8332,21 @@ def prep_elixer(cfg):
             if not FORCE_CONTINUE:
                 try:
                     #we are in the shot working dir
-                    h5 = tables.open_file(f"{cfg.datevshot}.h5",mode='r')
+                    #note: the h5 version is from hetdex_api and does not have the new columns
+                    #for interference_snr and _period
+                    #h5 = tables.open_file(f"{cfg.datevshot}.h5",mode='r')
                     #bad_amps_list = list(h5.root.AmpStats.read_where("flag==0", field="multiframe").astype(str))
 
-                    amp_stat_table = Table(h5.root.AmpStats.read)
+                    amp_stat_table = Table.read(f"{cfg.datevshot}_ampstats.fits", format="fits")
+
+                    #amp_stat_table = Table(h5.root.AmpStats.read())
                     sel_bad = np.array(amp_stat_table["flag"]==0)
                     bad_amps_list = amp_stat_table["multiframe"][sel_bad]
 
                     log(f"[{cfg.datevshot}] Loaded {len(bad_amps_list)} bad amps ...")
-                    h5.close()
+                    #h5.close()
                 except:
-                    log(f"[{cfg.datevshot}] Could not load bad_amps_list")
+                    log(f"[{cfg.datevshot}] Could not load bad_amps_list: {traceback.format_exc()}")
                     bad_amps_list = []
             else:
                 log(f"[{cfg.datevshot}] --force specified. Will not restrict bad amps.")
@@ -8413,10 +8417,8 @@ def prep_elixer(cfg):
                         #update sel, turn OFF those that failed
                         sel[sel_det_int] = False
 
-            else:
-                line_dets = list(tab['detectid'][sel])
 
-
+            line_dets = list(tab['detectid'][sel])
             line_ct = len(line_dets)
             np.savetxt(os.path.join(elixdir, "line.dets"), line_dets, fmt="%d")
             log(f"[{cfg.datevshot}] Wrote {len(line_dets)} emission line detections for ELiXer to examine.")

@@ -29,8 +29,9 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 # 0.1.11 add reduction_date,  reduction_status, and reduction_status_ext to VIRUSShot table
 # 0.1.12 add plog as print/logging variant
 # 0.1.13 add Detections_mc, Detection_cs tables (raw detections for lines and cont)
+# 0.1.14 updated AmpStats table for interference snr and period
 
-__version__ = '0.1.13'
+__version__ = '0.1.14'
 
 
 import numpy as np
@@ -45,6 +46,7 @@ from PIL import Image
 from tqdm import tqdm
 import traceback
 import time
+import psutil
 
 import astropy.units as u
 from astropy.coordinates import SkyCoord
@@ -229,6 +231,7 @@ def check_version():
 
 Lock_tmp_mutex_fn = "tmp_ssrcompress.mutex"
 Lock_tmp_ct_fn = "tmp_ssrcompress.ct"
+Lock_tmp_memory_fn = "tmp_ssrcompress.memory"
 Max_Simultaneous_Shots = 3 #this depends on options
 
 SafeActiveShotsSleep = 30.0 # recheck every xx seconds
@@ -308,6 +311,79 @@ def wait_to_run(max_procs=3,datevshot="???",clean_up=False): #,safelimit=0):
         # lock auto releases
     except:
         plog(f"[{datevshot}] Exception! in wait_to_run()",traceback.format_exc())
+
+
+def wait_for_memory(target_memory_GB=12.0,datevshot="???",clean_up=False):
+    """
+
+    use filelock and approximage memory needs for a code section to limit the entries into that section
+
+
+    """
+    sleep_secs = 1.0 if clean_up else SafeActiveShotsSleep
+
+    try:
+        lock = FileLock(Lock_tmp_mutex_fn)
+        abort = False
+
+        if target_memory_GB >= 0:
+            redlight = True
+            if clean_up:
+                plog(f"[{datevshot}] memory mutex cleaning up ...")
+            else:
+                plog(f"[{datevshot}] checking if sufficient memory for restricted section to start. ...")
+
+            while redlight:
+                with lock:
+                    #how much memory is "available" or not reserved
+                    with open(Lock_tmp_memory_fn,"a+") as f:
+                        f.seek(0)
+                        reserved_memory_GB = f.readline()
+                        try:
+                            reserved_memory_GB = round(float(reserved_memory_GB),1)
+                        except:
+                            reserved_memory_GB = 0.0
+
+                        if reserved_memory_GB < 0 and not clean_up: #this is the signal to abort and exit
+                            plog(f"[{datevshot}] received mutex memory abort/ignore. Exiting ...")
+                            abort = True
+
+
+                        f.seek(0)
+                        if clean_up: #we are done and need to remove THIS runner
+                            reserved_memory_GB = reserved_memory_GB - round(float(target_memory_GB),1)
+                            f.truncate()
+                            f.write(f"{reserved_memory_GB}\n")
+                            redlight = False
+                        else:
+                            if ApproxBaseRAM > (reserved_memory_GB + round(float(target_memory_GB),1)) and not abort:
+                                #if there is room to start this runner and an abort is not signaled
+                                reserved_memory_GB = reserved_memory_GB + round(float(target_memory_GB),1)
+                                f.truncate()
+                                f.write(f"{reserved_memory_GB}\n")
+                                redlight = False
+                            elif target_memory_GB == 0.0:
+                                #we are not enforcing a limit on THIS runner, but it still
+                                #counts on the total so it can impact another that does have limits
+                                #(since this is an immediate start, do not need to check "abort")
+                                redlight = False
+                            else:
+                                #still need to wait
+                                pass
+
+                if not redlight:
+                    if clean_up:
+                        plog(f"[{datevshot}] Releasing critical memory {target_memory_GB:0.1f} GB.")
+                    elif not abort:
+                        plog(f"[{datevshot}] Reserving critical memory {target_memory_GB:0.1f} GB.")
+                    else:
+                        exit(-1)
+                else:
+                    #plog(f"[{datevshot}] too many active shots. Must wait ...")
+                    time.sleep(sleep_secs)
+        # lock auto releases
+    except:
+        plog(f"[{datevshot}] Exception! in wait_for_memory()",traceback.format_exc())
 
 #make a class for each table
 class Version(tables.IsDescription):
@@ -936,6 +1012,8 @@ class AmpStats(tables.IsDescription):
     norm = tables.Float32Col()
     kchi = tables.Float32Col()
     n_cont = tables.Int32Col()
+    interference_snr = tables.Float32Col(dflt=0.0)
+    interference_period = tables.Float32Col(dflt=0.0)
 
 
 
@@ -1852,6 +1930,21 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 plog(f"[{datevshot}] Using Float16 for VIRUSImages")
                 fileh.create_table(fileh.root.Data, 'Images', VIRUSImage16, 'VIRUS CCD Image Data',filters=COMPRESSION_FILTER)
 
+
+
+            #todo: here
+            # check how much memory is available and how many shots are being processed in THIS step
+            # figure the memory needed 2 bytes or 4 bytes (e.g. 16 or 32 bit) * 1032x1032 per image * 3 images (data, error, clean)
+            # * up to 3 dithers * 4 amps * # active IFUs ... can get to that just by the length of the table
+            # wait on a filelock (for, say, tmp_ssrvirusimage.ct) ... allow up to
+
+            target_memory_GB = 3 * (1032 * 1032 * len(shot_h5.root.Data.Images) * 4 if use32 else 2) / 2**30
+            #remove this memory from the "Available" and add it back at the end of this section
+            #nominal max, 78 IFUs x 4 amps x 3 dithers x 3 images  at 32bit ~ 11.2 GB
+
+            wait_for_memory(target_memory_GB=target_memory_GB ,datevshot=datevshot, clean_up=False)
+
+
             for row in tqdm(shot_h5.root.Data.Images.read(),disable=not SHOW_TQDM):
                 # for row in shot_h5.root.Data.Fibers.read():
                 new_row = fileh.root.Data.Images.row
@@ -1885,6 +1978,8 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 log.debug(f"Index fail on Data.Images table", exc_info=True)
 
             fileh.root.Data.Images.flush()
+
+        wait_for_memory(target_memory_GB=target_memory_GB, datevshot=datevshot, clean_up=True)
 
         #####################################
         # CalfibDQ
@@ -1923,15 +2018,36 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         copy_cols = fileh.root.AmpStats.colnames
         copy_cols.remove('expnum')
 
+        #the shot_h5 version does not have the new interference_snr and _period columns, so
+        #we want to try to read from the fits or tab version
+        try:
+            amp_stat_table = Table.read(os.path.join(os.path.dirname(shot_h5_path),f"{datevshot}_ampstats.fits"), format="fits")
+        except:
+            plog(f"[{datevshot}] Exception! Importing AmpStats data in loading the extra columns ...",flush=True)
+            amp_stat_table = None
+
         for row in tqdm(shot_h5.root.AmpStats.read(),disable=not SHOW_TQDM):
             new_row = fileh.root.AmpStats.row
             # go over some columns individual since want to change some types
-            # directy copy columns:
+            # directly copy columns:
             for col in copy_cols:
                 new_row[col] = row[col]
 
             # changed the size of this one
             new_row['expnum'] = row['expnum'].astype(np.int8)
+
+            #add the interference stuff
+            #need to match up on multiframe and exp
+            if amp_stat_table is not None:
+                sel_amp = (np.array(amp_stat_table['multiframe'] == row['multiframe']) *
+                           np.array(amp_stat_table['expnum'] == row['expnum']))
+
+                if np.count_nonzero(sel_amp) == 1: #should be exactly 1
+                    new_row['interference_snr'] = amp_stat_table['interference_snr'][sel_amp][0]
+                    new_row['interference_period'] = amp_stat_table['interference_period'][sel_amp][0]
+                else:
+                    plog(f"[{datevshot}] Error. Found ({np.count_nonzero(sel_amp)}) matches for "
+                         f"{row['multiframe']} exp# {row['expnum']} ...", flush=True)
 
             new_row.append()
 
@@ -3416,6 +3532,17 @@ if "-help" in args:
     """
     print(help)
     exit(0)
+
+
+try:
+    ApproxBaseRAM = psutil.virtual_memory()[0] / (1024**3) #in GB (e.g. ~32GB for vm small, 256 GB for normal on LS6)
+    #need somewhere around 20GB for normal big shots (once IFU is full)
+    #varies depending also on the number of exposures, but 20GB is a safe rule of thumb
+
+    print(f"*** Approx BaseRAM {ApproxBaseRAM:0.1f}GB)")
+
+except:
+    ApproxBaseRAM = -1
 
 shot_h5_path = None
 if "-shot_h5" in args: #path to the shot h5 file
