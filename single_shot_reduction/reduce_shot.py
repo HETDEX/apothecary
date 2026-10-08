@@ -4601,7 +4601,7 @@ def vdrp_check_norms(cfg):
     :return:
     """
 
-    print("check norms ... ")
+    log(f"[{cfg.datevshot}] check norms ... ")
     #only run IF there are dithers (multiple exposures ... assume dither)
     if cfg.exp == 0 and cfg.numexp > 1:
         rc = 0
@@ -4616,21 +4616,30 @@ def vdrp_check_norms(cfg):
             rc = -1
             log(f"[{cfg.datevshot}] vdrp : check norms ... no matches found")
         else:
-            fns = sorted(fns)
+            fns = sorted(fns) #could have a weird element in the list, if so, just let the exception trap and move on
+            found = False
             for fn in fns:
-                norms = np.loadtxt(os.path.join(fn, "norm.dat"))  # one line, 3 values
-                cfg.dither_norms = norms
-                if np.count_nonzero(abs(1 - norms) > 0.5) > 0 or np.any(np.isnan(norms)):
-                    print("Possible bad dither norm:", os.path.basename(fn), norms)
-                    rc = -1
+                try:
+                    norms = np.loadtxt(os.path.join(fn, "norm.dat"))  # one line, 3 values
+                    cfg.dither_norms = norms
+                    found = True
+                    if np.count_nonzero(abs(1 - norms) > 0.5) > 0 or np.any(np.isnan(norms)):
+                        print("Possible bad dither norm:", os.path.basename(fn), norms)
+                        rc = -1
+                except:
+                    log(f"[{cfg.datevshot}] Exception! vdrp_check norms for {fn} \n {traceback.format_exc()}")
 
+            if not found:
+                rc = -1
+                log(f"[{cfg.datevshot}] check norms ... none found"
+                    f"")
         if rc < 0:
-            print("check norms ... fail")
+            log(f"[{cfg.datevshot}] check norms ... fail")
         else:
-            print("check norms ... pass")
+            log(f"[{cfg.datevshot}] check norms ... pass")
         return rc
     else:
-        print("check norms ... OK")
+        log(f"[{cfg.datevshot}] check norms ... OK")
         return 0
 
 def vdrp_check_shout_ifu(cfg):
@@ -4762,7 +4771,7 @@ def run_vdrp(cfg):
                 fail_gaia = True
 
         except Exception as e:
-            log(f"[{cfg.datevshot}] VDRP: GAIA fail.", e, "\n", traceback.format_exc())
+            log(f"[{cfg.datevshot}] VDRP: GAIA fail.", str(e), "\n", traceback.format_exc())
             fail_gaia = True
 
         return fail_gaia
@@ -6567,7 +6576,14 @@ def amp_stats(cfg,shot_h5_fqfn=None,update=True):
 
             #now, check amps for interference patterns ... need the multifits files
             #we are currently in the top sci<datevshot> directory
-            mfns = glob.glob(f"./reductions/{cfg.datevshot[0:8]}/virus/virus0000{cfg.datevshot[-3:]}/exp0?/virus/multi.fits")
+
+            #log(f"[{cfg.datevshot}] ***DEBUG*** {os.getcwd()}")
+            #log(f"[{cfg.datevshot}] ***DEBUG*** glob string: ./reductions/{cfg.datevshot[0:8]}/virus/virus0000{cfg.datevshot[-3:]}/exp0?/virus/multi*.fits")
+
+
+
+            mfns = glob.glob(f"./reductions/{cfg.datevshot[0:8]}/virus/virus0000{cfg.datevshot[-3:]}/exp0?/virus/multi*.fits")
+            #log(f"[{cfg.datevshot}] ***DEBUG*** glob hits {len(mfns)}")
             cols_idx_min = 200
             cols_idx_max = 800
 
@@ -6575,41 +6591,51 @@ def amp_stats(cfg,shot_h5_fqfn=None,update=True):
             t.add_column(0.0, name='interference_snr', index=-5)
             t.add_column(0.0, name='interference_period', index=-5)
 
+            log(f"[{cfg.datevshot}] Scanning for interference patterns ...")
+
+            #for mf in tqdm(mfns):
             for mf in mfns:
                 try:
                     hdu = fits.open(mf)
                     mfname = os.path.basename(mf).replace(".fits","")
                     expnum  = int(os.path.dirname(mf).split("/exp")[1][0:2])
                     sel_t = np.array(t['multiframe'] == mfname) * np.array(t['expnum'] == expnum)
-                    if np.count_nonzzero(sel_t) != 1: #did not find it?
+                    if np.count_nonzero(sel_t) != 1: #did not find it?
                         log(f"[{cfg.datevshot}] Warning. Interference check: could not match {mfname} : exp#{expnum} "
                             f"to amp_stats table. Found {np.count_nonzero(sel_t)}")
                         hdu.close()
                         continue
 
                     #use hdu[0] (the "processed" image)
-                    mft, _ = detect_interference(hdu[0].data, snr_threshold=10.0, xmin=cols_idx_min,xmax=cols_idx_max)
+                    mft  = detect_interference(hdu[0].data, snr_threshold=10.0, xmin=cols_idx_min,xmax=cols_idx_max)
                     hdu.close()
 
                     #for now, at least, just want the highest snr
                     #maybe also track the period (but the amplitude, and amp/noise, slant, etc are not useful
                     if len(mft) == 1: #most common or zero
                         ix = 0
+                        #log(f"[{cfg.datevshot}] ***DEBUG*** {mf} 1 interference pattern found")
                     elif len(mft) > 1: #pick highest SNR
                         ix = np.argmax(np.array(mft['snr']))
+                        #log(f"[{cfg.datevshot}] ***DEBUG*** {mf} {len(mft)} interference patterns found.")
                     else: # ... do nothing ... leave the entry unchanged
                         ix = None
+                        #log(f"[{cfg.datevshot}] ***DEBUG*** {mf} no interference found")
 
                     if ix is not None:
                         t['interference_snr'][sel_t] = round(mft['snr'][ix],1)
                         t['interference_period'][sel_t] = round(mft['period'][ix],2)
 
-                    #if the interference is bad and the amp is not already marked, then flag it
-                    if t['interference_snr'][sel_t] > Interference_Bad_SNR_Thresh and t['flag'][sel_t] !=0:
-                        t['flag'][sel_t] = 0
-
                 except:
                     log(f"[{cfg.datevshot}] Exception with detect_interference for {mf}.", traceback.format_exc())
+
+            # if the interference is bad and the amp is not already marked, then flag it
+            if t['interference_snr'][sel_t] > Interference_Bad_SNR_Thresh and t['flag'][sel_t] != 0:
+                before = np.count_nonzero(t['flag'] != 1)
+                t['flag'][sel_t] = 0
+                after = np.count_nonzero(t['flag'] != 1)
+                log(f"[{cfg.datevshot}] After interference check, {after-before} additional amps marked bad "
+                    f"for a total of {after} amps marked explicitly 'bad'")
 
 
             if update:
