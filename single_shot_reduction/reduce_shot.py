@@ -493,6 +493,7 @@ if "-help" in args:
     --force : continue the reduction regardless of select exit conditions
               + ignore excessive line detections 
               + ignore excessive bad amps
+              + do not restrict detections on high interference amps
         
     --help : display this help text and exit
         
@@ -8365,7 +8366,7 @@ def prep_elixer(cfg):
             sel = np.array([x['multiframe'] not in bad_amps_list for x in tab])
             log(f"[{cfg.datevshot}] Excluding {len(sel)-np.count_nonzero(sel)} / {len(sel)} line detections as residing on bad amps.")
 
-            if amp_stat_table is not None:
+            if amp_stat_table is not None and not FORCE_CONTINUE:
                 #point at which we start being careful
                 min_interference_snr_thresh = 30.0
 

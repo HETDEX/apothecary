@@ -54,6 +54,7 @@ from hetdex_api.extinction import deredden_spectra
 import healpy as hp
 from datetime import datetime
 #from elixer import utilities as utils
+from elixer import global_config as G
 
 try:
     from filelock import FileLock
@@ -96,7 +97,7 @@ FATAL_EXIT = 0 #global flag to terminate
 elixer_h5_force = False  #if True (set later) ignore the version constraint and try anyway
 #exclude_ccd_images = False #do not include the CCD images (VIRUSImage table)
 minimum_h5 = False #replaced exclude_ccd_images
-
+include_all_reports = False #do not include ELiXer report images for detections that are "bad" (unless set to True)
 
 #logging will just be prints
 #this is all single threaded, no real management needed
@@ -3113,7 +3114,9 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
 
         #max_shape, unique_d1, unique_ct = get_max_image(image_path,datevshot)
 
-        max_shape, img_dict = get_image_dict(image_path,datevshot)
+        #todo: alter get_image_dict to check on whether the report should be included, based on ELiXer flagging and results
+
+        max_shape, img_dict = get_image_dict(image_path,datevshot,shot_h5fn)
         unique_d1 = img_dict.keys()
         if unique_d1 is None or len(unique_d1) < 1:
             plog(f"[{datevshot}] No matching report images found.")
@@ -3295,53 +3298,95 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
     except:
         plog(f"[{datevshot}] Exception in add_report_images(): {traceback.format_exc()}")
 
+# [defunct]
+# def get_image_dict_ORIGINAL (image_path,datevshot="???"):
+#     """
+#
+#     :param image_path:
+#     :return: 3-tuple of (max) shape, and dictionary of image paths keyed by the image 1st Dimension length
+#     """
+#
+#     max1 = 0
+#     max2 = 0
+#     max3 = 0
+#
+#     img_dict = {}
+#
+#     try:
+#         plog(f"[{datevshot}] Checking image sizes for {image_path}...",flush=True)
+#         image_fns = sorted(glob.glob(image_path))
+#         plog(f"[{datevshot}] Checking image sizes for {len(image_fns)} matching image names ...", flush=True)
+#
+#         #to
+#
+#         for img_path in tqdm(image_fns,disable=not SHOW_TQDM):
+#             try:
+#                 x1,x2,x3  = np.array(Image.open(img_path)).shape
+#
+#                 max1 = max(max1, x1)
+#                 max2 = max(max2, x2)
+#                 max3 = max(max3, x3)
+#
+#                 if x1 in img_dict.keys():
+#                     img_dict[x1].append(img_path)
+#                 else:
+#                     img_dict[x1] = [img_path]
+#             except:
+#                 plog(f"[{datevshot}] Exception with {img_path}: {traceback.format_exc()}", flush=True)
+#
+#     except:
+#         plog(f"[{datevshot}] Exception: {traceback.format_exc()}",flush=True)
+#
+#     return (max1,max2,max3), img_dict
 
-def get_image_dict_ORIGINAL (image_path,datevshot="???"):
+
+def get_exclude_elixer_flags():
+    elixer_flags = [
+        #  G.DETFLAG_FOLLOWUP_NEEDED,        #might not want to reject out of hand, but may want to look
+        #  G.DETFLAG_IMAGING_MAG_INCONSISTENT,
+        #  G.DETFLAG_DEX_GMAG_INCONSISTENT,  #might not want to reject out of hand, but may want to look
+        #  G.DETFLAG_UNCERTAIN_CLASSIFICATION,
+        # G.DETFLAG_BLENDED_SPECTRA,
+        # G.DETFLAG_COUNTERPART_NOT_FOUND,
+        # G.DETFLAG_DISTANT_COUNTERPART,
+        # G.DETFLAG_COUNTERPART_MAG_MISMATCH,
+        # G.DETFLAG_NO_IMAGING,
+        # G.DETFLAG_POOR_IMAGING,
+        # G.DETFLAG_LARGE_SKY_SUB,
+        #  G.DETFLAG_EXT_CAT_QUESTIONABLE_Z,
+        # G.DETFLAG_Z_FROM_NEIGHBOR,
+        # G.DETFLAG_DEXSPEC_GMAG_INCONSISTENT,
+        # G.DETFLAG_LARGE_NEIGHBOR,
+        #  G.DETFLAG_POSSIBLE_LOCAL_TRANSIENT,
+        G.DETFLAG_BAD_PIXEL_FLAT,
+        G.DETFLAG_DUPLICATE_FIBERS,
+        G.DETFLAG_NEGATIVE_SPECTRUM,
+        #  G.DETFLAG_POOR_THROUGHPUT, #since this works on only a single shot, probably don't want it on as every det would be flagged if it is set
+        #  G.DETFLAG_BAD_DITHER_NORM, #since this works on only a single shot, probably don't want it on as every det would be flagged if it is set
+        #  G.DETFLAG_POOR_SHOT,       #since this works on only a single shot, probably don't want it on as every det would be flagged if it is set
+        G.DETFLAG_QUESTIONABLE_DETECTION,
+        G.DETFLAG_EXCESSIVE_ZERO_PIXELS,
+        # G.DETFLAG_POSSIBLE_PN,
+        # G.DETFLAG_NO_DUST_CORRECTION,
+        G.DETFLAG_BAD_PIXELS,
+        # G.DETFLAG_BAD_EMISSION_LINE,  #you do NOT want this on for continuum sources
+        # G.DETFLAG_NO_ZEROPOINT,
+        # G.DETFLAG_BAD_FIBERTRACE, #this one can produce too many false flags
+        G.DETFLAG_BAD_AMP,
+        G.DETFLAG_CORRUPT_DATA
+    ]
+
+    return np.sum(elixer_flags)
+
+def get_image_dict(image_path,datevshot="???",shot_h5fn=None):
     """
 
     :param image_path:
     :return: 3-tuple of (max) shape, and dictionary of image paths keyed by the image 1st Dimension length
     """
 
-    max1 = 0
-    max2 = 0
-    max3 = 0
-
-    img_dict = {}
-
-    try:
-        plog(f"[{datevshot}] Checking image sizes for {image_path}...",flush=True)
-        image_fns = sorted(glob.glob(image_path))
-        plog(f"[{datevshot}] Checking image sizes for {len(image_fns)} matching image names ...", flush=True)
-
-        #to
-
-        for img_path in tqdm(image_fns,disable=not SHOW_TQDM):
-            try:
-                x1,x2,x3  = np.array(Image.open(img_path)).shape
-
-                max1 = max(max1, x1)
-                max2 = max(max2, x2)
-                max3 = max(max3, x3)
-
-                if x1 in img_dict.keys():
-                    img_dict[x1].append(img_path)
-                else:
-                    img_dict[x1] = [img_path]
-            except:
-                plog(f"[{datevshot}] Exception with {img_path}: {traceback.format_exc()}", flush=True)
-
-    except:
-        plog(f"[{datevshot}] Exception: {traceback.format_exc()}",flush=True)
-
-    return (max1,max2,max3), img_dict
-
-def get_image_dict(image_path,datevshot="???"):
-    """
-
-    :param image_path:
-    :return: 3-tuple of (max) shape, and dictionary of image paths keyed by the image 1st Dimension length
-    """
+    # todo: alter get_image_dict to check on whether the report should be included, based on ELiXer flagging and results
+    # if the shot_h5fn is provided, use the Detections table to decide on which images to keep
 
     max1 = 0
     max2 = 0
@@ -3349,10 +3394,44 @@ def get_image_dict(image_path,datevshot="???"):
 
     img_dict = {}
 
+    det_tab =  None
+    if not include_all_reports:
+        with tables.open_file(shot_h5fn, mode="r") as h5:  # so will auto close regardless of exit
+            det_tab = Table(h5.root.Detections.read())
+
     try:
-        plog(f"[{datevshot}] Checking image sizes for {image_path}...",flush=True)
+        if det_tab is not None:
+            plog(f"[{datevshot}] Checking image sizes for {image_path}, with quality enforcement ...", flush=True)
+        else:
+            plog(f"[{datevshot}] Checking ALL image sizes for {image_path} ...", flush=True)
+
         image_fns = sorted(glob.glob(image_path))
         plog(f"[{datevshot}] Checking image sizes for {len(image_fns)} matching image names ...", flush=True)
+
+        #todo: what flags to enforce?
+        # include bad amp and interference pattern thresholds?
+        if det_tab is not None:
+            #todo: thin out the image_fns list (yes, this is a second loop)
+            bad_flags = get_exclude_elixer_flags()
+            plog(f"[{datevshot}] Evaluating 'bad' detection reports  ...", flush=True)
+            keep = np.full(len(image_fns), True)
+            for i, img_path in enumerate(tqdm(image_fns,disable=not SHOW_TQDM)):
+                try:
+                    detid = np.int64(os.path.basename(img_path).split(".")[0].split("_")[0]) #and may or may not have a _nei
+                    row = det_tab[det_tab['detectid']==detid][0]
+
+                    #check the spurious_reason
+                    if len(row['spurious_reason']) > 1:
+                        keep[i] = False
+                    elif row['flags'] & bad_flags != 0: #check the flags
+                        #assumes we incorporate interference check into the ELiXer run ....
+                        keep[i] = False
+                except:
+                    plog(f"[{datevshot}] Exception\n{traceback.format_exc()}",flush=True)
+
+
+            image_fns = image_fns[keep]
+            plog(f"[{datevshot}] Excluding {len(keep)-np.count_nonzero(keep)} 'bad' detection reports  ...", flush=True)
 
         for img_path in tqdm(image_fns,disable=not SHOW_TQDM):
             try:
@@ -3394,7 +3473,7 @@ def import_images_carray(shot_h5fn,image_path,group_name,carray_name="image_data
         datevshot = os.path.basename(shot_h5fn).replace(".h5", "").replace("ssr_", "")
         plog(f"[{datevshot}] Importing images: {image_path} to root.{group_name}.{carray_name}*",flush=True)
 
-        max_shape, img_dict = get_image_dict(image_path,datevshot)
+        max_shape, img_dict = get_image_dict(image_path,datevshot,shot_h5fn)
 
         with tables.open_file(shot_h5fn,mode="r+") as h5:  #so will auto close regardless of exit
 
@@ -3505,6 +3584,9 @@ if "-help" in args:
         --exclude_ccd       optional
             Do not include the CCD images (3x1032x1032 plus supporting fields for each amp)
             note: in compressed float16 representation this is around 6GB for a typical shot. 
+            
+        --include_all_reports       optional
+            Include the ELiXer report images for all reports, including for those detections deemed 'bad'
             
         --compression       optional
             Set the compression type and level. Mostly affectes ELiXer report images. The default is (2)
@@ -3622,6 +3704,11 @@ if "-float32" in args: #force32 bit for fields that were originally 32bit (do no
 # if "-exclude_ccd" in args:
 #     exclude_ccd_images = True
 #     args.remove("-exclude_ccd")
+
+
+if "-include_all_reports" in args:
+    include_all_reports = True
+    args.remove("-include_all_reports")
 
 if "-minimum" in args:
     minimum_h5 = True
