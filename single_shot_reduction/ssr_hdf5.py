@@ -17,9 +17,9 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 #       the images can force to float32 but if only the error is large, cap the error to max float16
 # 0.1.3 restored FiberIndex as its own separate table to speed up searches
 # 0.1.4 add in the Astrometry Collapsed images as they can come in handy for debugging and are part of analysis notebook
-#       turned on group level compression for these iamges AND for the CCD images
+#       turned on group level compression for these images AND for the CCD images
 #       added in Calibration.Throughput.throughput
-# 0.1.5 repace --exclude_ccd_images with --minimum as applies to more than just the VIRUS CCD images
+# 0.1.5 replace --exclude_ccd_images with --minimum as applies to more than just the VIRUS CCD images
 #       include all additional original hdf5 info
 # 0.1.6 add "avg_sky" to Shot table (based on *amp.dat files; matching to collapsed images)
 # 0.1.7 add DiagnoseClassifications table
@@ -30,8 +30,8 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 # 0.1.12 add plog as print/logging variant
 # 0.1.13 add Detections_mc, Detection_cs tables (raw detections for lines and cont)
 # 0.1.14 updated AmpStats table for interference snr and period
-
-__version__ = '0.1.14'
+# 0.1.15 add EmptyFiber table
+__version__ = '0.1.15'
 
 
 import numpy as np
@@ -1013,8 +1013,8 @@ class AmpStats(tables.IsDescription):
     norm = tables.Float32Col()
     kchi = tables.Float32Col()
     n_cont = tables.Int32Col()
-    interference_snr = tables.Float32Col(dflt=0.0)
-    interference_period = tables.Float32Col(dflt=0.0)
+    interference_snr = tables.Float32Col(dflt=-1.0)
+    interference_period = tables.Float32Col(dflt=-1.0)
 
 
 
@@ -1272,8 +1272,23 @@ class Detections_cs(tables.IsDescription):
     detectid = tables.Int64Col(pos=12,dflt=0)  #not to be a key ... not all will have a detectid
 
 
+#todo: consider ... there are not very many of these ... maybe just keep always as float32 ?
+class EmptyFiber16(tables.IsDescription):
+    sky = tables.StringCol((1),pos=0) #"L", "R", "R", for local, fullfield or rescore
+    flags = tables.Int32Col(dflt=0,pos=1)
+    rtype = tables.StringCol((16),pos=2)
+    fluxd = tables.Float16Col((1036,),pos=3)
+    fluxd_err = tables.Float16Col((1036,), pos=3)
+    contrib = tables.Int32Col(1036,pos=4) #this always needs to be 32bit since we have to have ints, usually around 70-90k
 
 
+class EmptyFiber32(tables.IsDescription):
+    sky = tables.StringCol((1),pos=0) #"L", "R", "R", for local, fullfield or rescore
+    flags = tables.Int32Col(dflt=0,pos=1)
+    rtype = tables.StringCol((16),pos=2)
+    fluxd = tables.Float32Col((1036,),pos=3)
+    fluxd_err = tables.Float32Col((1036,), pos=3)
+    contrib = tables.Int32Col(1036, pos=4)
 
 
 
@@ -1608,7 +1623,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 try:
                     #need to load the file first
 
-                    tp_all_path = os.path.join(os.path.dirname(shot_h5_path),f"detect/{datevshot}/res/tp.all")
+                    tp_all_path = os.path.join(shot_h5_path,f"detect/{datevshot}/res/tp.all")
                     if os.path.exists(tp_all_path):
 
                         refid, c2,c3 = np.loadtxt(tp_all_path,usecols=[0,2,3],unpack=True,dtype=int)
@@ -1939,7 +1954,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             # * up to 3 dithers * 4 amps * # active IFUs ... can get to that just by the length of the table
             # wait on a filelock (for, say, tmp_ssrvirusimage.ct) ... allow up to
 
-            target_memory_GB = 3 * (1032 * 1032 * len(shot_h5.root.Data.Images) * 4 if use32 else 2) / 2**30
+            target_memory_GB = 3 * 1032 * 1032 * len(shot_h5.root.Data.Images) * (4 if use32 else 2) / 2**30
             #remove this memory from the "Available" and add it back at the end of this section
             #nominal max, 78 IFUs x 4 amps x 3 dithers x 3 images  at 32bit ~ 11.2 GB
 
@@ -2022,7 +2037,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         #the shot_h5 version does not have the new interference_snr and _period columns, so
         #we want to try to read from the fits or tab version
         try:
-            amp_stat_table = Table.read(os.path.join(os.path.dirname(shot_h5_path),f"{datevshot}_ampstats.fits"), format="fits")
+            amp_stat_table = Table.read(os.path.join(shot_h5_path,f"{datevshot}_ampstats.fits"), format="fits")
         except:
             plog(f"[{datevshot}] Exception! Importing AmpStats data in loading the extra columns ...",flush=True)
             amp_stat_table = None
@@ -2262,16 +2277,16 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         if ADD_MC_DETECTIONS:
             try:
                 try:
-                    line_h5 = tables.open_file(os.path.join(os.path.dirname(shot_h5_path), f"{datevshot}_line.h5"))
+                    line_h5 = tables.open_file(os.path.join(shot_h5_path, f"{datevshot}_line.h5"))
                     hetdex_api_lines = Table(line_h5.root.Detections.read())
                     line_h5.close()
                 except:
                     hetdex_api_lines = None
 
-                mc_fns = sorted(glob.glob(os.path.join(os.path.dirname(shot_h5_path), "alldet/detect_out/*.mc")))
+                mc_fns = sorted(glob.glob(os.path.join(shot_h5_path, "alldet/detect_out/*.mc")))
 
                 plog(f"[{datevshot}] Importing raw *.mc detections from {len(mc_fns)} files ... ", flush=True)
-                plog(f"[{datevshot}] {os.path.join(os.path.dirname(shot_h5_path), 'alldet/detect_out/*.mc')}",flush=True)
+                plog(f"[{datevshot}] {os.path.join(shot_h5_path, 'alldet/detect_out/*.mc')}",flush=True)
                 fileh.create_table(fileh.root, 'Detections_mc', Detections_mc,
                                    'Raw mc line detections Table')
 
@@ -2322,6 +2337,13 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 for fn in tqdm(mc_fns,disable=not SHOW_TQDM):
                     try:
                         mc = os.path.basename(fn)
+
+                        #we don't want any zero sized files ... can happen (esp. for IFUs with bad amps like 095)
+
+                        if os.path.getsize(fn) == 0:
+                            plog(f"[{datevshot}] Skipping zero sized file {mc}")
+                            continue
+
                         t = Table.read(fn,format="ascii",converters=data_types,names=mc_colnames)
 
                         #need to convert a few (like expnum from a string to an integer)
@@ -2444,6 +2466,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                     except:
                         plog(f"[{datevshot}] Exception adding Detections_mc for file: {fn}", exc_info=True)
                         log.warning(f"[{datevshot}] Exception adding Detections_mc for file: {fn}", exc_info=True)
+                        print(traceback.format_exc())
 
                 fileh.root.Detections_mc.flush()
                 plog(f"[{datevshot}] Added {len(fileh.root.Detections_mc)} records", flush=True)
@@ -2461,16 +2484,16 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         if ADD_CS_DETECTIONS:
             try:
                 try:
-                    cont_h5 = tables.open_file(os.path.join(os.path.dirname(shot_h5_path), f"{datevshot}_cont.h5"))
+                    cont_h5 = tables.open_file(os.path.join(shot_h5_path, f"{datevshot}_cont.h5"))
                     hetdex_api_cont = Table(cont_h5.root.Detections.read())
                     cont_h5.close()
                 except:
                     hetdex_api_cont = None
 
-                cs_fns = sorted(glob.glob(os.path.join(os.path.dirname(shot_h5_path), "cs/spec/*.list")))
+                cs_fns = sorted(glob.glob(os.path.join(shot_h5_path, "cs/spec/*.list")))
 
                 plog(f"[{datevshot}] Importing raw cs/*.list detections from {len(cs_fns)} files ... ", flush=True)
-                plog(f"[{datevshot}] {os.path.join(os.path.dirname(shot_h5_path), 'cs/spec/*.list')}",flush=True)
+                plog(f"[{datevshot}] {os.path.join(shot_h5_path, 'cs/spec/*.list')}",flush=True)
                 fileh.create_table(fileh.root, 'Detections_cs', Detections_cs,
                                    'Raw cs continuum detections Table')
 
@@ -2628,6 +2651,90 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             plog(f"[{datevshot}] No Diagnose Classification data provided. ", flush=True)
 
 
+
+        ##############################################
+        # Optional EmptyFiber Residuals
+        # the fits tables were produced in reduce_shot.py
+        #
+        ##############################################
+
+
+        plog(f"[{datevshot}] Importing EmptyFiber data ... ", flush=True)
+        #table bit
+        if StdFloatCol == FullFloatCol:
+            use32 = True
+            clip_error = 0.
+        else:
+            use32 = False
+            #todo: check the fluxes and errors for max value ...
+
+
+            #need the fits tables
+            ef_tabs = []
+            ef_sky = []
+            try:
+                ef_tabs.append(Table.read(os.path.join(shot_h5_path,f"empty_fibers_{shotid}_ll.fits"),format="fits"))
+                ef_sky.append("L")
+            except:
+                plog(f"[{datevshot}] Could not open local empty fibers file: "
+                     f"{os.path.join(shot_h5_path,f'empty_fibers_{shotid}_ll.fits')} ", flush=True)
+
+            try:
+                ef_tabs.append(Table.read(os.path.join(shot_h5_path,f"empty_fibers_{shotid}_ff.fits"),format="fits"))
+                ef_sky.append("F")
+            except:
+                plog(f"[{datevshot}] Could not open ffsky empty fibers file: "
+                     f"{os.path.join(shot_h5_path,f'empty_fibers_{shotid}_ff.fits')} ", flush=True)
+
+            #future: could add rescor?
+
+            for eft in ef_tabs:
+                #only need to check the array columns
+                for c in eft.columns:
+                    if len(eft[c].shape) == 2 and "contrib" not in c:
+                        mx = np.abs(eft[c]).max()
+                        if mx > image_threshold_16:
+                            use32 = True
+                            log.debug(f"[{datevshot}] EmptyFiber requires float32: mx {mx}")
+
+        if use32:
+            plog(f"[{datevshot}] Using Float32 for EmptyFiber")
+            fileh.create_table(fileh.root, 'EmptyFiber', EmptyFiber32, 'Shot Average Empty Fiber',
+                               filters=COMPRESSION_FILTER)
+        else:
+            plog(f"[{datevshot}] Using Float16 for EmptyFiber")
+            fileh.create_table(fileh.root, 'EmptyFiber', EmptyFiber16, 'Shot Average Empty Fiber',
+                               filters=COMPRESSION_FILTER)
+
+
+        #each table is only one row, but many columns
+        for sky,eft in zip(ef_sky,ef_tabs):
+            flags = eft['flags'][0]
+
+            #build up the list of columns we want
+            data_cols_to_add = []
+            for c in eft.columns:
+                if len(eft[c].shape) == 2 and "_contrib" not in c and "_err" not in c: #this is a data (array) column
+                    data_cols_to_add.append(c.split("_fluxd")[0])
+
+            for c in data_cols_to_add:
+                try:
+                    new_row = fileh.root.EmptyFiber.row
+                    new_row['sky'] = sky
+                    new_row['flags'] = flags
+                    new_row['rtype'] = c
+                    new_row['fluxd'] = np.array(eft[f"{c}_fluxd"])
+                    new_row['fluxd_err'] = np.array(eft[f"{c}_fluxd_err"])
+                    new_row['contrib'] = np.array(eft[f"{c}_contrib"])
+
+                    new_row.append()
+                except:
+                    plog(f"[{datevshot}] EmptyFiber Insertaion Fail for {c} : {traceback.format_exc()}")
+
+            fileh.root.EmptyFiber.flush()
+
+        fileh.root.EmptyFiber.flush()
+        #there are so few rows it is not worth an index
 
         ##############################################
         # Optional ELiXer tables
@@ -3420,7 +3527,7 @@ def get_image_dict(image_path,datevshot="???",shot_h5fn=None):
                     detid = np.int64(os.path.basename(img_path).split(".")[0].split("_")[0]) #and may or may not have a _nei
                     row = det_tab[det_tab['detectid']==detid][0]
 
-                    #check the spurious_reason
+                    #check the spurious_reason ... !!! could add new spurious reason for interference limit ??
                     if len(row['spurious_reason']) > 1:
                         keep[i] = False
                     elif row['flags'] & bad_flags != 0: #check the flags
@@ -3626,11 +3733,11 @@ try:
 except:
     ApproxBaseRAM = -1
 
-shot_h5_path = None
+shot_h5_fqfn = None
 if "-shot_h5" in args: #path to the shot h5 file
     i = args.index("-shot_h5")
     try:
-        shot_h5_path = args[i+1]
+        shot_h5_fqfn = args[i+1]
     except:
         print(f"Invalid -shot_h5 specified: {args[i+1]}")
         exit(-1)
@@ -3640,7 +3747,9 @@ if "-shot_h5" in args: #path to the shot h5 file
 else:
     print("Fatal. Must supply --shot_h5 <path to the shot hdf5 file>")
 
-datevshot = os.path.basename(shot_h5_path).replace(".h5","")
+datevshot = os.path.basename(shot_h5_fqfn).replace(".h5","")
+shotid = int(datevshot.replace("v","").replace("s","").replace("d",""))
+shot_h5_path = os.path.dirname(shot_h5_fqfn)
 
 diagnose_path = None
 if "-diagnose" in args: #path to the diagnose table
@@ -3656,7 +3765,7 @@ if "-diagnose" in args: #path to the diagnose table
 else:
     #see if can guess based on the shot_h5
     try:
-        diagnose_path = os.path.join(os.path.dirname(shot_h5_path),"diagnose_classifications.tab")
+        diagnose_path = os.path.join(shot_h5_path,"diagnose_classifications.tab")
         if not os.path.exists(diagnose_path):
             diagnose_path = None
             plog(f"[{datevshot}] Could not locate Diagnose table, will skip.")
@@ -3776,7 +3885,7 @@ wait_to_run(Max_Simultaneous_Shots, datevshot=datevshot,clean_up=False)
 
 start_time = time.perf_counter()
 
-new_h5_fn = build_ssr_shot_h5(shot_h5_path, elixer_fn=elixer_h5_path)
+new_h5_fn = build_ssr_shot_h5(shot_h5_fqfn, elixer_fn=elixer_h5_path)
 if images_path is not None and not FATAL_EXIT and new_h5_fn is not None:
     #print("Skipping images import")
     #using the earray and growing
@@ -3788,7 +3897,7 @@ if images_path is not None and not FATAL_EXIT and new_h5_fn is not None:
     #import_images_carray(new_h5_fn,os.path.join(images_path,"*_nei.png"),"elixer_neighbors")
 
 
-print(f"[{os.path.basename(shot_h5_path).replace('.h5','')}] Elapsed time: {time.perf_counter() - start_time :0.1f}s")
+print(f"[{os.path.basename(shot_h5_fqfn).replace('.h5','')}] Elapsed time: {time.perf_counter() - start_time :0.1f}s")
 wait_to_run(Max_Simultaneous_Shots, datevshot=datevshot,clean_up=True)
 
 # example code to fetch images
