@@ -38,8 +38,9 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # 1.0.16 add --repair switch
 # 1.0.17 add log replacement
 # 1.0.18 add interference pattern analysis
+# 1.0.19 add call to build empty fibers; includes new step s06b2
 
-__version__ = '1.0.18'
+__version__ = '1.0.19'
 
 import numpy as np
 import sys
@@ -84,6 +85,7 @@ from elixer import global_config as G
 from elixer import spectrum_utilities as SU
 # noinspection PyUnresolvedReferences
 from elixer import utilities as Utils
+
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -231,11 +233,12 @@ s05_detection = s05_detection | s05b_rdet_rf1 | s05c_rgetmax | s05e_detection_hd
 
 s06_catalogs = True
 s06b_fof = True      #cluster the lines and continuum sources (separately)
+s06b2_emptyfibers = True
 s06c_diagnose = True #run Diagnose
 s06d_elixer = True   #run elixer
 s06e_source_cat = True #make a source catalog
 
-s06_catalogs = s06_catalogs | s06b_fof | s06c_diagnose | s06d_elixer | s06e_source_cat
+s06_catalogs = s06_catalogs | s06b_fof | s06b2_emptyfibers | s06c_diagnose | s06d_elixer | s06e_source_cat
 
 #
 # if False: #testing
@@ -1545,7 +1548,7 @@ def progress_init(cfg,initialize_only=False):
                 dtprog["s05_detection"] = dtprog["s05_detection"] and dtprog["s05b_rdet_rf1"] and \
                                                 dtprog["s05c_rgetmax"] and dtprog["s05e_detection_hdf5"]
 
-                dtprog["s06_catalogs"] = dtprog["s06_catalogs"] and dtprog["s06b_fof"] and \
+                dtprog["s06_catalogs"] = dtprog["s06_catalogs"] and dtprog["s06b_fof"] and dtprog["s06b2_emptyfibers"] and \
                                                 dtprog["s06c_diagnose"] and dtprog["s06d_elixer"] and dtprog["s06e_source_cat"]
         except:
             print(f"Exception in progress_init(). {traceback.format_exc()}")
@@ -1568,6 +1571,7 @@ def progress_init(cfg,initialize_only=False):
                   "s05e_detection_hdf5": False,
                   "s06_catalogs": False,
                   "s06b_fof": False,
+                  "s06b2_emptyfibers": False,
                   "s06c_diagnose": False,
                   "s06d_elixer": False,
                   "s06e_source_cat": False, }
@@ -2802,7 +2806,7 @@ def get_guider_fwhm(cfg):
                     fh.close()
                     t1.close()
                 except:
-                    print(f"Exception in get_guider_fwhm: {traceback.format_exc()}")
+                    print(f"[{cfg.datevshot}] Exception in get_guider_fwhm: {traceback.format_exc()}")
 
             if gc1_active:
                 # base_tarfn = os.path.join(path, "gc1/gc1.tar")
@@ -2828,7 +2832,7 @@ def get_guider_fwhm(cfg):
 
                 gc_near = gc2_near
             else:
-                print(f"No active guider. Cannot get seeing fwhm.")
+                print(f"[{cfg.datevshot}] No active guider. Cannot get seeing fwhm.")
                 return None
 
             for near_list in gc_near:
@@ -2850,8 +2854,10 @@ def get_guider_fwhm(cfg):
                         fh.close()
                         t1.close()
                     except:
-                        print(f"Invalid IQ card")
+                        print(f"[{cfg.datevshot}] Invalid IQ card")
 
+
+        print(f"[{cfg.datevshot}] ***** DEBUG FWHM len(iq) = {len(iq)} ***** ")
         if len(iq) == 1:
             np.savetxt(saved_fn,[iq[0]],fmt="%0.4f")
             return iq[0]
@@ -6281,6 +6287,11 @@ def build_shot_h5(cfg):
 
         os.chdir(cfg.cwd)
 
+
+        #IF the shot h5 already exists, we need to remove it
+        if os.path.exists(f"{cfg.datevshot}.h5"):
+            os.remove(f"{cfg.datevshot}.h5")
+
         cmd = f"python3 {hetdex_api_path}/h5tools/create_shot_hdf5.py"
         cmd += " --tar"
         cmd += f" --date {cfg.datevshot[0:8]}"
@@ -7770,6 +7781,63 @@ def build_detection_hdf5(cfg):
     return rc
 
 
+def run_empty_fibers(cfg):
+    """
+    Needs to run AFTER the *_sourcecat.tab files are created, so after step 06b
+
+    Other than logging an issue, this is far from fatal and we move on without it
+
+    this  should be run in the top level sciXXX director
+
+    output are 2 fits tables: empty_fibers_<shotid>_ll and _ff.fits   !!! notice: shotid not datevshot
+
+    :param cfg:
+    :return:
+    """
+
+    log(f"[{cfg.datevshot}] Computing average empty fibers ...")
+
+    entry_wd = os.getcwd()
+    os.chdir(cfg.cwd)  # this path MUST already exist or we'd never get here
+    rc = -1
+
+    try:
+        #need the elixer install path
+        empty_fiber_code_fqfn = os.path.join(elixer_path,"random_apertures/empty_fibers_per_shot_ssr.py")
+        shot_h5_fqfn = os.path.join(cfg.cwd,f"{cfg.datevshot}.h5")
+        if os.path.exists(empty_fiber_code_fqfn):
+            cmd = f"python3 {empty_fiber_code_fqfn} --local --ffsky --shot_h5 {shot_h5_fqfn}"
+            #note other parms NOT being used here: --rescor --fiber_corr
+            system_command(cfg, cmd)
+
+            #it did run
+            rc = 0
+
+            #check the expected output files exist
+            check_fn = f"./empty_fibers_{cfg.shotid}_ll.fits"
+            if os.path.exists(check_fn):
+                log(f"[{cfg.datevshot}] created {check_fn} ...")
+            else:
+                log(f"[{cfg.datevshot}] Warning! Empty Fibers output fail. File does not exist: {check_fn}")
+                rc += 1 #it ran but had a problem
+
+            check_fn = f"./empty_fibers_{cfg.shotid}_ff.fits"
+            if os.path.exists(check_fn):
+                log(f"[{cfg.datevshot}] created {check_fn} ...")
+            else:
+                log(f"[{cfg.datevshot}] Warning! Empty Fibers output fail. File does not exist: {check_fn}")
+                rc += 1 #it ran but had a problem
+
+        else:
+            log(f"[{cfg.datevshot}] Warning! Could not locate empty fibers code. Path does not exist: {empty_fiber_code_fqfn}")
+
+    except:
+        log(f"[{cfg.datevshot}] Warning! run_empty_fibers() fail: {traceback.format_exc()}")
+
+    os.chdir(entry_wd)
+    return rc
+
+
 def diagnose(cfg):
     """
 
@@ -8716,6 +8784,11 @@ if not cfg.multifits_only and (cfg.numexp < 3 or not cfg.hetdex_original):
     cfg.guider_fwhm = get_guider_fwhm(cfg) #this also gets the exposure times
     if cfg.guider_fwhm is not None:
         log(f"[{cfg.datevshot}] Using guider FWHM = {cfg.guider_fwhm}")
+        #sanity check
+        if not os.path.exists("guider.fwhm"):
+            print(f"[{cfg.datevshot}] Safety write of guider.fwhm")
+            np.savetxt("guider.fwhm", [cfg.guider_fwhm], fmt="%0.4f")
+
     else:
         log(f"[{cfg.datevshot}] Unable to obtain guider seeing FWHM. Will measure as best can be from available data.")
 
@@ -9140,6 +9213,15 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
     log(f"[{cfg.datevshot}] Catalog creation ... ")
 
     if s06b_fof and not dtprog["s06b_fof"]:
+
+        with open("sourcecat.readme","w") as f:
+            f.write("The *_line.h5 and *_line_sourcecat.tab AND *_cont.h5 and *_cont_sourcecat.tab\n")
+            f.write("are related as the *sourcecat.tab files are the additionally down-selected and\n")
+            f.write("FoF clustered detections from the corresponding *.h5 file.\n\n")
+            f.write("The *.h5 files contain additional information and additional HDF5 tables, including\n")
+            f.write("Detections (with additional columns), Fibers (info on the fibers for each detections),\n")
+            f.write("Spectra (1D PSF Weighted spectra for each detection)\n")
+
         try:
             #line_tab = Table.read(os.path.join(cfg.cwd,f"{cfg.datevshot}_line.fits"),format="fits")
             line_h5 = tables.open_file(os.path.join(cfg.cwd,f"{cfg.datevshot}_line.h5"))
@@ -9352,6 +9434,20 @@ if s06_catalogs and not dtprog["s06_catalogs"]:
     else:
         log(f"[{cfg.datevshot}] Skipping s06b_fof Friends of Friends clustering.")
     #end if s06b_fof
+
+
+    #now build up the Empty Fibers
+    if s06b2_emptyfibers and not dtprog["s06b2_emptyfibers"]:
+        rc = run_empty_fibers(cfg)
+
+        if rc >= 0:
+            progress_update(cfg, dtprog, "s06b2_emptyfibers")
+            if rc == 1:
+                log(f"[{cfg.datevshot}] Empty Fibers limited success. Non-fatal. Will continue")
+            elif rc > 1:
+                log(f"[{cfg.datevshot}] Empty Fibers Fail. Non-fatal. Will continue")
+        else:
+            log(f"[{cfg.datevshot}] Empty Fibers Fail. Could not execute. Non-fatal. Will continue")
 
     #we now have clustered lines and continuum
     #the additional clustering performed in hetdex_api is overkill or unnecessary here, I think, as this is just
