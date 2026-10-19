@@ -12,13 +12,15 @@ import os
 from astropy.table import Table
 import shutil
 
+START_DATE = 20161231  #inclusive  YYYYMMDD
+END_DATE = 20161231  #inclusive YYYYMMDD
 NOTIFICATION_EMAIL = None # "XXX@astro.as.utexas.edu"
+
+
 SU_ACCOUNT = "AST23008"
 BASE_FILENAME = "parallel"
 MIN_TOTAL_EXPTIME = 300.0 #seconds
 MAX_TOTAL_EXPTIME = 999999.0 #seconds
-START_DATE = 20240801  #inclusive
-END_DATE = 20240831    #inclusive
 
 QUEUE = "normal"
 MAX_NODES = 5 #this is a TACC request to limit
@@ -44,6 +46,8 @@ EXTRA_SWITCHES = "--linedet_filter 0 " #"--multifits_only --clean 0"
 #read the table
 if os.path.exists("virus_shot_summary_table.tab"):
     T = Table.read("virus_shot_summary_table.tab",format="ascii")
+elif os.path.exists("/corral/utexas/Hobby-Eberly-Telesco/parallel/reduction/virus_shot_summary_table.tab"):
+    T = Table.read("/corral/utexas/Hobby-Eberly-Telesco/parallel/reduction/virus_shot_summary_table.tab")
 elif os.path.exists("/work/03261/polonius/hetdex/single_shot/virus_shot_summary_table.tab"):
     T = Table.read("/work/03261/polonius/hetdex/single_shot/virus_shot_summary_table.tab", format="ascii")
 else:
@@ -56,7 +60,7 @@ else:
 ##################
 sel = np.array(T['exptime'] >= MIN_TOTAL_EXPTIME) * np.array(T['exptime'] <= MAX_TOTAL_EXPTIME)
 
-#new version of the virus_shot_summary_table.tab is a whitelist, so no need to kick out VDFI as it is not already there
+#new version of the virus_shot_summary_table.tab is an "allowlist"", so no need to kick out VDFI as it is not already there
 #still, just to be safe ....
 #sel = sel * np.array(T['name'] == 'parallel')
 sel = sel * np.array([n[0:4] != 'VDFI' for n in T['name']])
