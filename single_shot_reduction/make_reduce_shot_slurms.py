@@ -47,7 +47,7 @@ EXTRA_SWITCHES = "--linedet_filter 0 " #"--multifits_only --clean 0"
 if os.path.exists("virus_shot_summary_table.tab"):
     T = Table.read("virus_shot_summary_table.tab",format="ascii")
 elif os.path.exists("/corral/utexas/Hobby-Eberly-Telesco/parallel/reduction/virus_shot_summary_table.tab"):
-    T = Table.read("/corral/utexas/Hobby-Eberly-Telesco/parallel/reduction/virus_shot_summary_table.tab")
+    T = Table.read("/corral/utexas/Hobby-Eberly-Telesco/parallel/reduction/virus_shot_summary_table.tab", format="ascii")
 elif os.path.exists("/work/03261/polonius/hetdex/single_shot/virus_shot_summary_table.tab"):
     T = Table.read("/work/03261/polonius/hetdex/single_shot/virus_shot_summary_table.tab", format="ascii")
 else:
@@ -96,7 +96,7 @@ def find_min_product(max_a: int, max_b: int, c: int):
 
     return best_a, best_b
 
-def make_slurm(basename, max_nodes, max_tpn, tasks):
+def make_slurm(basename, max_nodes, max_tpn, tasks,rn=None):
 
     global NOTIFICATION_EMAIL, QUEUE, NOMINAL_TIME_REQUEST, SU_ACCOUNT
 
@@ -112,13 +112,17 @@ def make_slurm(basename, max_nodes, max_tpn, tasks):
     #nodes = min(nodes, max_nodes)
     jobfile = f"{basename}.run"
     slurmfile = f"{basename}.slurm"
+    if rn is not None:
+        jobname = f"HETSSR_{str(rn).zfill(2)}"
+    else:
+        jobname = f"HETSSR"
 
     slurmstr = f"""#!/bin/bash
-#SBATCH -J HETSSR                # Job name
+#SBATCH -J {jobname}                # Job name
 #SBATCH -N {nodes}                     # Total number of nodes requested
 #SBATCH --ntasks-per-node {tpn}     # tasks per node
 #SBATCH -p {QUEUE}                # Queue name
-#SBATCH -o HETSSR.o%j            # Name of stdout output file (%j expands to jobid)
+#SBATCH -o {jobname}.o%j            # Name of stdout output file (%j expands to jobid)
 #SBATCH -t {NOMINAL_TIME_REQUEST}               # Run time (hh:mm:ss)
 #SBATCH -A {SU_ACCOUNT}
 """
@@ -192,4 +196,4 @@ for fi in range(num_files):
 
         print(f"Wrote: {fn} ; {len(lines)} lines")
 
-    make_slurm(basename, nodes, tasks_per_node, num_lines)
+    make_slurm(basename, nodes, tasks_per_node, num_lines,rn)
