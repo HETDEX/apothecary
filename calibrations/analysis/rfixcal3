@@ -17,6 +17,13 @@ cp 202309/i014aRL* 202311/.
 ############################
 # FYI, 015LL f2f always around 2.0 (max thresh 1.5), at least since 202301; always ignore
 
+############################
+# 023
+############################
+cp 202509/i023aRL* 202510/.  #a2a to zero (202510, rebounds to normal 202511), all other metrics show big deviation for 202510, though technically stay in base range
+cp 202509/i023aRU* 202510/.  #big fwhm, a2a to zero (202510, rebounds to normal 202511), all other metrics show big deviation for 202510, though technically stay in base range
+
+
 
 ############################
 # 026
@@ -24,6 +31,24 @@ cp 202309/i014aRL* 202311/.
 cp 202404/i026aRU* 202405/.  #f2f big jump and out or range, 1.2 to 1.8
 cp 202404/i026aRU* 202406/.  #f2f ditto
 cp 202404/i026aRU* 202407/.  #f2f ditto
+cp 202404/i026aRU* 202408/.  #f2f ditto to 1.7
+cp 202404/i026aRU* 202409/.  #f2f ditto to 1.6
+
+
+############################
+# 028
+############################
+cp 202412/i028aLL* 202501/.  #f2f zero
+cp 202501/i028aLL* 202502/.  #f2f,a2a,dwave zero
+cp 202501/i028aLU* 202502/.  #a2a,dwave
+cp 202501/i028aRL* 202502/.  #f2f,a2a,dwave
+cp 202501/i028aRU* 202502/.  #f2f,a2a,dwave
+
+
+############################
+# 030
+############################
+cp 202501/i030aRL* 202502/.  #f2f,a2a,dwave
 
 
 ############################
@@ -38,6 +63,8 @@ cp 202308/i032aRL* 202309/.
 ############################
 # FYI 033RU FWHM is always a little high, but we ignore
 cp 202308/i033aRL* 202309/.  #FWHM high
+cp 202601/i033aLU* 202602/.  #NANs
+
 
 
 ############################
@@ -46,6 +73,8 @@ cp 202308/i033aRL* 202309/.  #FWHM high
 cp 202404/i036aRU* 202405/.  #f2f (8.9) max allowed 1.8
 cp 202404/i036aRU* 202406/.  #f2f (5.5)
 cp 202404/i036aRU* 202407/.  #f2f (3.9)
+cp 202404/i036aRU* 202408/.  #f2f (2.9)
+cp 202404/i036aRU* 202409/.  #f2f (2.7)
 
 
 ############################
@@ -78,7 +107,8 @@ cp 202402/i034aLL* 202403/. #a2a
 ############################
 # 045
 ############################
-# FYI, 045RL a2a is ALWAYS zero and we have never done anythhing about it (at least not since 202301)
+# FYI, 045RL a2a is ALWAYS zero and we have never done anything about it (at least not since 202301)
+
 
 ############################
 # 046
@@ -86,12 +116,22 @@ cp 202402/i034aLL* 202403/. #a2a
 cp 202404/i046aLL* 202405/. #f2f (3.4) max allowed 1.8
 cp 202404/i046aLL* 202406/. #f2f (3.5) max allowed 1.8
 cp 202404/i046aLL* 202407/. #f2f (2.6) max allowed 1.8
+cp 202404/i046aLL* 202408/. #f2f (2.5) max allowed 1.8
+cp 202404/i046aLL* 202409/. #f2f (2.5) max allowed 1.8
+
+############################
+# 047
+############################
+cp 202509/i047aLL* 202510/. #fiber pos way off just for 202510, back to normal in 202511 and later
+
+
 
 
 ############################
 # 048
 ############################
-#something changed in date or calculation? 202401 to 202404 is now (as of 202407 check) marginally low in a2a but okay there after
+#048RU ata marginally low since at least 202401 (just below 0.5), have been ignoring
+
 
 
 ############################
@@ -126,7 +166,7 @@ cp 202406/i062aRU* 202407/. #pos (mask)
 ############################
 # 067
 ############################
-# FYI 067RU f2f has been a little high since 202303 and we have done nothing
+# FYI 067RU f2f has been a little high (1.5 to 1.6) since 202303 and we have done nothing
 cp 202312/i067aLL* 202401/. 
 cp 202401/i067aLL* 202402/. #pos  #really from 202312
 cp 202402/i067aLL* 202403/. #pos  #really from 202312
@@ -150,6 +190,24 @@ cp 202401/i071aLU* 202402/. #pos
 ############################
 # FYI 072+RL FWHM has been a bit erratic for a long time, but always within the bounds and we have been ignoring
 
+############################
+# 082
+############################
+cp 202602/i082aLL* 202603/.  #NANs 
+cp 202602/i082aLU* 202603/.  #NANs 
+cp 202602/i082aRU* 202603/.  #NANs 
+cp 202602/i082aRL* 202603/.  #not NANs, but many other issues
+
+############################
+# 083
+###########################
+# FYI 083+RU FWHM always just a little high (8.5-ish) and we always ignore
+
+
+############################
+# 086
+############################
+cp 202501/i086aLL* 202502/.  #big drop fwhm, f2f,a2a,delwave 
 
 
 ############################
@@ -157,6 +215,10 @@ cp 202401/i071aLU* 202402/. #pos
 ############################
 # 088+RL drop in FWHM (202405 to 06), but still in range, and more stable in Karl's calculation, so ignoring
 
+############################
+# 089
+############################
+cp 202504/i089aRU* 202505/.  #big drop fwhm, f2f,a2a,delwave 
 
 ############################
 # 091
@@ -166,6 +228,7 @@ cp 202401/i071aLU* 202402/. #pos
 ############################
 # 095
 ############################
+# 095RU has been a problem for a very long time
 cp 202308/i095aRU* 202309/.
 cp 202309/i095aRU* 202310/.
 cp 202310/i095aRU* 202311/.
@@ -173,13 +236,34 @@ cp 202311/i095aRU* 202312/.
 cp 202312/i095aRU* 202401/.
 cp 202401/i095aRU* 202402/.
 cp 202402/i095aRU* 202403/.
-cp 202403/i095aRU* 202404/.
+cp 202403/i095aRU* 202404/.   #really no reason to keep updating the cp source, we always replace 095RU
 cp 202404/i095aRU* 202405/.
 cp 202404/i095aRU* 202406/.
 cp 202404/i095aRU* 202407/.
+cp 202404/i095aRU* 202408/.
+cp 202404/i095aRU* 202409/.
+cp 202404/i095aRU* 202410/.
+cp 202404/i095aRU* 202411/.
+cp 202404/i095aRU* 202412/.
+cp 202404/i095aRU* 202501/.
+cp 202404/i095aRU* 202502/.
+cp 202404/i095aRU* 202503/.
+cp 202404/i095aRU* 202504/.
+cp 202404/i095aRU* 202505/.
+cp 202404/i095aRU* 202506/.
+cp 202404/i095aRU* 202507/.
+cp 202404/i095aRU* 202508/.
+cp 202404/i095aRU* 202509/.
+cp 202404/i095aRU* 202510/.
+cp 202404/i095aRU* 202511/.
+cp 202404/i095aRU* 202512/.
+cp 202404/i095aRU* 202601/.
+cp 202404/i095aRU* 202602/.
+cp 202404/i095aRU* 202603/.
+cp 202404/i095aRU* 202604/.
 
 
 ############################
 # 096
 ############################
-# 095+RU alwasy very slighly high in FWHM, but stable and always ignore
+# 095+RU always very slighly high in FWHM (8.5-8.7 ish), but stable and always ignore
