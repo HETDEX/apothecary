@@ -802,6 +802,7 @@ if not make_new: #then this was just one month, add a summary
 
     print("\nSummary:")
     print("Iffy:")
+    print("yyyymm cmbf_file        multiframe+fiber   mean   median stddev  ct_0 low  med high st reason")
     sel = np.array(all_fT["yyyymm"] == yyyymm) * np.array(all_fT["status"] > 0)
     for row in all_fT[sel]:
         changed = ""
@@ -816,9 +817,15 @@ if not make_new: #then this was just one month, add a summary
         except:
             changed = "?"
 
-        print(row["yyyymm"], row["cmbf"], row["fiberid"], row["status"], row["reason"], changed)
+        #print(row["yyyymm"], row["cmbf"], row["fiberid"], row["status"], row["reason"], changed)
+
+        print(f'{row["yyyymm"]} {row["cmbf"]} {row["fiberid"]} '
+              f'{row["mean"]:0.4f} {row["median"]:0.4f} {row["stddev"]:0.4f} '
+              f'{str(row["ct_0"]).rjust(4)} {str(row["ct_bad_low"]).rjust(4)} {str(row["ct_bad_medlow"]).rjust(4)} '
+              f'{str(row["ct_bad_high"]).rjust(4)} {str(row["status"]).rjust(2)} {row["reason"]} {changed}')
 
     print("\nBad:")
+    print("yyyymm cmbf_file        multiframe+fiber   mean   median stddev  ct_0 low  med high st reason")
     sel = np.array(all_fT["yyyymm"] == yyyymm) * np.array(all_fT["status"] < 0)
     for row in all_fT[sel]:
         changed = ""
@@ -834,4 +841,8 @@ if not make_new: #then this was just one month, add a summary
             changed = "?"
 
 
-        print(row["yyyymm"], row["cmbf"], row["fiberid"], row["status"], row["reason"])
+        #print(row["yyyymm"], row["cmbf"], row["fiberid"], row["status"], row["reason"])
+        print(f'{row["yyyymm"]} {row["cmbf"]} {row["fiberid"]} '
+              f'{row["mean"]:0.4f} {row["median"]:0.4f} {row["stddev"]:0.4f} '
+              f'{str(row["ct_0"]).rjust(4)} {str(row["ct_bad_low"]).rjust(4)} {str(row["ct_bad_medlow"]).rjust(4)} '
+              f'{str(row["ct_bad_high"]).rjust(4)} {str(row["status"]).rjust(2)} {row["reason"]} {changed}')

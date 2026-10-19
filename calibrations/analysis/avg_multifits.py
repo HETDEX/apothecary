@@ -40,6 +40,7 @@ SHOW_TQDM = False
 MAX_WORKERS = 20 #20 works for development ... need around 8GB max to hold 300 shots of one amp in memory for
                  #averaging, etc, plus leave room for some slop
 AssumedMemFootprint = 9.5 #GB (1032x1032 [pixels] x300 [shots] x8 [bytes] x2 (Python memory)
+keep_pct = 0.95 #or strip off the top 1-keep_ct ....
 
 try:
     ApproxBaseRAM = psutil.virtual_memory()[0] / (1024**3) #in GB (e.g. ~32GB for vm small, 256 GB for normal on LS6)
@@ -63,22 +64,20 @@ unique_amps = np.unique(all_amps)
 #organize in dictionary so can deal with each amp
 
 print(f"Building averages of multi*fits for {month} from {reductions_basepath} ...")
+user_input = input("Continue? (y/n)")
+if user_input.lower() != "y":
+    print(f"User aborted.")
+    exit(0)
+
+
+
 amp_dict = {}
 for amp in unique_amps:
     sel = all_amps == amp
     amp_dict[amp] = all_multis[sel]
 
 
-#fits_dict = {}
-#mean_dict = {}
-#median_dict = {}
-#std_dict = {}
 
-keep_pct = 0.95
-
-#todo: need to make this multithreaded ... nothing difficult here, but it will just
-# take WAAAY too long otherwise ... I suppose each is independent too, so could
-# do this as multiple processes, as an alternative ...
 
 
 def make_avg_for_amp(amp_shot_list,amp_str):
@@ -152,41 +151,6 @@ if op.exists("stop"):
     print("stop detected. Exiting ...")
 else:
     print("done")
-# for key in tqdm(keys,disable=not SHOW_TQDM):
-#     #fits_dict[key]     = []
-#
-#     if op.exists(f"{key}_std.fits"):
-#         print(f"Skipping. Already exists: {key} ...")
-#         continue
-#
-#
-#
-
-
-    # print(f"Working on: {key} ...")
-    # fits_list = []
-    # #this is the list of all multifits for that amp (e.g. the same amp for each shot in the month)
-    # for amp in tqdm(amp_dict[key],colour="green",disable=not SHOW_TQDM):
-    #     hdu = fits.open(amp)
-    #     #fits_dict[key].append(hdu[0].data)
-    #     fits_list.append(hdu[0].data)
-    #
-    # #keep_rt_idx = int(keep_pct * len(fits_dict[key]))
-    # keep_rt_idx = int(keep_pct * len(fits_list))
-    #
-    # #im_array_sorted = np.sort(fits_dict[key],axis=0)
-    # im_array_sorted = np.sort(fits_list, axis=0)
-    # im_mean = np.nanmean(im_array_sorted[0:keep_rt_idx,:,:],axis=0)
-    # im_median = np.nanmedian(im_array_sorted[0:keep_rt_idx,:,:],axis=0)
-    # im_std = np.nanstd(im_array_sorted[0:keep_rt_idx,:,:],axis=0)
-    # # mean_dict[key] = im_mean
-    # # median_dict[key] = im_median
-    # # std_dict[key] = im_std
-    #
-    # #and/or write out as fits
-    # fits.PrimaryHDU(im_mean).writeto(f'{key}_mean.fits', overwrite=True)
-    # fits.PrimaryHDU(im_median).writeto(f'{key}_median.fits', overwrite=True)
-    # fits.PrimaryHDU(im_std).writeto(f'{key}_std.fits', overwrite=True)
 
 #todo: or in another python code,
 # basic analysis of each averaged mutli*fits
