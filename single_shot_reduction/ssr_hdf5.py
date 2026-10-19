@@ -3537,7 +3537,7 @@ def get_image_dict(image_path,datevshot="???",shot_h5fn=None):
                     plog(f"[{datevshot}] Exception\n{traceback.format_exc()}",flush=True)
 
 
-            image_fns = image_fns[keep]
+            image_fns = np.array(image_fns)[keep]
             plog(f"[{datevshot}] Excluding {len(keep)-np.count_nonzero(keep)} 'bad' detection reports  ...", flush=True)
 
         for img_path in tqdm(image_fns,disable=not SHOW_TQDM):
