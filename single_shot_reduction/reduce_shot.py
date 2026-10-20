@@ -505,7 +505,7 @@ if "-help" in args:
     --ifuslot <str(3)> : Special operation - work with ONLY this IFUSlot
                          only used in conjuection with --multifits_only
     
-    --linedet_filter : preset filter/selection for line detections to send to ELIXer. Default is (1)
+    --linedet_filter : preset filter/selection for line detections to send to ELIXer. Default is (0)
                     0 = default: snr > 4.8, chi2 <= 2.5, 1.5 <= linewidth <= 16, chi2fib <= 4.5, continuum >= -3
                     1 = OFF + normal HETDEX_API.  Only snr >= 4.5 filter.
                     1.x+ = OFF + HETDEX_API snr set to this value (i.e. for values 1.1 and up, single decimal precision)
