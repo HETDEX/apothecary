@@ -31,7 +31,8 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 # 0.1.13 add Detections_mc, Detection_cs tables (raw detections for lines and cont)
 # 0.1.14 updated AmpStats table for interference snr and period
 # 0.1.15 add EmptyFiber table
-__version__ = '0.1.15'
+# 0.1.16 add Detection_Fiber_Map table
+__version__ = '0.1.16'
 
 
 import numpy as np
@@ -579,6 +580,21 @@ class Detections(tables.IsDescription):
     p_conf = tables.Float32Col(dflt=-1.0) #added in 0.10.4
 
 
+
+class Detection_Fiber_Map(tables.IsDescription):
+    """
+    reduced form of the Fibers table from the _line.h5 and _cont.h5 detection files
+    only maps to the detectid and keeps the key columns
+    The rest are to been matched to the fiber_id
+
+    """
+    detectid = tables.Int64Col(pos=0)  # unique HETDEX detection ID 1e9+
+    fiber_id = tables.StringCol((38), pos=1)
+    distance = tables.Float32Col(pos=2)
+    weight = tables.Float32Col(pos=3)
+
+
+
 class SpectraLines(tables.IsDescription):
     detectid = tables.Int64Col(pos=0)  # unique HETDEX detection ID 1e9+
     wavelength = tables.Float32Col(dflt=UNSET_FLOAT,pos=1)
@@ -824,7 +840,7 @@ class VIRUSFiber16(tables.IsDescription): #uses Float16 where possibly
     cloned from HETDEX_API create_shot_hdf5.py
 
     remove redundant columns (for this purpose ... single shot only)
-    reduce the unneccesary precision to save space
+    reduce the unnecessary precision to save space
 
     """
     #obsind = tables.Int32Col() #usuall only 3 digits, but I suppose technically could be up to 9, so leave as is?
@@ -892,7 +908,7 @@ class VIRUSFiber32(tables.IsDescription): #same as VIRUSFiber but uses Float32 i
         cloned from HETDEX_API create_shot_hdf5.py
 
         remove redundant columns (for this purpose ... single shot only)
-        reduce the unneccesary precision to save space
+        reduce the unnecessary precision to save space
 
         """
         # obsind = tables.Int32Col() #usuall only 3 digits, but I suppose technically could be up to 9, so leave as is?
@@ -2271,6 +2287,63 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
 
         ##############################################
+        # Optional Detection_Fiber_Map
+        # ? should this be an option?
+        ##############################################
+
+        if True:
+
+            try:
+                line_h5 = tables.open_file(os.path.join(shot_h5_path, f"{datevshot}_line.h5"))
+                hetdex_api_line_fibers = Table(line_h5.root.Fibers.read())
+                line_h5.close()
+            except:
+                hetdex_api_line_fibers = None
+
+            try:
+                cont_h5 = tables.open_file(os.path.join(shot_h5_path, f"{datevshot}_cont.h5"))
+                hetdex_api_cont_fibers = Table(cont_h5.root.Fibers.read())
+                cont_h5.close()
+            except:
+                hetdex_api_cont_fibers = None
+
+            if hetdex_api_line_fibers is not None or hetdex_api_cont_fibers is not None:
+                plog(f"[{datevshot}] Building Detections_Fiber_Map", flush=True)
+                fileh.create_table(fileh.root, 'Detection_Fiber_Map', Detection_Fiber_Map,
+                                   'Map detectids to the fiber_ids that comprise them.')
+
+                if hetdex_api_line_fibers is not None:
+                    for row in hetdex_api_line_fibers:
+                        new_row =  fileh.root.Detection_Fiber_Map.row
+
+                        new_row['detectid'] = row['detectid']
+                        new_row['fiber_id'] = row['fiber_id']
+                        new_row['distance'] = row['distance']
+                        new_row['weight'] = row['weight']
+
+                        new_row.append()
+
+                    fileh.root.Detection_Fiber_Map.flush()
+
+                if hetdex_api_cont_fibers is not None:
+                    for row in hetdex_api_cont_fibers:
+                        new_row = fileh.root.Detection_Fiber_Map.row
+
+                        new_row['detectid'] = row['detectid']
+                        new_row['fiber_id'] = row['fiber_id']
+                        new_row['distance'] = row['distance']
+                        new_row['weight'] = row['weight']
+
+                        new_row.append()
+
+                    fileh.root.Detection_Fiber_Map.flush()
+
+                try:
+                    fileh.root.Detection_Fiber_Map.cols.detectid.create_csindex()
+                except:
+                    log.debug(f"[{datevshot}] Index fail on Detection_Fiber_Map table", exc_info=True)
+
+        ##############################################
         # Optional add raw *.mc line detections
         #
         ##############################################
@@ -2729,7 +2802,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
                     new_row.append()
                 except:
-                    plog(f"[{datevshot}] EmptyFiber Insertaion Fail for {c} : {traceback.format_exc()}")
+                    plog(f"[{datevshot}] EmptyFiber Insertion Fail for {c} : {traceback.format_exc()}")
 
             fileh.root.EmptyFiber.flush()
 
