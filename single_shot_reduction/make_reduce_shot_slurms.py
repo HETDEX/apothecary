@@ -25,7 +25,7 @@ MAX_TOTAL_EXPTIME = 999999.0 #seconds
 QUEUE = "normal"
 MAX_NODES = 5 #this is a TACC request to limit
 MAX_TASKS_PER_NODE = 11 #this is a memory issue
-NOMINAL_TIME_REQUEST = "3:00:00"  #this per SLURM file, the assumption here is there are 5*11 = 55 shots per file
+NOMINAL_TIME_REQUEST = "4:00:00"  #this per SLURM file, the assumption here is there are 5*11 = 55 shots per file
 #for future, rather than fix a time, let it be estimated, like in elixer
 #PER_REDUCTION_TIME = 3.0 #hours (nominal worst case ... a 3-dither, deep observation)
 NUM_SLURM_FILES = None # if None, let the script fit, otherwise use this value?
@@ -184,7 +184,7 @@ for fi in range(num_files):
     rn = str(fi + 1).zfill(2)
     num_lines = stop_ix - start_ix
     if NOTIFICATION_EMAIL is not None:
-        lines = [f"{BASE_CMD} --email {NOTIFICATION_EMAIL} {s}\n" for s in T['shotid'][sel][start_ix:stop_ix]]
+        lines = [f"{BASE_CMD} {EXTRA_SWITCHES} --email {NOTIFICATION_EMAIL} {s}\n" for s in T['shotid'][sel][start_ix:stop_ix]]
     else:
         lines = [f"{BASE_CMD} {EXTRA_SWITCHES} {s}\n" for s in T['shotid'][sel][start_ix:stop_ix]]
 
