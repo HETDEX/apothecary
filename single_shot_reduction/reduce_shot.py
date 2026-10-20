@@ -39,8 +39,9 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # 1.0.17 add log replacement
 # 1.0.18 add interference pattern analysis
 # 1.0.19 add call to build empty fibers; includes new step s06b2
+# 1.0.20 updates to initial setup (locking), protection for CoaddImages (when exposures do not exist), flush logging
 
-__version__ = '1.0.19'
+__version__ = '1.0.20'
 
 import numpy as np
 import sys
@@ -303,7 +304,7 @@ def log(logstr,*args,**kwargs):
         for arg in args:
             msg += " " + arg
 
-        flush = False
+        flush = True
         end = None
         for key, value in kwargs.items():
             if key == 'flush':
@@ -3659,11 +3660,13 @@ def initial_setup(cfg):
             #need to see if can get the file lock in case another instance is copying
             lock = FileLock(Lock_mutex_fn) #we are in the top directory (not sciXXXX)
             with lock:
+                log(f"[{cfg.datevshot}] Local repo lock obtained ...")
                 if cfg.update_local_repo:
-                    print("Updating local repo ... (this may take 1-2 minutes)")
+                    log(f"[{cfg.datevshot}] Updating local repo ... (this may take 1-2 minutes)")
                     shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
                                     os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
                     cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                    log(f"[{cfg.datevshot}] Update to local repo complete.")
 
                     # if cfg.code_fn_to_copy is not None:
                     #     if cfg.cwd_orig is not None:
@@ -3680,7 +3683,9 @@ def initial_setup(cfg):
                     shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
                                     os.path.join(os.getcwd(),LocalScriptRepo), dirs_exist_ok=True)
                     cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                    log(f"[{cfg.datevshot}] Copy to local repo complete.")
 
+            log(f"[{cfg.datevshot}] Local repo lock released ...")
             #lock auto releases
         else:
             log(f"[{cfg.datevshot}] Using main script repo (may be remote) ...")
@@ -6958,37 +6963,46 @@ def shot_analyisis(cfg,ratio=False):
 
         #new, try just using Figure to avoid matplotlib global config issues ("changed" exception)
         try:
-            fig = Figure(figsize=(8, 8))
-            ax = fig.subplots()
-            ax.set_title(f"{cfg.datevshot} x1")
-            ax.imshow(h5.root.Astrometry.CoaddImages.png_exp01.read())  # ,origin="upper")
-            fig.tight_layout()
-            fig.savefig(f"coadd_{cfg.datevshot}_exp01.png", dpi=96)
-            plt.close(fig)
+            if "png_exp01" in h5.root.Astrometry.CoaddImages._v_children.keys():
+                fig = Figure(figsize=(8, 8))
+                ax = fig.subplots()
+                ax.set_title(f"{cfg.datevshot} x1")
+                ax.imshow(h5.root.Astrometry.CoaddImages.png_exp01.read())  # ,origin="upper")
+                fig.tight_layout()
+                fig.savefig(f"coadd_{cfg.datevshot}_exp01.png", dpi=96)
+                plt.close(fig)
+            else:
+                log(f"[{cfg.datevshot}] WARNING! root.Astrometry.CoaddImages does not have png_exp01")
         except:
             log(f"[{cfg.datevshot}] Exception in shot_analysis on CoaddImages exp1",
                 traceback.format_exc())
 
         try:
-            fig = Figure(figsize=(8, 8))
-            ax = fig.subplots()
-            ax.set_title(f"{cfg.datevshot} x2")
-            ax.imshow(h5.root.Astrometry.CoaddImages.png_exp02.read())  # ,origin="upper")
-            fig.tight_layout()
-            fig.savefig(f"coadd_{cfg.datevshot}_exp02.png", dpi=96)
-            plt.close(fig)
+            if "png_exp02" in h5.root.Astrometry.CoaddImages._v_children.keys():
+                fig = Figure(figsize=(8, 8))
+                ax = fig.subplots()
+                ax.set_title(f"{cfg.datevshot} x2")
+                ax.imshow(h5.root.Astrometry.CoaddImages.png_exp02.read())  # ,origin="upper")
+                fig.tight_layout()
+                fig.savefig(f"coadd_{cfg.datevshot}_exp02.png", dpi=96)
+                plt.close(fig)
+            else:
+                log(f"[{cfg.datevshot}] FYI root.Astrometry.CoaddImages does not have png_exp02")
         except:
             log(f"[{cfg.datevshot}] Exception in shot_analysis on CoaddImages exp2",
                 traceback.format_exc())
 
         try:
-            fig = Figure(figsize=(8, 8))
-            ax = fig.subplots()
-            ax.set_title(f"{cfg.datevshot} x3")
-            ax.imshow(h5.root.Astrometry.CoaddImages.png_exp03.read())  # ,origin="upper")
-            fig.tight_layout()
-            fig.savefig(f"coadd_{cfg.datevshot}_exp03.png", dpi=96)
-            plt.close(fig)
+            if "png_exp03" in h5.root.Astrometry.CoaddImages._v_children.keys():
+                fig = Figure(figsize=(8, 8))
+                ax = fig.subplots()
+                ax.set_title(f"{cfg.datevshot} x3")
+                ax.imshow(h5.root.Astrometry.CoaddImages.png_exp03.read())  # ,origin="upper")
+                fig.tight_layout()
+                fig.savefig(f"coadd_{cfg.datevshot}_exp03.png", dpi=96)
+                plt.close(fig)
+            else:
+                log(f"[{cfg.datevshot}] FYI root.Astrometry.CoaddImages does not have png_exp03")
         except:
             log(f"[{cfg.datevshot}] Exception in shot_analysis on CoaddImages exp3",
                 traceback.format_exc())
