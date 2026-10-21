@@ -1391,7 +1391,7 @@ def read_shot_status_file(basepath="./"):
     except:
         log.minor(f"[{datevshot}] Exception! read_shot_status_file", exc_info=True)
 
-    log.debug(f"[{datevshot}] status file read: {status} : \"{status_str}\"")
+    log.debug(f"[{datevshot}] status file read: {status}\n{status_str}")
 
     if resume_status is not None:
         if status is not None:
@@ -2049,6 +2049,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         plog(f"[{datevshot}] Importing AmpStats data ...",flush=True)
         copy_cols = fileh.root.AmpStats.colnames
         copy_cols.remove('expnum')
+        source_cols = shot_h5.root.AmpStats.colnames
 
         #the shot_h5 version does not have the new interference_snr and _period columns, so
         #we want to try to read from the fits or tab version
@@ -2063,14 +2064,20 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             # go over some columns individual since want to change some types
             # directly copy columns:
             for col in copy_cols:
-                new_row[col] = row[col]
+                try:
+                    if col in source_cols:
+                        new_row[col] = row[col]
+                    #else:
+                    #    plog(f"[{datevshot}] {col} not in source h5 data")
+                except:
+                    plog(f"[{datevshot}] Exception buidling ampstats: {traceback.format_exc()}") #older versions may not have the interference stuff
 
             # changed the size of this one
             new_row['expnum'] = row['expnum'].astype(np.int8)
 
             #add the interference stuff
             #need to match up on multiframe and exp
-            if amp_stat_table is not None:
+            if amp_stat_table is not None and "interference_snr" in amp_stat_table.colnames:
                 sel_amp = (np.array(amp_stat_table['multiframe'] == row['multiframe']) *
                            np.array(amp_stat_table['expnum'] == row['expnum']))
 
@@ -3577,7 +3584,10 @@ def get_image_dict(image_path,datevshot="???",shot_h5fn=None):
     det_tab =  None
     if not include_all_reports:
         with tables.open_file(shot_h5fn, mode="r") as h5:  # so will auto close regardless of exit
-            det_tab = Table(h5.root.Detections.read())
+            try:
+                det_tab = Table(h5.root.Detections.read())
+            except:
+                plog(f"[{datevshot}] Exception! Cannot read Detections from {shot_h5fn}.\n{traceback.format_exc()}")
 
     try:
         if det_tab is not None:
@@ -3722,7 +3732,7 @@ def import_images_carray(shot_h5fn,image_path,group_name,carray_name="image_data
             plog(f"[{datevshot}] Stored {total_images} images in {shot_h5fn}.")
 
     except:
-        plog(f"[{datevshot}] Exception in add_report_images(): {traceback.format_exc()}")
+        plog(f"[{datevshot}] Exception in import_images_carray(): {traceback.format_exc()}")
 
 ########################################################################
 ########################################################################
