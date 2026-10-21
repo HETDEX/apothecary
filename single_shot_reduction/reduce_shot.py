@@ -142,7 +142,7 @@ LocalScriptRepo = "./local_script_repo" #useful if running multiple single shots
                                         #set to None if you do NOT want to use a local script dir cache
                                         #  and force a copy from the main repo each time
 
-Lock_mutex_fn = "lsr.lock"  #all instaces under this directory share this
+Lock_mutex_fn = "lsr.lock"  #all instances under this directory share this
 Node_basedir = "/tmp/hetssr"
 Lock_tmp_mutex_fn = "/tmp/tmp_hetssr.mutex" #all instaces on one node (common /tmp) share this
 WorkDirRoot = "./"
@@ -3212,7 +3212,7 @@ def update_only(cfg):
     :return:
     """
 
-    lock = FileLock(Lock_mutex_fn)  # we are in the top directory (not sciXXXX)
+    lock = FileLock(os.path.join(cfg.cwd_orig,Lock_mutex_fn))  # we are in the top directory (not sciXXXX)
     with lock:
         if cfg.update_local_repo:
             print("(Only) Updating local repo ... (this may take 1-2 minutes).")
@@ -3658,7 +3658,7 @@ def initial_setup(cfg):
 
         if LocalScriptRepo is not None:
             #need to see if can get the file lock in case another instance is copying
-            lock = FileLock(Lock_mutex_fn) #we are in the top directory (not sciXXXX)
+            lock = FileLock(os.path.join(cfg.cwd_orig,Lock_mutex_fn))#we are in the top directory (not sciXXXX)
             with lock:
                 log(f"[{cfg.datevshot}] Local repo lock obtained ...")
                 if cfg.update_local_repo:
@@ -3693,7 +3693,7 @@ def initial_setup(cfg):
     elif repair:
         if LocalScriptRepo is not None:
             fatal_rtn = False
-            lock = FileLock(Lock_mutex_fn) #we are in the top directory (not sciXXXX)
+            lock = FileLock(os.path.join(cfg.cwd_orig,Lock_mutex_fn))#we are in the top directory (not sciXXXX)
             with lock:
                 if cfg.update_local_repo:
                     log(f"[{cfg.datevshot}] Updating local repo ... (this may take 1-2 minutes)")
@@ -3716,7 +3716,7 @@ def initial_setup(cfg):
     else:
         if LocalScriptRepo is not None:
             fatal_rtn = False
-            lock = FileLock(Lock_mutex_fn) #we are in the top directory (not sciXXXX)
+            lock = FileLock(os.path.join(cfg.cwd_orig,Lock_mutex_fn))#we are in the top directory (not sciXXXX)
             with lock:
 
                 if cfg.update_local_repo:
@@ -3832,7 +3832,7 @@ def initial_setup(cfg):
     if not resume or cfg.update_local_repo or repair:
 
         # some other process might be updating the local repo ... do not proceed IF there is a lock
-        lock = FileLock(Lock_mutex_fn)  # we are in the top directory (not sciXXXX)
+        lock = FileLock(os.path.join(cfg.cwd_orig,Lock_mutex_fn))  # we are in the top directory (not sciXXXX)
         with lock:
             # obtained the lock, so we should be good now,
             # just release and go
