@@ -360,6 +360,8 @@ if True: #response.lower() == 'y':
     T_elixer_dets[
         'num_valid_misses'] = -1  # in how many group shots was it not found, where there are sufficient fibers
 
+    already_done_shots = [] #empty list, but read in those already done if table found on disk
+
     #u_groups = np.unique(T_elixer_dets['group'])
 
     # #need a dictionary of shots:
@@ -369,6 +371,7 @@ if True: #response.lower() == 'y':
     # for fn in tqdm(shot_fns):
     #     shot = int(os.path.basename(fn).split("ssr_")[1].split(".")[0].replace("v",""))
     #     shot_fiber_dict[shot] = Fibers(shot=shot,shot_h5=fn)
+
 
     # print("just running 1 group, 1 shot")
     for group in u_groups:  # [0:1]):
@@ -398,22 +401,54 @@ if True: #response.lower() == 'y':
 
         # print(f"group {group}, {len(u_shots)} shots)")
 
+        #if the table is already there, read it in and resume from the last write
+        if os.path.exists(f"laurel_elixer_mc_completeness_{str(group_num).zfill(2)}.fits"):
+            T = Table.read(f"laurel_elixer_mc_completeness_{str(group_num).zfill(2)}.fits", format="fits")
+
+            source_group = list(T['group'])
+            source_shotid = list(T['src_shotid'])
+            source_detid = list(T['detectid'])
+            source_wave = list(T['wave'])
+            source_line_flux = list(T['line_flux'])
+            source_line_sigma = list(T['line_sigma'])
+            source_num_fibers = list(T['src_nfib'])
+            source_sn = list(T['sn'])
+            source_f50 = list(T['src_f50'])
+            source_completeness = list(T['src_cmplt'])
+            miss_shotid = list(T['bid_shotid'])
+            miss_self = list(T['self'])
+            miss_found = list(T['found'])
+            miss_sn = list(T['bid_sn'])
+            miss_seeing = list(T['bid_seeing'])
+            miss_tput = list(T['bid_tput'])
+            miss_num_fibers = list(T['bid_nfib'])
+            miss_f50 = list(T['bid_f50'])
+            miss_completeness = list(T['bid_cmplt'])
+
+            already_done_shots = np.unique('source_shotid')
+
+
+
         # for i, zp in enumerate(tqdm(td)):
-        shot_counter  = 0
+        shot_counter = 0
         for shot in tqdm(u_shots,disable=not SHOW_TQDM):  # [0:1]):
             # if halt:
             #     break
 
             shot_counter += 1
+            dtnow = datetime.now()
+            dtnowstr = "%s:%s:%s.%s : " % (str(dtnow.hour).zfill(2), str(dtnow.minute).zfill(2), str(dtnow.second).zfill(2),
+                                str(dtnow.microsecond).zfill(6))
+            if shot in already_done_shots:
+                print(f"{dtnowstr} Already done group {group} shot {shot_counter} / {len(u_shots)} : {shot} with {len(elixer_dets)} dets ...")
+                continue
+            else:
+                print(f"{dtnowstr} Starting group {group} shot {shot_counter} / {len(u_shots)} : {shot} with {len(elixer_dets)} dets ...")
+
 
             elixer_dets = td[td['shotid'] == shot]['detectid']
             # print(f"#dets {len(elixer_dets)}")
             # T =zp[1]
-
-            dtnow = datetime.now()
-            dtnowstr = "%s:%s:%s.%s : " % (str(dtnow.hour).zfill(2), str(dtnow.minute).zfill(2), str(dtnow.second).zfill(2),
-                                str(dtnow.microsecond).zfill(6))
-            print(f"{dtnowstr} Starting group {group} shot {shot_counter} / {len(u_shots)} : {shot} with {len(elixer_dets)} dets ...")
 
             for det in tqdm(elixer_dets,disable=not SHOW_TQDM):  # [0:200]):
                 # if halt:
@@ -671,6 +706,30 @@ if True: #response.lower() == 'y':
 
                 T_elixer_dets['num_valid_misses'][sel_update] = valid_misses
 
+
+            #end for each det in a shot
+
+            #intermediate write
+            dtnow = datetime.now()
+            dtnowstr = "%s:%s:%s.%s : " % (
+            str(dtnow.hour).zfill(2), str(dtnow.minute).zfill(2), str(dtnow.second).zfill(2),
+            str(dtnow.microsecond).zfill(6))
+            print(f"{dtnowstr} Intermediate write of cmplt table for group {group}")
+
+            Cmplt_Table = Table(
+                [source_group, source_shotid, source_detid, source_wave, source_line_flux, source_line_sigma,
+                 source_num_fibers, source_sn, source_f50, source_completeness,
+                 miss_shotid, miss_self, miss_found, miss_sn, miss_seeing, miss_tput, miss_num_fibers,
+                 miss_f50, miss_completeness, ],
+                names=['group', 'src_shotid', 'detectid', 'wave', 'line_flux', 'line_sigma',
+                       'src_nfib', 'sn', 'src_f50', 'src_cmplt',
+                       'bid_shotid', 'self', 'found', 'bid_sn', 'bid_seeing', 'bid_tput', 'bid_nfib',
+                       'bid_f50', 'bid_cmplt'])
+
+            Cmplt_Table.write(f"laurel_elixer_mc_completeness_{str(group_num).zfill(2)}.fits", overwrite=True,
+                              format="fits")
+
+        #end for each shot
 
 
 Cmplt_Table = Table([source_group,source_shotid,source_detid,source_wave,source_line_flux,source_line_sigma,
