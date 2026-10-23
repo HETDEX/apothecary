@@ -40,12 +40,14 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # 1.0.18 add interference pattern analysis
 # 1.0.19 add call to build empty fibers; includes new step s06b2
 # 1.0.20 updates to initial setup (locking), protection for CoaddImages (when exposures do not exist), flush logging
+# 1.0.21 if virus*.tar copy stalls or is old, the requesting lock to copy can forcibly reset and take over
 
-__version__ = '1.0.20'
+__version__ = '1.0.21'
 
 import numpy as np
 import sys
 import os
+import socket
 import glob
 import shutil
 from pathlib import Path
@@ -58,7 +60,7 @@ import subprocess
 from tqdm import tqdm
 
 try:
-    from filelock import FileLock
+    from filelock import FileLock, SoftFileLock
 except:
     print("You need to install filelock (e.g.: pip install --user filelock) ")
     exit(-1)
@@ -205,6 +207,8 @@ except:
     ApproxBaseRAM = -1
     MaxSafeActiveShots = 0
 
+
+MyHostName = socket.gethostname()
 
 #execute steps
 s01_run1s = True
@@ -504,7 +508,7 @@ if "-help" in args:
     --hetdex : if present, overrides the restriction on running existing HETDEX shots
     
     --ifuslot <str(3)> : Special operation - work with ONLY this IFUSlot
-                         only used in conjuection with --multifits_only
+                         only used in conjunction with --multifits_only
     
     --linedet_filter : preset filter/selection for line detections to send to ELIXer. Default is (0)
                     0 = default: snr > 4.8, chi2 <= 2.5, 1.5 <= linewidth <= 16, chi2fib <= 4.5, continuum >= -3
@@ -3214,11 +3218,21 @@ def update_only(cfg):
 
     lock = FileLock(os.path.join(cfg.cwd_orig,Lock_mutex_fn))  # we are in the top directory (not sciXXXX)
     with lock:
+        log(f"[{cfg.datevshot}] Local repo lock obtained ({MyHostName}:{lock.lock_file}) for update_only ...")
         if cfg.update_local_repo:
             print("(Only) Updating local repo ... (this may take 1-2 minutes).")
-            shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
-                            os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
-            cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+            try:
+                cip_file = os.path.join(os.getcwd(), LocalScriptRepo, "copy-in-progress")
+                system_command(cfg, f"touch {cip_file}")
+
+                shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
+                                os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
+
+                system_command(cfg, f"rm {cip_file}")
+
+                cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+            except:
+                log(f"[{cfg.datevshot}] Exception in update_only. {traceback.format_exc()}")
 
             # if cfg.code_fn_to_copy is not None:
             #     if cfg.cwd_orig is not None:
@@ -3316,7 +3330,7 @@ def get_het_raw_archive(cfg):
         log(f"[{cfg.datevshot}] Exception in get_het_raw_archive: {traceback.format_exc()}")
         return None, False, False
 
-def get_het_raw_copy_mutex(cfg,virus_path,release=None):
+def get_het_raw_copy_mutex(cfg,virus_path,release=None,destination=None):
     """
 
                 # we need to limit our access hits to corral across ALL instances
@@ -3330,6 +3344,7 @@ def get_het_raw_copy_mutex(cfg,virus_path,release=None):
     :param cfg:
     :param virus_path:
     :param release: decrement this counter file or if, None, obtain a lock and increment if needed
+    :param destination: if provided, allows the lock request to check on the status of the copy to the destination
     :return: the counter file to decrement (or None) if not needed
     """
 
@@ -3348,6 +3363,7 @@ def get_het_raw_copy_mutex(cfg,virus_path,release=None):
 
                 io_lock_file = os.path.join(mux_root,"ssr_io.lock")
                 redlight = True
+                force_reset = False
 
                 # no PID here and no shot, just date ... want it common to any of the save datevshot
                 sync_fn = f"{cfg.datevshot[:8]}.sync"
@@ -3365,8 +3381,51 @@ def get_het_raw_copy_mutex(cfg,virus_path,release=None):
                                 try:
                                     with open(os.path.join(mux_root, sync_fn), "r") as f:
                                         line = f.readline()
+
+                                        #parse the line
+                                        #PID: 2643331 BEGAN 2026-09-27 15:07:00.131594 from /scratch/03261/polonius/parallel/laurel/trough_example1
+                                        #PID: 2643334 BEGAN 2026-09-27 15:07:00.506691 from /scratch/03261/polonius/parallel/laurel/trough_example1
+
+                                        if destination is not None: #
+                                            toks = line.split()
+                                            pid = int(toks[1])
+                                            datetime_str = str(toks[3]) + " " + str(toks[4])
+                                            dt = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M:%S.%f")
+                                            #how old is it?
+                                            age = (datetime.now() - dt).total_seconds()
+
+                                            #how much time is reasonable? on TACC this is usually only a minute or so
+                                            #but if the file is large and/or we are remote, it could be a much longer time
+                                            #so ... see what was the last update to the file?
+                                            if age > 600.0: #call it 10 minutes, then  start checking
+                                                #check the source and destination sizes ... would need to see if it is stalled?
+                                                #so check after an additional wait ... if unchanged AND they do not match,
+                                                #let this lock take over
+
+                                                log(f"[{cfg.datevshot}] Copy is old/stalled. Will reset for"
+                                                    f" {virus_path} to {destination}.")
+
+                                                try:
+                                                    src_size = os.path.getsize(virus_path)
+                                                    dst_size = os.path.getsize(destination)
+
+                                                    if src_size != dst_size:
+                                                        time.sleep(SafeActiveShotsSleep)
+                                                        dst_size2 = os.path.getsize(destination)
+
+                                                        if dst_size == dst_size2: #it is not changing, assume stalled
+                                                            log(f"[{cfg.datevshot}] Copy is old/stalled. Will reset for"
+                                                                f" {virus_path} to {destination}.")
+                                                            force_reset = True
+                                                            redlight = False
+                                                        #else is still copying ...
+
+                                                except:
+                                                    log(f"[{cfg.datevshot}] Unable to check destination copy status.")
+
                                 except:
                                     line = "Unable to read .sync file"
+
                                 log(f"[{cfg.datevshot}] copy must wait. Archive tar already being copied by another process: {line}")
                             else:
                                 with open(os.path.join(mux_root,sync_fn), "w") as f:
@@ -3378,6 +3437,14 @@ def get_het_raw_copy_mutex(cfg,virus_path,release=None):
 
                     if redlight:
                         time.sleep(SafeActiveShotsSleep)
+                    elif force_reset and destination is not None:
+                        #need to wipe out the destination file so we will recopy?
+                        log(f"[{cfg.datevshot}] Force-reset copy of {virus_path} to {destination}")
+                        try:
+                            os.remove(destination)
+                        except:
+                            log(f"[{cfg.datevshot}] Force-reset failed. {traceback.format_exc()}")
+
 
                 return sync_fn #name of the sync file
             else:  # we are done with the copy, just delete our sync file
@@ -3516,7 +3583,7 @@ def copy_het_raw_file(cfg):
                     counter_file = get_het_raw_copy_mutex(cfg, virus_path)
 
                     #start the copy
-                    #make sure the recieving location exists
+                    #make sure the receiving location exists
                     if not os.path.exists(cfg.local_het_raw_path):
                         os.makedirs(cfg.local_het_raw_path, exist_ok=True)
 
@@ -3631,6 +3698,7 @@ def initial_setup(cfg):
 
     workdir = os.path.join(WorkDirRoot,f"sci{cfg.datevshot}")
 
+    local_repo_status = 0
     repair = False
     resume = False #notice: cfg.resume MAY be true and this can still be false if the directory does not already exist
     if os.path.exists(workdir):
@@ -3660,13 +3728,23 @@ def initial_setup(cfg):
             #need to see if can get the file lock in case another instance is copying
             lock = FileLock(os.path.join(cfg.cwd_orig,Lock_mutex_fn))#we are in the top directory (not sciXXXX)
             with lock:
-                log(f"[{cfg.datevshot}] Local repo lock obtained ...")
+                log(f"[{cfg.datevshot}] Local repo lock obtained ({MyHostName}:{lock.lock_file}) for LocalScriptRepo check ...")
                 if cfg.update_local_repo:
                     log(f"[{cfg.datevshot}] Updating local repo ... (this may take 1-2 minutes)")
-                    shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
-                                    os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
-                    cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
-                    log(f"[{cfg.datevshot}] Update to local repo complete.")
+                    try:
+                        cip_file = os.path.join(os.getcwd(), LocalScriptRepo, "copy-in-progress")
+                        system_command(cfg, f"touch {cip_file}")
+
+                        shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
+                                        os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
+
+                        system_command(cfg, f"rm {cip_file}")
+
+                        cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                        log(f"[{cfg.datevshot}] Update to local repo complete.")
+                    except:
+                        log(f"[{cfg.datevshot}] Exception in initial_setup. Update to local repo failed. {traceback.format_exc()}")
+                        local_repo_status = 1 #fail, but try again
 
                     # if cfg.code_fn_to_copy is not None:
                     #     if cfg.cwd_orig is not None:
@@ -3680,10 +3758,20 @@ def initial_setup(cfg):
                 else:
                     #copy first to local script repo
                     log(f"[{cfg.datevshot}] Copying to local repo ...")
-                    shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
-                                    os.path.join(os.getcwd(),LocalScriptRepo), dirs_exist_ok=True)
-                    cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
-                    log(f"[{cfg.datevshot}] Copy to local repo complete.")
+                    try:
+                        cip_file = os.path.join(os.getcwd(), LocalScriptRepo, "copy-in-progress")
+                        system_command(cfg,f"touch {cip_file}")
+
+                        shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
+                                        os.path.join(os.getcwd(),LocalScriptRepo), dirs_exist_ok=True)
+
+                        system_command(cfg,f"rm {cip_file}")
+                        cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                        log(f"[{cfg.datevshot}] Copy to local repo complete.")
+                    except:
+                        log(f"[{cfg.datevshot}] Exception in initial_setup. Copy to local repo failed. {traceback.format_exc()}")
+                        local_repo_status = 1  # fail, but try again
+
 
             log(f"[{cfg.datevshot}] Local repo lock released ...")
             #lock auto releases
@@ -3695,11 +3783,23 @@ def initial_setup(cfg):
             fatal_rtn = False
             lock = FileLock(os.path.join(cfg.cwd_orig,Lock_mutex_fn))#we are in the top directory (not sciXXXX)
             with lock:
+                log(f"[{cfg.datevshot}] Local repo lock obtained ({MyHostName}:{lock.lock_file}) for repair ...")
                 if cfg.update_local_repo:
                     log(f"[{cfg.datevshot}] Updating local repo ... (this may take 1-2 minutes)")
-                    shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
-                                    os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
-                    cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                    try:
+
+                        cip_file = os.path.join(os.getcwd(), LocalScriptRepo, "copy-in-progress")
+                        system_command(cfg,f"touch {cip_file}")
+
+                        shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
+                                        os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
+
+                        system_command(cfg, f"rm {cip_file}")
+
+                        cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                    except:
+                        log(f"[{cfg.datevshot}] Exception in initial_setup. Update (repair) to local repo failed. {traceback.format_exc()}")
+                        local_repo_status = 1  # fail, but try again
 
                 if os.path.exists(LocalScriptRepo): #we want to use it
                     log(f"[{cfg.datevshot}] Using local repo ...")
@@ -3718,12 +3818,16 @@ def initial_setup(cfg):
             fatal_rtn = False
             lock = FileLock(os.path.join(cfg.cwd_orig,Lock_mutex_fn))#we are in the top directory (not sciXXXX)
             with lock:
-
+                log(f"[{cfg.datevshot}] Local repo lock obtained ({MyHostName}:{lock.lock_file}) for resume...")
                 if cfg.update_local_repo:
                     log(f"[{cfg.datevshot}] Updating local repo ... (this may take 1-2 minutes)")
-                    shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
-                                    os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
-                    cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                    try:
+                        shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
+                                        os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
+                        cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                    except:
+                        log(f"[{cfg.datevshot}] Exception in initial_setup. Update to local repo failed. {traceback.format_exc()}")
+                        local_repo_status = 1  # fail, but try again
 
                 if os.path.exists(LocalScriptRepo): #we want to use it
                     log(f"[{cfg.datevshot}] Using local repo ...")
@@ -3737,6 +3841,14 @@ def initial_setup(cfg):
         else:
             log(f"[{cfg.datevshot}] Using main script repo (may be remote) ...")
             cfg.scriptdir = os.path.join(ScriptRepo,"science_reductions")
+
+    if local_repo_status != 0:
+        #note: so, apparently there is an issue with FileLock ... it does not always behave as expected
+        #there *could* be a problem with the way TACC has the filesystem setup and this might not properly protect
+        #over different processes or (more likely) over different NODES.
+        #Might have to switch to the SoftFileLock, but that is slower and not as robust against failures ...
+        #  would need some manual clean up outside the process if the process somehow fails.
+        return -99
 
     set_fitradecsp(cfg)
     set_vred(cfg)
@@ -3836,6 +3948,7 @@ def initial_setup(cfg):
         with lock:
             # obtained the lock, so we should be good now,
             # just release and go
+            log(f"[{cfg.datevshot}] Local repo lock obtained ({MyHostName}:{lock.lock_file}) check to copy to sci<XXX> ...")
             log(f"[{cfg.datevshot}] Mutex checked. Okay. Safe to local_repo.")
             # lock auto releases
 
@@ -3844,14 +3957,30 @@ def initial_setup(cfg):
 
         #shutil.copy2(os.path.join(cfg.scriptdir, "science_reductions", "rsetups"),".") #no, this function is its equivalent
 
-        shutil.copy2(os.path.join(cfg.scriptdir, "rfixspec"), ".")
-        shutil.copytree(os.path.join(cfg.scriptdir, "sciscripts"), ".", dirs_exist_ok=True)
-        shutil.copytree(os.path.join(cfg.scriptdir,"vdrp"), "vdrp", dirs_exist_ok=True)
-        shutil.copytree(os.path.join(cfg.scriptdir, "detect"), "detect", dirs_exist_ok=True)
-        shutil.copytree(os.path.join(cfg.scriptdir, "getcen"), "getcen", dirs_exist_ok=True)
-        shutil.copytree(os.path.join(cfg.scriptdir, "alldet"), "alldet", dirs_exist_ok=True)
-        shutil.copytree(os.path.join(cfg.scriptdir, "cs"), "cs", dirs_exist_ok=True)
-        shutil.copytree(os.path.join(cfg.scriptdir, "Diagnose"), "Diagnose", dirs_exist_ok=True)
+        cip_file = os.path.join(os.getcwd(), LocalScriptRepo, "copy-in-progress")
+        total_wait = 300.0
+        while os.path.exists(cip_file) and total_wait > 0:
+            log(f"[{cfg.datevshot}] Waiting on {cip_file}")
+            time.sleep(10.0)
+            total_wait -= 10.0
+
+        if total_wait <= 0:
+            log(f"[{cfg.datevshot}] Fatal: copy not ready: {cip_file}")
+            return -1
+
+        try:
+            shutil.copy2(os.path.join(cfg.scriptdir, "rfixspec"), ".")
+            shutil.copytree(os.path.join(cfg.scriptdir, "sciscripts"), ".", dirs_exist_ok=True)
+            shutil.copytree(os.path.join(cfg.scriptdir,"vdrp"), "vdrp", dirs_exist_ok=True)
+            shutil.copytree(os.path.join(cfg.scriptdir, "detect"), "detect", dirs_exist_ok=True)
+            shutil.copytree(os.path.join(cfg.scriptdir, "getcen"), "getcen", dirs_exist_ok=True)
+            shutil.copytree(os.path.join(cfg.scriptdir, "alldet"), "alldet", dirs_exist_ok=True)
+            shutil.copytree(os.path.join(cfg.scriptdir, "cs"), "cs", dirs_exist_ok=True)
+            shutil.copytree(os.path.join(cfg.scriptdir, "Diagnose"), "Diagnose", dirs_exist_ok=True)
+        except:
+            log(f"[{cfg.datevshot}] Exception in initial_setup. Copy to sciXXX failed. {traceback.format_exc()}")
+            local_repo_status = 1  # fail, but try again
+            return -99
 
         #update the "home" path tilde
         system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits")
@@ -6437,6 +6566,7 @@ def build_shot_h5(cfg):
         if not os.path.exists(shot_link_dir):
             lock = FileLock(os.path.join(cfg.cwd_orig,Lock_mutex_fn)) #need to specify the top directory lock file
             with lock:
+                log(f"[{cfg.datevshot}] Local repo lock obtained ({MyHostName}:{lock.lock_file}) for softlink ...")
                 Path(shot_link_dir).mkdir(parents=True, exist_ok=True)
 
         #assume this is the only active task working on this shot
@@ -8719,6 +8849,12 @@ if cfg.numexp <= 0: # and not cfg.multifits_only:
     log(f"[{cfg.datevshot}] Did not find shot in standard gettar location. Not necessarily fatal. Will attempt to proceed ...")
     #try the initial setup anyway
     rc = initial_setup(cfg)
+
+    if rc == -99: #a fail, but retry once more
+        log(f"[{cfg.datevshot}] Initial Setup fail, but with retry. Second attempt after 120s sleep... ")
+        time.sleep(120.0)
+        rc = initial_setup(cfg)
+
     do_initial_setup = False
     if rc < 0:
         Quit(cfg, rc, "Could not complete initial setup.", do_write_status=False, do_write_summary=False)
