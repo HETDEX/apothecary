@@ -112,10 +112,19 @@ def make_slurm(basename, max_nodes, max_tpn, tasks,rn=None):
     #nodes = min(nodes, max_nodes)
     jobfile = f"{basename}.run"
     slurmfile = f"{basename}.slurm"
+
+    dname = os.path.basename(os.getcwd()) #the directory name of the cwd
+
+
+
     if rn is not None:
         jobname = f"HETSSR_{str(rn).zfill(2)}"
     else:
         jobname = f"HETSSR"
+
+    if dname is not None and len(dname) > 0:
+        jobname += f"_{dname}"
+
 
     slurmstr = f"""#!/bin/bash
 #SBATCH -J {jobname}                # Job name
