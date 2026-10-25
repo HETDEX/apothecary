@@ -992,13 +992,30 @@ def run_queue_elixer(cfg):
     fns = sorted(glob.glob(f"sci{cfg.datevshot}"))
     print(f"Attempting to SLURM queue using pattern: {cfg.datevshot}")
     print(f"  matches: {fns}")
+
+    if cfg.limit_queue_elixer > 0:
+        #cmd = ["squeue", "--me", "--format=%.10i %.10u %.20j %o"]
+        #cmd = ["squeue", "--me", "--format=%o"] #only care about paths ... status is either active or pending
+        cmd = ["squeue", "--me", "--format=%Z"] #Z is the workdir, o is the excutable
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        elixer_jobs = [ j for j in result.stdout.split("\n") if "elixer/out" in j]
+    else:
+        elixer_jobs = []
+
+
     queued_count = 0
     for fn in fns:
+
+        #check if already in queue (active or pending)
+        elixer_job_path = os.path.join(cwd,fn, f"elixer/out")
+        if elixer_job_path in elixer_jobs:
+            print(f"Already queued. Skipping {os.path.basename(fn)}")
+            continue
 
         #check if this is already done
         #do this first as it could be that we reach the queue limit, but everytihg else is already
         #done, so no need to set an alert
-        done_file = os.path.join(fn, f"out/elixer/elixer.done")
+        done_file = os.path.join(cwd,fn, f"out/elixer/elixer.done")
         if os.path.exists(done_file):
             #this one is already done
             print(f"Already done. Skipping {os.path.basename(fn)}")
@@ -1080,6 +1097,7 @@ def run_queue_elixer(cfg):
                         #print(f"Sending cmd to shell: {cmd}")
                         #print(f"TESTING DUMMY: >> {cmd}")
                         system_command(cfg,cmd)
+                        print(f"Queued: {os.path.basename(fn)}")
                         queued_count += 1
                     #end else
 
