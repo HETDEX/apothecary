@@ -41,8 +41,8 @@ Error control (at least for now) is deliberately limited as I want no hidden err
 # 1.0.19 add call to build empty fibers; includes new step s06b2
 # 1.0.20 updates to initial setup (locking), protection for CoaddImages (when exposures do not exist), flush logging
 # 1.0.21 if virus*.tar copy stalls or is old, the requesting lock to copy can forcibly reset and take over
-
-__version__ = '1.0.21'
+# 1.0.22 add --limit_queue_elixer
+__version__ = '1.0.22'
 
 import numpy as np
 import sys
@@ -401,6 +401,7 @@ class Config:
     node_clean_done = False
     dtprog = None
     write_progress = True #allow progress.dat to be written out
+    limit_queue_elixer = 0 #no limit
 
 ########################################################################
 # Basic user input
@@ -530,7 +531,7 @@ if "-help" in args:
     --overwrite : removes the shot working directory completely and (re)starts fresh. 
               !!! Notice: --resume has priority over --overwrite
     
-    --prep_compress : Special operation - creats an executable script to create the ssr_<shot>.h5 files, but does not
+    --prep_compress : Special operation - creates an executable script to create the ssr_<shot>.h5 files, but does not
                                           execute that script. Takes a single integer parameter to set the maximum
                                           concurrent processes to use followed by the shots to include (wildcards
                                           allowed but the string should be in quotes).
@@ -538,6 +539,9 @@ if "-help" in args:
     --queue_elixer : Special operation - Inserts provided shots (wildcard allowed, but should be in quotes)
                                          into SLURM queue as previously designated. Updates elixer slurm scripts,
                                          if needed, to adjust to path changes.
+                                         
+    --limit_queue_elixer: same as --queue_elixer but takes an integer to set the maximum number of jobs
+                          to queue. (e.g. --limit_queue_elixer <limit integer> <pattern> )
     
     --repair : basically --resume but with a repair/re-copy of files that would have been lost to cleaning
     
@@ -626,11 +630,37 @@ if "-queue_elixer" in args:
     #  and calls sbatch for the line and conts (again, which should have been previously created)
     # e.g. it just makes it simpler to call sbatch on already created slurm jobs
     #      it shoud be executed from the normal login node
-    print("Hidden switch : queueing elixer slurm jobs that match datevshot ...")
+    print("queueing elixer slurm jobs that match datevshot ...")
     print("Usage: python reduce_shot.py --queue_elixer <datevshot>")
     print("Usage: wildcards allowed, but put in quotes and DO NOT prefix with 'sci ")
     args.remove("-queue_elixer")
     queue_elixer = True
+
+if "-limit_queue_elixer" in args:
+    # this is option is to be used on its own call, not part of a normal reduction
+    # it looks for the shot under the current directory (reduction must already be completed in a previous run)
+    #  and calls sbatch for the line and conts (again, which should have been previously created)
+    # e.g. it just makes it simpler to call sbatch on already created slurm jobs
+    #      it shoud be executed from the normal login node
+    print("queueing elixer slurm jobs that match datevshot ...")
+    print("Usage: python reduce_shot.py --limit_queue_elixer <limit> <datevshot>")
+    print("Usage: wildcards allowed, but put in quotes and DO NOT prefix with 'sci ")
+
+    queue_elixer = True
+
+    i = args.index("-limit_queue_elixer")
+    try:
+        cfg.limit_queue_elixer = int(args[i + 1])
+        if cfg.limit_queue_elixer < 1:
+            print(f"Invalid -limit_queue_elixer specified: {args[i + 1]} ; must be integer > 0 ")
+            exit(-1)
+    except:
+        print(f"Invalid -limit_queue_elixer specified")
+        exit(-1)
+
+    del args[i + 1]  # args.pop(0) #remove THIS file
+    args.remove("-limit_queue_elixer")
+
 
 if "-prep_compress" in args:
     # this is option is to be used on its own call, not part of a normal reduction
@@ -958,11 +988,33 @@ def run_queue_elixer(cfg):
     :return:
     """
 
+
+    #todo: skip those that have elixer.done file
+    # limit to cfg.limit_queue_elixer as count
+
+
     cwd = os.getcwd()
-    fns = glob.glob(f"sci{cfg.datevshot}")
+    fns = sorted(glob.glob(f"sci{cfg.datevshot}"))
     print(f"Attempting to SLURM queue using pattern: {cfg.datevshot}")
     print(f"  matches: {fns}")
+    queued_count = 0
     for fn in fns:
+
+        #check if this is already done
+        #do this first as it could be that we reach the queue limit, but everytihg else is already
+        #done, so no need to set an alert
+        done_file = os.path.join(fn, f"out/elixer/elixer.done")
+        if os.path.exists(done_file):
+            #this one is already done
+            print(f"Already done. Skipping {os.path.basename(fn)}")
+            continue
+
+        #check the queue limit
+        if cfg.limit_queue_elixer > 0 and queued_count >= cfg.limit_queue_elixer:
+            print(f"--limit_elixer_queue count ({cfg.limit_queue_elixer}) reached. Skipping remaining {len(fns)-queued_count} elixer jobs.")
+            break
+
+
         try:
             for dettype in ["out","line","cont"]:
                 datevshot = os.path.basename(fn)[3:] #e.g. sci20260421v011, strip off the sci
@@ -1034,6 +1086,7 @@ def run_queue_elixer(cfg):
                         #print(f"Sending cmd to shell: {cmd}")
                         #print(f"TESTING DUMMY: >> {cmd}")
                         system_command(cfg,cmd)
+                        queued_count += 1
                     #end else
 
                     #return to previous directory
