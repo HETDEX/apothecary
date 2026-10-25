@@ -6110,10 +6110,14 @@ def check_line_detections_by_ifu(cfg):
 
         all_sn = []
 
-
-
         for fn in fns:
-            xlw, xcont, xsnr, xchi2, xchi2fib = np.loadtxt(fn, usecols=[4, 6, 8, 10, 18], unpack=True)
+            #can be some ***** columns; this is rare and loadtxt is more efficient
+            try:
+                xlw, xcont, xsnr, xchi2, xchi2fib = np.loadtxt(fn, usecols=[4, 6, 8, 10, 18], unpack=True)
+            except:
+                #"*****" values become np.nan
+                xlw, xcont, xsnr, xchi2, xchi2fib = np.genfromtxt(fn, usecols=[4, 6, 8, 10, 18], unpack=True)
+
             ifu_name = os.path.basename(fn).split(".")[0].split("_")[1:] #ie. 20240801v002_323_043_040.mc
             ifu_name = '_'.join(ifu_name)
             cfg.ifu_list.append(ifu_name)
@@ -6125,8 +6129,8 @@ def check_line_detections_by_ifu(cfg):
 
             #this is a basic sanity sub-selection ... it may be different than what is applied
             #for the input to ELiXer, but, this is a way to semi-calibrate these data
-            #to what is rouhgly, normally expected to see if we are way off
-            # (i.e. we would normally expecte something like 5-20 line detects per IFU to survive this
+            #to what is roughly, normally expected to see if we are way off
+            # (i.e. we would normally expect something like 5-20 line detects per IFU to survive this
             #       down-selection for a 3-Dither, 1100s observation)
 
             ## !!!! make sure any changed MATCH those in check_line_detections() !!!
