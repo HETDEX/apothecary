@@ -988,11 +988,6 @@ def run_queue_elixer(cfg):
     :return:
     """
 
-
-    #todo: skip those that have elixer.done file
-    # limit to cfg.limit_queue_elixer as count
-
-
     cwd = os.getcwd()
     fns = sorted(glob.glob(f"sci{cfg.datevshot}"))
     print(f"Attempting to SLURM queue using pattern: {cfg.datevshot}")
@@ -1013,7 +1008,6 @@ def run_queue_elixer(cfg):
         if cfg.limit_queue_elixer > 0 and queued_count >= cfg.limit_queue_elixer:
             print(f"--limit_elixer_queue count ({cfg.limit_queue_elixer}) reached. Skipping remaining {len(fns)-queued_count} elixer jobs.")
             break
-
 
         try:
             for dettype in ["out","line","cont"]:
