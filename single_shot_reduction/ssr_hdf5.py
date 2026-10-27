@@ -40,6 +40,7 @@ import tables
 from astropy.io import ascii
 from astropy.table import Table
 import os
+import socket
 from pathlib import Path
 import sys
 import glob
@@ -234,9 +235,34 @@ def check_version():
 Lock_tmp_mutex_fn = "tmp_ssrcompress.mutex"
 Lock_tmp_ct_fn = "tmp_ssrcompress.ct"
 Lock_tmp_memory_fn = "tmp_ssrcompress.memory"
-Max_Simultaneous_Shots = 3 #this depends on options
+
+Max_Simultaneous_Shots = 2 #this depends on options ... 2 is default for vm-small
 
 SafeActiveShotsSleep = 30.0 # recheck every xx seconds
+
+
+def clear_mutex():
+    """
+    grab the lock and remove the two mutex counter files, causing them to reset
+
+    :return:
+    """
+
+    try:
+        lock = FileLock(Lock_tmp_mutex_fn)
+        with lock:
+            #delete the memory and count files
+            if os.path.exists(Lock_tmp_ct_fn):
+                os.remove(Lock_tmp_ct_fn)
+            if os.path.exists(Lock_tmp_memory_fn):
+                os.remove(Lock_tmp_memory_fn)
+
+            os.remove(Lock_tmp_mutex_fn) #don't really need to remove
+
+        print("Mutex cleared.")
+
+    except:
+        print(f"[{datevshot}] Exception! in clear_mutex()", traceback.format_exc())
 
 def wait_to_run(max_procs=3,datevshot="???",clean_up=False): #,safelimit=0):
     """
@@ -3758,27 +3784,20 @@ if "-help" in args:
         
         output: new file named ssr_<shot_h5>        
                
-        --shot_h5           REQUIRED
+        --shot_h5                   REQUIRED
             The input shot.h5 file to be compressed (includes the filename). Can be a relative path.
 
-        --bg [#]            optional
+        --bg [#]                    optional
             Specify the maximum number of simultaneously running hdf5 constructions
-            Note: for a single vm-small node on lonestar6, this should be 2-3 depending on expected size
+            Note: for a single vm-small node on lonestar6, this can only be 1-2 depending on expected size
                   for a single development or normal node, this can be 15-20 depending on expected size
                   but 10-12 is perhaps safer, when there are many detects
                   
-        --float32           optional
-            Override the compression and force float32 where float16 would otherwise be used due to limited range
-            Note: this applies only to float32 data in the original (input) shot.h5 file 
-        
-        --exclude_ccd       optional
-            Do not include the CCD images (3x1032x1032 plus supporting fields for each amp)
-            note: in compressed float16 representation this is around 6GB for a typical shot. 
-            
-        --include_all_reports       optional
-            Include the ELiXer report images for all reports, including for those detections deemed 'bad'
-            
-        --compression       optional
+        --clear_mutex               optional (special)
+            Special operation - clears the concurrency mutex, resetting allowed concurrent active processes.
+            This takes priority over all other switches and will terminate with this action.
+                              
+        --compression               optional
             Set the compression type and level. Mostly affectes ELiXer report images. The default is (2)
             (1) blosc2 compression at level 9; very fast but lesser compression
                     about 20% faster but 25%+ lesser compression than (2)
@@ -3787,23 +3806,61 @@ if "-help" in args:
             (3) bzip2 compression at level 9; very slow but maximum compression
                     about 300% longer to run but 40-50% better compression than (2)
                     
-        --diagnose          optional
+        --diagnose                  optional
             Path to the diagnose_classifications.tab file. If this switch is not provide, the code will look
             in the same directory as the --shot_h5. 
                   
-        --elixer_h5         optional
+        --elixer_h5                 optional
             Path to the <elixer>.h5 file for this shot (includes the filename). Can be a relative path.
             if present, the ELiXer hdf5 tables and the ELiXer report images will be included in the output hdf5 file
             
-        --elixer_h5_force   optional
+        --elixer_h5_force           optional
              attempt to force the inclusion of ELiXer data even if the reported elixer version is not explicitly supported
              
-        --images            optional
+        --exclude_ccd               optional
+            Do not include the CCD images (3x1032x1032 plus supporting fields for each amp)
+            note: in compressed float16 representation this is around 6GB for a typical shot. 
+             
+        --float32                   optional
+            Override the compression and force float32 where float16 would otherwise be used due to limited range
+            Note: this applies only to float32 data in the original (input) shot.h5 file 
+            
+        --images                    optional
             Path the the ELiXer report (png) images (path only, no filenames). Can be a relative path.
+            
+        --include_all_reports       optional
+            Include the ELiXer report images for all reports, including for those detections deemed 'bad'
+            
+
             
     """
     print(help)
     exit(0)
+
+
+MyHostName = socket.gethostname()
+
+if "tacc.utexas.edu" in MyHostName:
+    if "login" in MyHostName:
+        #do anything special?
+        Max_Simultaneous_Shots = 1
+        if "-clear_mutex" not in args:
+            print(f"!!!Warning!!! You are on a login node: {MyHostName}")
+    else: #should be a vm-small or development or normal node, etc
+        #make use of /tmp
+
+        if "v" == MyHostName[0]:
+            Max_Simultaneous_Shots = 2
+        else:
+            Max_Simultaneous_Shots = 20
+
+        if not os.path.exists("/tmp/ssr"):
+            Path("/tmp/ssr").mkdir(parents=True, exist_ok=True)
+
+        if os.path.exists("/tmp/ssr"):
+            Lock_tmp_mutex_fn = os.path.join("/tmp/ssr",Lock_tmp_mutex_fn)
+            Lock_tmp_ct_fn = os.path.join("/tmp/ssr",Lock_tmp_ct_fn)
+            Lock_tmp_memory_fn = os.path.join("/tmp/ssr",Lock_tmp_memory_fn)
 
 
 try:
@@ -3815,6 +3872,14 @@ try:
 
 except:
     ApproxBaseRAM = -1
+
+
+if "-clear_mutex" in args:
+    try:
+        clear_mutex()
+    except:
+        pass
+    exit(0)
 
 shot_h5_fqfn = None
 if "-shot_h5" in args: #path to the shot h5 file
@@ -3918,8 +3983,8 @@ if "-bg" in args:
     del args[i + 1]
     args.remove("-bg")
 else:
-    if not minimum_h5: #cut in half
-        Max_Simultaneous_Shots = round(Max_Simultaneous_Shots/2)
+    if minimum_h5: #double if minimum
+        Max_Simultaneous_Shots = Max_Simultaneous_Shots * 2
 
 
 #default, level 2
