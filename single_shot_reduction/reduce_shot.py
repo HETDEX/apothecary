@@ -1009,7 +1009,7 @@ def run_queue_elixer(cfg):
         #check if already in queue (active or pending)
         elixer_job_path = os.path.join(cwd,fn, f"elixer/out")
         if elixer_job_path in elixer_jobs:
-            print(f"Already queued. Skipping {os.path.basename(fn)}")
+            print(f"Already queued. Skipping {os.path.basename(fn)}\n\n")
             continue
 
         #check if this is already done
@@ -1018,12 +1018,13 @@ def run_queue_elixer(cfg):
         done_file = os.path.join(cwd,fn, f"out/elixer/elixer.done")
         if os.path.exists(done_file):
             #this one is already done
-            print(f"Already done. Skipping {os.path.basename(fn)}")
+            print(f"Already done. Skipping {os.path.basename(fn)}\n\n")
             continue
 
         #check the queue limit
         if cfg.limit_queue_elixer > 0 and queued_count >= cfg.limit_queue_elixer:
-            print(f"--limit_elixer_queue count ({cfg.limit_queue_elixer}) reached. Skipping remaining {len(fns)-queued_count} elixer jobs.")
+            print(f"--limit_elixer_queue count ({cfg.limit_queue_elixer}) reached. "
+                  f"Skipping remaining {len(fns)-queued_count} elixer jobs.\n")
             break
 
         try:
@@ -1097,7 +1098,7 @@ def run_queue_elixer(cfg):
                         #print(f"Sending cmd to shell: {cmd}")
                         #print(f"TESTING DUMMY: >> {cmd}")
                         system_command(cfg,cmd)
-                        print(f"Queued: {os.path.basename(fn)}")
+                        print(f"Queued: {os.path.basename(fn)}\n\n")
                         queued_count += 1
                     #end else
 
@@ -7398,12 +7399,12 @@ def shot_analyisis(cfg,ratio=False):
                         fig.savefig(f"i{mf_base.decode()[10:13]}_{cfg.datevshot}_{mf_base.decode()}.png",
                                     dpi=DIAG_AMP_IMG_DPI)
                         #plt.close('all')
-                        plt.close(fig)
+                        #plt.close(fig) #according to claude this is causeing the weakref issue
                     else:
                         fig.savefig(f"i{mf_base.decode()[10:13]}_{cfg.datevshot}_{mf_base.decode()}_ratio.png",
                                     dpi=DIAG_AMP_IMG_DPI)
                         #plt.close('all')
-                        plt.close(fig)
+                        #plt.close(fig) #according to claude this is causeing the weakref issue
                 except KeyError as ke:
                     if "changed" in str(ke):
                         log(f"[{cfg.datevshot}] Ignored matplotlib \"changed\" issue {mf_base.decode()}")
@@ -7821,11 +7822,11 @@ def make_amp_images(cfg,ratio=False):
             try:
                 if ratio:
                     fig.savefig(f"i{mf_base[10:13]}_{cfg.datevshot}_{mf_base}_ratio.png", dpi=DIAG_AMP_IMG_DPI)
-                    plt.close(fig)
+                    #plt.close(fig) #according to claude this is causeing the weakref issue
                     #plt.close('all')
                 else:
                     fig.savefig(f"i{mf_base[10:13]}_{cfg.datevshot}_{mf_base}.png", dpi=DIAG_AMP_IMG_DPI)
-                    plt.close(fig)
+                   # plt.close(fig) #according to claude this is causeing the weakref issue
                    # plt.close('all')
             except KeyError as ke:
                 if "changed" in str(ke):
