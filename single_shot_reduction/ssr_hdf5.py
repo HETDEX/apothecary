@@ -32,12 +32,14 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 # 0.1.14 updated AmpStats table for interference snr and period
 # 0.1.15 add EmptyFiber table
 # 0.1.16 add Detection_Fiber_Map table
-__version__ = '0.1.16'
+
+
+__version__ = '0.1.17'
 
 
 import numpy as np
 import tables
-from astropy.io import ascii
+from astropy.io import ascii, fits
 from astropy.table import Table
 import os
 import socket
@@ -835,7 +837,7 @@ class VIRUSShot(tables.IsDescription): #Shot table
     expnum = tables.Int32Col((3))
     exptime = tables.Float32Col((3))
     darktime = tables.Float32Col((3))
-    mjd = tables.Float32Col((3))   #this really should be float64 ... otherwise is limite to 160s resolution
+    mjd = tables.Float64Col((3))   # (start time of 1st dither) this really should be float64 ... otherwise is limited to 160s resolution
     fwhm_virus = tables.Float32Col(pos=10)
     fwhm_virus_err = tables.Float32Col(pos=11)
     response_4540 = tables.Float32Col(pos=12)  # normalized for 360s
@@ -858,6 +860,24 @@ class VIRUSShot(tables.IsDescription): #Shot table
     reduction_date = tables.Int32Col()
     reduction_status = tables.StringCol(4,dflt="unk") # enough for "warn" "pass" "fail" "unk"
     reduction_status_ext = tables.StringCol(256,dflt="unk") #basically contents of status.xxxx file, with [datevshot] stripped out
+
+
+class VIRUSFITSHeader(tables.IsDescription):
+    """
+    holds header from each multifits (note: save for a few irrelevant cards, is the same as the *sci.fits header)
+
+    much of the data is redundant for each exposure, though there is amp specific stuff too
+
+    """
+    expnum = tables.Int32Col(pos=0)
+    specid = tables.StringCol(3,pos=1) #index
+    ifuslot = tables.StringCol(3,pos=2) #index
+    ifuid = tables.StringCol(3,pos=3)
+    amp = tables.StringCol(2,pos=4)
+    card = tables.StringCol((8),pos=5)
+    value = tables.StringCol((20),pos=6)
+    comment = tables.StringCol((50), pos=7)
+
 
 
 #these next two tables decide on 16 or 32 at runtime, so can't use the predefs
@@ -1942,7 +1962,69 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         plog(f"[{datevshot}] Trying softlink to FiberIndex....")
         shot_h5.create_soft_link(fileh.root.Data, 'FiberIndex', target=fileh.root.FiberIndex)
 
+        #####################################
+        # VIRUSFITSHedaers
+        #
+        # have to read in all the fits files
+        #####################################
 
+        #what is the path?
+        try:
+            plog(f"[{datevshot}] Importing headers from multifits  ... ", flush=True)
+            mf_path = f"reductions/{datevshot[0:8]}/virus/virus0000{datevshot[-3:]}"
+            mf_exps = [os.path.basename(x) for x in glob.glob(f"{mf_path}/*")]
+
+            skip_cards = [ 'SIMPLE','BITPIX','NAXIS','NAXIS1','NAXIS2','EXTEND','COMMENT','NAME0','EXTNAME',
+                           'NCUT','NERR','NBTRACE','NBACK','NBACKB']
+
+            fileh.create_table(fileh.root, 'VIRUSFITSHeaders', VIRUSFITSHeader, 'VIRUS FITS Headers from multi*.fits files',
+                               filters=COMPRESSION_FILTER)
+
+            for exp in mf_exps: #as 'exp01', "exp02'
+                fns = sorted(glob.glob(f"{mf_path}/{exp}/virus/multi*.fits"))
+                expn = int(exp[-2])
+                for fn in fns:
+                    try:
+                        hdu = fits.open(fn)
+                        toks = os.path.basename(fn).split("_")
+                        specid = toks[1]
+                        ifuslot = toks[2]
+                        ifuid = toks[3]
+                        amp = toks[4][0:2] #XX.fits
+
+                        for card in hdu[0].header.cards:
+                            if card.keyword in skip_cards:
+                                continue
+
+                            new_row = fileh.root.VIRUSFITSHeader.row
+                            new_row['expnum'] = expn
+                            new_row['specid'] = specid
+                            new_row['ifuslot'] = ifuslot
+                            new_row['ifuid'] = ifuid
+                            new_row['amp'] = amp
+                            new_row['card'] = card.keyword[:8]
+                            new_row['value']  = card.value[:20]
+                            new_row['comment'] = card.comment[:50]
+
+                            new_row.append()
+
+                        hdu.close()
+
+                        fileh.root.VIRUSFITSHeaders.flush()
+
+                    except:
+                        plog(f"[{datevshot}] Exception building VIRUSFITSHeaders with {fn}\n{traceback.format_exc()}")
+
+            fileh.root.VIRUSFITSHeaders.flush()
+
+            try:
+                fileh.root.VIRUSFITSHeaders.cols.specid.create_csindex()
+                fileh.root.VIRUSFITSHeaders.cols.ifuslot.create_csindex()
+                fileh.root.VIRUSFITSHeaders.flush()
+            except:
+                log.debug(f"Index fail on VIRUSFITSHeaders table", exc_info=True)
+        except:
+            plog(f"[{datevshot}] Exception building VIRUSFITSHeaders \n{traceback.format_exc()}")
 
 
 
@@ -2147,7 +2229,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                     if n.name[0:3] in ["mat","png","exp"]:
                         try:
                             img_array = n.read().astype(np.float32)
-                            #compression is automtic due to group creation with filters defined
+                            #compression is automatic due to group creation with filters defined
                             fileh.create_array(groupCoadd, n.name, img_array)
                         except:
                             log.debug(f"[{datevshot}] Exception adding {n}", exc_info=True)
@@ -2265,7 +2347,11 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                         for col in float_cols:
                             new_row[col] = np.float32(row[col])#.astype(np.float32)
 
+                        new_row.append()
+
                     scmtb.flush()
+
+                fileh.root.Astrometry.CatalogMatches.flush()
 
             except:
                 log.debug(f"[{datevshot}] Exception adding Astrometry.CatalogMatches.expXX", exc_info=True)
@@ -2276,6 +2362,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 subgroup = fileh.create_group(fileh.root.Astrometry, 'Dithall', 'Fiber Astrometry Info')
 
                 for node in shot_h5.root.Astrometry.Dithall:  # this is "exp01", "exp02", ...
+                    plog(f"[{datevshot}] Astrometry.Dithall {node.name} , {len(node)} rows")
                     datb = fileh.create_table(subgroup, node.name, Dithall, 'Fiber Astrometry Info')
                     for row in node:
                         new_row = datb.row
@@ -2284,7 +2371,11 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                         for col in copy_cols:
                             new_row[col] = row[col]
 
+                        new_row.append()
+
                     datb.flush()
+
+                fileh.root.Astrometry.Dithall.flush()
             except:
                 log.debug(f"[{datevshot}] Exception adding Astrometry.Dithall.expXX", exc_info=True)
 
@@ -2306,7 +2397,11 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                         for col in int_cols:
                             new_row[col] = np.int32(row[col])#.astype(np.int32)
 
+                        new_row.append()
+
                     potb.flush()
+
+                fileh.root.Astrometry.PositionOffsets.flush()
             except:
                 log.debug(f"[{datevshot}] Exception adding Astrometry.PositionOffsets.expXX", exc_info=True)
 
