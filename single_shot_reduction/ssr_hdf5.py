@@ -32,6 +32,8 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 # 0.1.14 updated AmpStats table for interference snr and period
 # 0.1.15 add EmptyFiber table
 # 0.1.16 add Detection_Fiber_Map table
+# 0.1.17 add VIRUSFITSHeader table, make VIRUSShot mhd a float64,
+#        added to VIRUSShot total_exposures, total_pexptime, pexptimes, ut_strings  and reordered VIRUSShot columns
 
 
 __version__ = '0.1.17'
@@ -813,18 +815,31 @@ class VIRUSShot(tables.IsDescription): #Shot table
     cloned from HETDEX_API create_shot_hdf5.py
     """
     shotid = tables.Int64Col(pos=0)
-    field = tables.StringCol((12), pos=1)
-    objid = tables.StringCol((18), pos=2)
+    datevobs = tables.StringCol((12),pos=1)
+    field = tables.StringCol((12), pos=2)
+    objid = tables.StringCol((18), pos=3)
 
-    date = tables.Int32Col(pos=3)
-    obsid = tables.Int32Col(pos=4)
+    date = tables.Int32Col(pos=4)
+    obsid = tables.Int32Col(pos=5)
 
-    ra = tables.Float64Col(pos=5)
-    dec = tables.Float64Col(pos=6)
-    healpix = tables.Int64Col(dflt=-999,pos=7)  # added 0.1.10
-    pa = tables.Float64Col(pos=8)
-    n_ifu = tables.Int32Col(pos=9)
-    datevobs = tables.StringCol((12))
+    ra = tables.Float64Col(pos=6)
+    dec = tables.Float64Col(pos=7)
+    healpix = tables.Int64Col(dflt=-999,pos=8)  # added 0.1.10
+
+    #added 0.1.11
+    reduction_date = tables.Int32Col(pos=9)
+    reduction_status = tables.StringCol(4,dflt="unk",pos=10) # enough for "warn" "pass" "fail" "unk"
+    reduction_status_ext = tables.StringCol(256,dflt="unk",pos=11) #basically contents of status.xxxx file, with [datevshot] stripped out
+
+    #added 0.1.17
+    total_exposures = tables.Int32Col(dflt=-1,pos=12)
+    total_pexptime = tables.Float32Col(dflt=-1,pos=13) #sum of all
+    pexptimes = tables.Float32Col((3),dflt=[-1,-1,-1],pos=14) #up to 3
+    ut_strings = tables.StringCol(itemsize=12, shape=(3,),dflt=["","",""],pos=15) #3 strings of length 12 for ut time hh:mm:ss.xxx
+
+    pa = tables.Float64Col()
+    n_ifu = tables.Int32Col()
+
     trajcra = tables.Float32Col()
     trajcdec = tables.Float32Col()
     trajcpa = tables.Float32Col()
@@ -838,12 +853,12 @@ class VIRUSShot(tables.IsDescription): #Shot table
     exptime = tables.Float32Col((3))
     darktime = tables.Float32Col((3))
     mjd = tables.Float64Col((3))   # (start time of 1st dither) this really should be float64 ... otherwise is limited to 160s resolution
-    fwhm_virus = tables.Float32Col(pos=10)
-    fwhm_virus_err = tables.Float32Col(pos=11)
-    response_4540 = tables.Float32Col(pos=12)  # normalized for 360s
+    fwhm_virus = tables.Float32Col()
+    fwhm_virus_err = tables.Float32Col()
+    response_4540 = tables.Float32Col()  # normalized for 360s
     nstars_fit_fwhm = tables.Int32Col()
     # relflux_guider = tb.Float32Col((3),pos=13)
-    relflux_virus = tables.Float32Col((3), pos=13)
+    relflux_virus = tables.Float32Col((3))
     xditherpos = tables.Float32Col((3))
     yditherpos = tables.Float32Col((3))
     xoffset = tables.Float32Col((3))
@@ -855,12 +870,6 @@ class VIRUSShot(tables.IsDescription): #Shot table
     obsind = tables.Int32Col()
     avg_sky = tables.Float32Col() #not the same as AmpStat table avg_orig, but related
     dust_corr_4540 = tables.Float32Col()
-
-    #added 0.1.11
-    reduction_date = tables.Int32Col()
-    reduction_status = tables.StringCol(4,dflt="unk") # enough for "warn" "pass" "fail" "unk"
-    reduction_status_ext = tables.StringCol(256,dflt="unk") #basically contents of status.xxxx file, with [datevshot] stripped out
-
 
 class VIRUSFITSHeader(tables.IsDescription):
     """
@@ -1549,6 +1558,100 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         row.append()
         vtb.flush()
 
+        #####################################
+        # VIRUSFITSHedaers
+        #
+        # have to read in all the fits files
+        # this is at the top as we want to modify
+        # the Shot table with data from here
+        #####################################
+
+
+        PEXPTIMES = []
+        UT_Str = []
+        TOTAL_EXPS = 0
+
+        try:
+            plog(f"[{datevshot}] Importing headers from multifits  ... ", flush=True)
+            mf_path = f"reductions/{datevshot[0:8]}/virus/virus0000{datevshot[-3:]}"
+            mf_exps = [os.path.basename(x) for x in glob.glob(f"{mf_path}/*")]
+
+            skip_cards = ['SIMPLE', 'BITPIX', 'NAXIS', 'NAXIS1', 'NAXIS2', 'EXTEND', 'COMMENT', 'NAME0', 'EXTNAME',
+                          'NCUT', 'NERR', 'NBTRACE', 'NBACK', 'NBACKB']
+
+            fileh.create_table(fileh.root, 'VIRUSFITSHeaders', VIRUSFITSHeader,
+                               'VIRUS FITS Headers from multi*.fits files',
+                               filters=COMPRESSION_FILTER)
+
+            TOTAL_EXPS = len(mf_exps)
+
+            for exp in mf_exps:  # as 'exp01', "exp02'
+                fns = sorted(glob.glob(f"{mf_path}/{exp}/virus/multi*.fits"))
+                expn = int(exp[-2])
+
+                ut_str = None
+                pexptime = None
+                for fn in fns:
+                    try:
+                        hdu = fits.open(fn)
+                        toks = os.path.basename(fn).split("_")
+                        specid = toks[1]
+                        ifuslot = toks[2]
+                        ifuid = toks[3]
+                        amp = toks[4][0:2]  # XX.fits
+
+                        #we assume the UT and PEXPTIME are the SAME for all headers for a given exposure number
+                        if ut_str is None:
+                            try:
+                                ut_str = hdu[0].header['UT']
+                                UT_Str.append(ut_str)
+                            except:
+                                pass
+
+                        if pexptime is None:
+                            try:
+                                pexptime = hdu[0].header['PEXPTIME']
+                                PEXPTIMES.append(pexptime)
+                            except:
+                                pass
+
+                        for card in hdu[0].header.cards:
+                            if card.keyword in skip_cards:
+                                continue
+
+                            new_row = fileh.root.VIRUSFITSHeader.row
+                            new_row['expnum'] = expn
+                            new_row['specid'] = specid
+                            new_row['ifuslot'] = ifuslot
+                            new_row['ifuid'] = ifuid
+                            new_row['amp'] = amp
+                            new_row['card'] = card.keyword[:8]
+                            new_row['value'] = card.value[:20]
+                            new_row['comment'] = card.comment[:50]
+
+                            new_row.append()
+
+                        hdu.close()
+
+                        fileh.root.VIRUSFITSHeaders.flush()
+
+                    except:
+                        plog(f"[{datevshot}] Exception building VIRUSFITSHeaders with {fn}\n{traceback.format_exc()}")
+
+            fileh.root.VIRUSFITSHeaders.flush()
+
+            try:
+                fileh.root.VIRUSFITSHeaders.cols.specid.create_csindex()
+                fileh.root.VIRUSFITSHeaders.cols.ifuslot.create_csindex()
+                fileh.root.VIRUSFITSHeaders.flush()
+            except:
+                log.debug(f"Index fail on VIRUSFITSHeaders table", exc_info=True)
+        except:
+            plog(f"[{datevshot}] Exception building VIRUSFITSHeaders \n{traceback.format_exc()}")
+
+
+
+
         #######################################
         # Shot Table
         #######################################
@@ -1617,6 +1720,15 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                     dvs = str(new_row['shotid'])
                     dvs = dvs[0:8]+"v"+dvs[-3:]
                     new_row['reduction_status_ext'] = shot_status_str #.replace(f"[{dvs}] {shot_status}.","")[0:256]
+            except:
+                pass
+
+            try: #from the VIRUSFITSHeader
+                new_row['total_exposures'] = TOTAL_EXPS
+                new_row['pexptimes'] = PEXPTIMES[:3]
+                new_row['total_pexptime'] = np.nansum(PEXPTIMES)
+                new_row['ut_strings'] = UT_Str[:3]
+
             except:
                 pass
 
@@ -1961,70 +2073,6 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         #create a softlink for compatibility ????
         plog(f"[{datevshot}] Trying softlink to FiberIndex....")
         shot_h5.create_soft_link(fileh.root.Data, 'FiberIndex', target=fileh.root.FiberIndex)
-
-        #####################################
-        # VIRUSFITSHedaers
-        #
-        # have to read in all the fits files
-        #####################################
-
-        #what is the path?
-        try:
-            plog(f"[{datevshot}] Importing headers from multifits  ... ", flush=True)
-            mf_path = f"reductions/{datevshot[0:8]}/virus/virus0000{datevshot[-3:]}"
-            mf_exps = [os.path.basename(x) for x in glob.glob(f"{mf_path}/*")]
-
-            skip_cards = [ 'SIMPLE','BITPIX','NAXIS','NAXIS1','NAXIS2','EXTEND','COMMENT','NAME0','EXTNAME',
-                           'NCUT','NERR','NBTRACE','NBACK','NBACKB']
-
-            fileh.create_table(fileh.root, 'VIRUSFITSHeaders', VIRUSFITSHeader, 'VIRUS FITS Headers from multi*.fits files',
-                               filters=COMPRESSION_FILTER)
-
-            for exp in mf_exps: #as 'exp01', "exp02'
-                fns = sorted(glob.glob(f"{mf_path}/{exp}/virus/multi*.fits"))
-                expn = int(exp[-2])
-                for fn in fns:
-                    try:
-                        hdu = fits.open(fn)
-                        toks = os.path.basename(fn).split("_")
-                        specid = toks[1]
-                        ifuslot = toks[2]
-                        ifuid = toks[3]
-                        amp = toks[4][0:2] #XX.fits
-
-                        for card in hdu[0].header.cards:
-                            if card.keyword in skip_cards:
-                                continue
-
-                            new_row = fileh.root.VIRUSFITSHeader.row
-                            new_row['expnum'] = expn
-                            new_row['specid'] = specid
-                            new_row['ifuslot'] = ifuslot
-                            new_row['ifuid'] = ifuid
-                            new_row['amp'] = amp
-                            new_row['card'] = card.keyword[:8]
-                            new_row['value']  = card.value[:20]
-                            new_row['comment'] = card.comment[:50]
-
-                            new_row.append()
-
-                        hdu.close()
-
-                        fileh.root.VIRUSFITSHeaders.flush()
-
-                    except:
-                        plog(f"[{datevshot}] Exception building VIRUSFITSHeaders with {fn}\n{traceback.format_exc()}")
-
-            fileh.root.VIRUSFITSHeaders.flush()
-
-            try:
-                fileh.root.VIRUSFITSHeaders.cols.specid.create_csindex()
-                fileh.root.VIRUSFITSHeaders.cols.ifuslot.create_csindex()
-                fileh.root.VIRUSFITSHeaders.flush()
-            except:
-                log.debug(f"Index fail on VIRUSFITSHeaders table", exc_info=True)
-        except:
-            plog(f"[{datevshot}] Exception building VIRUSFITSHeaders \n{traceback.format_exc()}")
 
 
 
