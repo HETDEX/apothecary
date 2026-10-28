@@ -1587,11 +1587,11 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
             for exp in mf_exps:  # as 'exp01', "exp02'
                 fns = sorted(glob.glob(f"{mf_path}/{exp}/virus/multi*.fits"))
-                expn = int(exp[-2])
+                expn = int(exp[-2:])
 
                 ut_str = None
                 pexptime = None
-                for fn in fns:
+                for fn in tqdm(fns,disable=not SHOW_TQDM):
                     try:
                         hdu = fits.open(fn)
                         toks = os.path.basename(fn).split("_")
@@ -1619,14 +1619,14 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                             if card.keyword in skip_cards:
                                 continue
 
-                            new_row = fileh.root.VIRUSFITSHeader.row
+                            new_row = fileh.root.VIRUSFITSHeaders.row
                             new_row['expnum'] = expn
                             new_row['specid'] = specid
                             new_row['ifuslot'] = ifuslot
                             new_row['ifuid'] = ifuid
                             new_row['amp'] = amp
                             new_row['card'] = card.keyword[:8]
-                            new_row['value'] = card.value[:20]
+                            new_row['value'] = str(card.value)[:20]
                             new_row['comment'] = card.comment[:50]
 
                             new_row.append()
