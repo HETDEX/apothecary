@@ -1,0 +1,4 @@
+from Karl 20261029
+includes Donghui identified fix for SN correction when bad or dead fibers are in the detection
+  (minor issue, can shift the SN a little at low SNR values)
+
