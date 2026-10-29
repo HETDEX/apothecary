@@ -1003,13 +1003,17 @@ def run_queue_elixer(cfg):
         elixer_jobs = []
 
 
-    queued_count = 0
+    new_queue_ct = 0
+    already_in_queue_ct = 0
+    already_done_ct = 0
+
     for fn in fns:
 
         #check if already in queue (active or pending)
         elixer_job_path = os.path.join(cwd,fn, f"elixer/out")
         if elixer_job_path in elixer_jobs:
             print(f"Already queued. Skipping {os.path.basename(fn)}\n\n")
+            already_in_queue_ct += 1
             continue
 
         #check if this is already done
@@ -1019,12 +1023,12 @@ def run_queue_elixer(cfg):
         if os.path.exists(done_file):
             #this one is already done
             print(f"Already done. Skipping {os.path.basename(fn)}\n\n")
+            already_done_ct += 1
             continue
 
         #check the queue limit
-        if cfg.limit_queue_elixer > 0 and queued_count >= cfg.limit_queue_elixer:
-            print(f"--limit_elixer_queue count ({cfg.limit_queue_elixer}) reached. "
-                  f"Skipping remaining {len(fns)-queued_count} elixer jobs.\n")
+        if cfg.limit_queue_elixer > 0 and new_queue_ct >= cfg.limit_queue_elixer:
+            print(f"--limit_elixer_queue count ({cfg.limit_queue_elixer}) reached.\n")
             break
 
         try:
@@ -1036,6 +1040,7 @@ def run_queue_elixer(cfg):
                     # do not run if already "done"
                     if os.path.exists("elixer.done") or os.path.exists(f"elixer_{datevshot}_cat.h5"):
                         print(f"[{datevshot}] ELiXer already done.")
+                        already_done_ct += 1
 
                     else: #if os.path.exists("elixer.slurm"):
                         if  os.path.exists("elixer.slurm") and os.path.exists("elixer.run"):
@@ -1099,13 +1104,19 @@ def run_queue_elixer(cfg):
                         #print(f"TESTING DUMMY: >> {cmd}")
                         system_command(cfg,cmd)
                         print(f"Queued: {os.path.basename(fn)}\n\n")
-                        queued_count += 1
+                        new_queue_ct += 1
                     #end else
 
                     #return to previous directory
                     os.chdir(cwd)
         except:
             print(traceback.format_exc())
+
+    print(f"From the input shots pattern {cfg.datevshot}:"
+          f"{new_queue_ct} added to queue,\n"
+          f"{already_in_queue_ct} previously still active/pending,\n"
+          f"{already_done_ct} already complete,\n"
+          f"{len(fns)-new_queue_ct-already_in_queue_ct-already_done_ct} remaining to be queued.")
 
     os.chdir(cwd)
 
