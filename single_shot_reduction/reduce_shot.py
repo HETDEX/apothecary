@@ -1112,7 +1112,7 @@ def run_queue_elixer(cfg):
         except:
             print(traceback.format_exc())
 
-    print(f"From the input shots pattern {cfg.datevshot}:"
+    print(f"From the input shots pattern {cfg.datevshot}:\b"
           f"{new_queue_ct} added to queue,\n"
           f"{already_in_queue_ct} previously still active/pending,\n"
           f"{already_done_ct} already complete,\n"
