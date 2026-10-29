@@ -1544,7 +1544,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         #if want to use /tmp  update to /tmp HERE (and copy at the end, after the file handle is closed)
         #HOWEVER, WARNING!!! These files CAN get to be 20GB in size and /tmp (on ls6) is only 120 GB?
         #so that could be an issue when running at max memory allowance of 10-12 of these
-        outfn = "ssr_" + os.path.basename(shot_fn)
+        outfn = "ssr_" + os.path.basename(shot_fn) + ".part"
 
         log.debug(f"[{datevshot}] ***START*** Creating new SingleShot Reduction HDF5 catalog (%s)" % (outfn))
 
@@ -3462,10 +3462,11 @@ def import_images_earray (shot_h5fn,image_path,group_name,earray_name="image_dat
     :param image_path: path to images, include wildcards as will be used with glob
     :return:
     """
-    datevshot = shot_h5fn
+    #datevshot is global
+    #datevshot = shot_h5fn
     try:
 
-        datevshot = os.path.basename(shot_h5fn).replace(".h5", "").replace("ssr_","")
+        #datevshot = os.path.basename(shot_h5fn).replace(".h5", "").replace("ssr_","")
         plog(f"[{datevshot}] Importing images: {image_path} to root.{group_name}.{earray_name}*",flush=True)
 
         #max_shape, unique_d1, unique_ct = get_max_image(image_path,datevshot)
@@ -3827,9 +3828,10 @@ def import_images_carray(shot_h5fn,image_path,group_name,carray_name="image_data
     :return:
     """
 
-    datevshot = shot_h5fn
+    #datevshot is a global
+    #datevshot = shot_h5fn
     try:
-        datevshot = os.path.basename(shot_h5fn).replace(".h5", "").replace("ssr_", "")
+        #datevshot = os.path.basename(shot_h5fn).replace(".h5", "").replace("ssr_", "")
         plog(f"[{datevshot}] Importing images: {image_path} to root.{group_name}.{carray_name}*",flush=True)
 
         max_shape, img_dict = get_image_dict(image_path,datevshot,shot_h5fn)
@@ -4187,6 +4189,10 @@ if images_path is not None and not FATAL_EXIT and new_h5_fn is not None:
     #import_images_carray(new_h5_fn,os.path.join(images_path,"*[0-9].png"),"elixer_reports")
     #import_images_carray(new_h5_fn,os.path.join(images_path,"*_nei.png"),"elixer_neighbors")
 
+try:
+    os.rename(new_h5_fn, new_h5_fn.replace(".part",""))
+except:
+    print(f"Error renaming .part file: {traceback.format_exc()}")
 
 print(f"[{os.path.basename(shot_h5_fqfn).replace('.h5','')}] Elapsed time: {time.perf_counter() - start_time :0.1f}s")
 wait_to_run(Max_Simultaneous_Shots, datevshot=datevshot,clean_up=True)
