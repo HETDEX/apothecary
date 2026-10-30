@@ -344,9 +344,9 @@ if True: #response.lower() == 'y':
     # out_has_multiples = [] #e.g. in a single shot ... put in the list of shotids
 
     # to be considered a match
-    base_max_sep = 3.0  # arcsec  ... this actually needs to be flexible, esp for resolved objects !!!
+    base_max_sep = 2.0  # arcsec  ... this actually needs to be flexible, esp for resolved objects !!!
     base_max_resolved_major = 15.0 #arcsec
-    max_delta_wave = 6.0  # AA   #thi is the usual, but I worry it gets a bit to lax for small linewidths
+    max_delta_wave = 6.0  # AA   #this is the usual, but I worry it gets a bit to lax for small lin ewidths
 
     # no-match found check on fibers
     aperture = 3.5  # arcsec ... this is the aperture using the target coords on the bid_shot, assume some
@@ -494,7 +494,8 @@ if True: #response.lower() == 'y':
                 # max_dec = max_sep / 3600.0 #in degrees
                 # max_ra = max_dec / ra_for_dec_adjust #set earlier
                 # all groups are similar in dec and all detects are similar (with 15' or so), so this is close enough
-                max_miss_dec = (max_sep + 1.5) / 3600.0  # go out larger than the aperture
+                #max_miss_dec = (max_sep + 1.5) / 3600.0  # go out a little larger than the aperture
+                max_miss_dec = max_sep  / 3600.0  #do not add anything extra ... just build it into the base
                 max_miss_ra = max_miss_dec / np.cos(np.deg2rad(td['dec'][0]))
 
                 ref_coord = SkyCoord(ra=ri['ra'] * u.deg, dec=ri['dec'] * u.deg)
