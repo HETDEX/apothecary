@@ -1142,6 +1142,10 @@ def run_prep_compress(cfg,max_simultaneous=3):
         try:
             datevshot = os.path.basename(cpath).replace("sci","")
 
+            if os.path.exists(f"ssr_{datevshot}.h5"):
+                print(f"ssr_{datevshot}.h5 already exists. Skipping.")
+                continue
+
             if shutil.which("ssr_hdf5"):
                 cmd = f"ssr_hdf5 --compression 2"
             else:
@@ -2939,7 +2943,7 @@ def get_guider_fwhm(cfg):
                         print(f"[{cfg.datevshot}] Invalid IQ card")
 
 
-        print(f"[{cfg.datevshot}] ***** DEBUG FWHM len(iq) = {len(iq)} ***** ")
+        #print(f"[{cfg.datevshot}] ***** DEBUG FWHM len(iq) = {len(iq)} ***** ")
         if len(iq) == 1:
             np.savetxt(saved_fn,[iq[0]],fmt="%0.4f")
             return iq[0]
