@@ -431,7 +431,7 @@ def check_version(cfg):
                         arc_ver = str(toks[1].replace('\'', "").replace('\"', "").strip())
                         found_version = True
         else:
-            print(f"Could not check version. Counld not locate code archive: {fn}")
+            print(f"Could not check version. Could not locate code archive: {fn}")
 
         if arc_ver is not None:
             if arc_ver != __version__:
@@ -534,7 +534,8 @@ if "-help" in args:
     --prep_compress : Special operation - creates an executable script to create the ssr_<shot>.h5 files, but does not
                                           execute that script. Takes a single integer parameter to set the maximum
                                           concurrent processes to use followed by the shots to include (wildcards
-                                          allowed but the string should be in quotes).
+                                          allowed but the string should be in quotes). A 'normal' node with 256GB should
+                                          be safe with 20 concurrent processes. Above that there can be memory problems.
     
     --queue_elixer : Special operation - Inserts provided shots (wildcard allowed, but should be in quotes)
                                          into SLURM queue as previously designated. Updates elixer slurm scripts,
@@ -668,9 +669,9 @@ if "-prep_compress" in args:
     #  and calls sbatch for the line and conts (again, which should have been previously created)
     # e.g. it just makes it simpler to call sbatch on already created slurm jobs
     #      it shoud be executed from the normal login node
-    print("Hidden switch : preparing default SSR compression calls that match datevshot ...")
-    print("Usage: python reduce_shot.py --prep_compress [max_simultaneous, default=3] <datevshot>")
-    print("Usage: wildcards allowed, but put in quotes and DO NOT prefix with 'sci ")
+    print("Preparing default SSR compression calls that match datevshot ...")
+    #print("Usage: python reduce_shot.py --prep_compress [max_simultaneous, default=3] <datevshot>")
+    #print("Usage: wildcards allowed, but put in quotes and DO NOT prefix with 'sci ")
 
     i = args.index("-prep_compress")
     try:
@@ -678,6 +679,12 @@ if "-prep_compress" in args:
         if prep_compress < 0:
             print(f"Invalid --prep_compress specified. Must be non-negative")
             exit(-1)
+        elif prep_compress > 20:
+            print(f"Warning! --prep_compress maximum recommended is 20 for a 'normal' node with 256GB RAM.")
+            print(f"Warning! Other considerations may be active (i.e. if these are known to be small files or"
+                  f" without ELiXer reports, etc)")
+            #continue anyway, this is just a warning
+
     except:
         print(f"Invalid --prep_compress specified")
         exit(-1)
@@ -1073,8 +1080,6 @@ def run_queue_elixer(cfg):
                                 #     that it would be exectued
                                 #  then run this as a test and compare the new elixer.run to the saved one
                                 #
-                                # system_command(cfg,f"sed -i s#~gebhardt#{karlhome}# rbfits")
-                                # cd dispatch_0001 ; /usr/bin/python /work/03261/polonius/maverick/science/sciscripts/elixer.test/elixer/elixer.py  -f --slurm 0 --nodes 1 --log info --shot_h5 /scratch/03261/polonius/parallel/shela/sci20241005v013/20241005v013.h5 --diagnose /scratch/03261/polonius/parallel/shela/sci20241005v013/diagnose_classifications.tab --png --error 3.0 --neighborhood 10.0 --ntasks_per_node 25 --timex 0.8 --post_merge 2 --merge_name elixer_20241005v013_cat.h5 --email dustin@astro.as.utexas.edu --name out --dets line.dets --hdf5 /scratch/03261/polonius/parallel/shela/sci20241005v013/20241005v013_line.h5 --dispatch dispatch_0001 -f ; cd ..
                                 #
 
                                 #get the first row and assume everything else is much the same
