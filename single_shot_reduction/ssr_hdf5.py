@@ -3398,6 +3398,8 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
     except:
         plog(f"[{datevshot}] Exception building new h5 file. {traceback.format_exc()}")
+        FATAL_EXIT = -1
+        outfn = None
 
 
 
@@ -3787,7 +3789,7 @@ def get_image_dict(image_path,datevshot="???",shot_h5fn=None):
                         #assumes we incorporate interference check into the ELiXer run ....
                         keep[i] = False
                 except:
-                    plog(f"[{datevshot}] Exception\n{traceback.format_exc()}",flush=True)
+                    plog(f"[{datevshot}] Exception in get_image_dict(). Detectid {detid}\n{traceback.format_exc()}",flush=True)
 
 
             image_fns = np.array(image_fns)[keep]
@@ -4190,7 +4192,8 @@ if images_path is not None and not FATAL_EXIT and new_h5_fn is not None:
     #import_images_carray(new_h5_fn,os.path.join(images_path,"*_nei.png"),"elixer_neighbors")
 
 try:
-    os.rename(new_h5_fn, new_h5_fn.replace(".part",""))
+    if FATAL_EXIT == 0 and new_h5_fn is not None:
+        os.rename(new_h5_fn, new_h5_fn.replace(".part",""))
 except:
     print(f"Error renaming .part file: {traceback.format_exc()}")
 
