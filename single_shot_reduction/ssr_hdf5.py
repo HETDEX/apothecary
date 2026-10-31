@@ -74,7 +74,7 @@ UNSET_INT = -99999
 UNSET_STR = ""
 UNSET_NAN = np.nan
 SUPPORTED_ELIXER_H5_VERSIONS = [b"0.9.2",b"0.10.0",b"0.10.1",b"0.10.2",b"0.10.3",b"0.10.4"]
-SHOW_TQDM = True
+SHOW_TQDM = False
 
 ADD_MC_DETECTIONS = True #raw line detections from *.mc files
 ADD_CS_DETECTIONS = True #raw contiuum detections from cs/*.list files
@@ -122,7 +122,7 @@ class PrintLog:
             try:
                 with open(self.logfile,"a") as f:
                     if exc_info:
-                        f.write(logmsg + traceback.format_exc() + "\n")
+                        f.write(logmsg + ": " + traceback.format_exc() + "\n")
                     else:
                         f.write(logmsg+"\n")
             except:
@@ -144,7 +144,7 @@ class PrintLog:
         self.log(msg,exc_info)
 # end class def
 
-log = PrintLog('h5_merge.log')
+log = PrintLog('ssr_h5_build.log')
 
 
 
@@ -2253,6 +2253,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         except:
             log.debug(f"[{datevshot}] Index fail on AmpStats table", exc_info=True)
 
+
         fileh.root.AmpStats.flush()
 
 
@@ -2280,11 +2281,13 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                             #compression is automatic due to group creation with filters defined
                             fileh.create_array(groupCoadd, n.name, img_array)
                         except:
-                            log.debug(f"[{datevshot}] Exception adding {n}", exc_info=True)
+                            #log.debug(f"[{datevshot}] Exception adding {n}", exc_info=True)
+                            plog(f"[{datevshot}] Exception adding {n}: {traceback.format_exc()}")
 
                 fileh.flush()
             except:
-                log.debug(f"[{datevshot}] Exception adding Collapsed Image(s)", exc_info=True)
+                #log.debug(f"[{datevshot}] Exception adding Collapsed Image(s)", exc_info=True)
+                plog(f"[{datevshot}] Exception adding Collapsed Image(s): {traceback.format_exc()}")
 
 
             try:
@@ -2302,7 +2305,8 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
                 fileh.root.Astrometry.NominalVals.flush()
             except:
-                log.debug(f"[{datevshot}] Exception adding Astrometry.NominalVals", exc_info=True)
+                #log.debug(f"[{datevshot}] Exception adding Astrometry.NominalVals", exc_info=True)
+                plog(f"[{datevshot}] Exception adding Astrometry.NominalVals: {traceback.format_exc()}")
 
             try:
                 plog(f"[{datevshot}] Astrometry.QA")
@@ -2319,7 +2323,8 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
                 fileh.root.Astrometry.QA.flush()
             except:
-                log.debug(f"[{datevshot}] Exception adding Astrometry.QA", exc_info=True)
+                #log.debug(f"[{datevshot}] Exception adding Astrometry.QA", exc_info=True)
+                plog(f"[{datevshot}] Exception adding Astrometry.QA: {traceback.format_exc()}")
 
             #plog(f"[{datevshot}] Deliberately skipping Astrometry.ShuffleCfg. This is by design.")
 
@@ -2330,7 +2335,8 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                     fileh.create_array(groupAstrometry, 'ShuffleCfg', blob)
                     shot_h5.root.Astrometry.ShuffleCfg.flush()
             except:
-                log.debug(f"[{datevshot}] Exception adding Astrometry.ShuffleCfg", exc_info=True)
+                #log.debug(f"[{datevshot}] Exception adding Astrometry.ShuffleCfg", exc_info=True)
+                plog(f"[{datevshot}] Exception adding Astrometry.ShuffleCfg: {traceback.format_exc()}")
 
 
             try:
@@ -2348,7 +2354,8 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
                 fileh.root.Astrometry.StarCatalog.flush()
             except:
-                log.debug(f"[{datevshot}] Exception adding Astrometry.StarCatalog", exc_info=True)
+                #log.debug(f"[{datevshot}] Exception adding Astrometry.StarCatalog", exc_info=True)
+                plog(f"[{datevshot}] Exception adding Astrometry.StarCatalog: {traceback.format_exc()}")
 
 
             try:
@@ -2369,7 +2376,9 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
                 fileh.root.Astrometry.fplane.flush()
             except:
-                log.debug(f"[{datevshot}] Exception adding Astrometry.fplane", exc_info=True)
+                #log.debug(f"[{datevshot}] Exception adding Astrometry.fplane", exc_info=True)
+                plog(f"[{datevshot}] Exception adding Astrometry.fplane: {traceback.format_exc()}")
+
 
 
             #CatalogMatches ... depends on the number of exposures
@@ -2402,7 +2411,8 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 fileh.root.Astrometry.CatalogMatches.flush()
 
             except:
-                log.debug(f"[{datevshot}] Exception adding Astrometry.CatalogMatches.expXX", exc_info=True)
+                #log.debug(f"[{datevshot}] Exception adding Astrometry.CatalogMatches.expXX", exc_info=True)
+                plog(f"[{datevshot}] Exception adding Astrometry.CatalogMatches.expXX: {traceback.format_exc()}")
 
             # Dithall ... depends on the number of exposures
             try:
@@ -2425,7 +2435,8 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
                 fileh.root.Astrometry.Dithall.flush()
             except:
-                log.debug(f"[{datevshot}] Exception adding Astrometry.Dithall.expXX", exc_info=True)
+                #log.debug(f"[{datevshot}] Exception adding Astrometry.Dithall.expXX", exc_info=True)
+                plog(f"[{datevshot}] Exception adding Astrometry.Dithall.expXX: {traceback.format_exc()}")
 
 
             # PositionOffsets ... depends on the number of exposures
@@ -2451,7 +2462,8 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
                 fileh.root.Astrometry.PositionOffsets.flush()
             except:
-                log.debug(f"[{datevshot}] Exception adding Astrometry.PositionOffsets.expXX", exc_info=True)
+                #log.debug(f"[{datevshot}] Exception adding Astrometry.PositionOffsets.expXX", exc_info=True)
+                plog(f"[{datevshot}] Exception adding Astrometry.PositionOffsets.expXX: {traceback.format_exc()}")
 
 
 
@@ -3978,6 +3990,12 @@ if "-help" in args:
         --include_all_reports       optional
             Include the ELiXer report images for all reports, including for those detections deemed 'bad'
             
+        --overwrite                 optional
+            Overwrite target file. Otherwise, if the file exists, abort processing.
+        
+        --tqdm                      optional
+            Show progress bars.
+            
 
             
     """
@@ -4027,6 +4045,9 @@ if "-clear_mutex" in args:
     except:
         pass
     exit(0)
+
+
+
 
 shot_h5_fqfn = None
 if "-shot_h5" in args: #path to the shot h5 file
@@ -4087,6 +4108,19 @@ if "-elixer_h5_force" in args: #path to the shot h5 file
     elixer_h5_force = True
     args.remove("-elixer_h5_force")
 
+if "-tqdm" in args:
+    args.remove("-tqdm")
+    SHOW_TQDM = True
+else:
+    SHOW_TQDM = False
+
+if "-overwrite" in args:
+    args.remove("-overwrite")
+    OVERWRITE = True
+else:
+    OVERWRITE = False
+
+
 images_path = None
 if "-images" in args:
     i = args.index("-images")
@@ -4122,8 +4156,8 @@ if "-bg" in args:
     i = args.index("-bg")
     try:
         Max_Simultaneous_Shots = int(args[i+1])
-        if Max_Simultaneous_Shots > 0:
-            SHOW_TQDM = False
+        # if Max_Simultaneous_Shots > 0:
+        #     SHOW_TQDM = False
     except:
         print(f"Invalid -bg argument specified: {args[i + 1]}")
         exit(-1)
@@ -4176,11 +4210,21 @@ if len(args) > 0:
     plog(f"[{datevshot}] Unknown remaining args: {args}")
 
 
+#is this a legit call ... do NOT overwrite a file that is already there
+if os.path.exists("ssr_" + os.path.basename(shot_h5_fqfn)):
+    if OVERWRITE:
+        plog(f"[{datevshot}] Output file ALREADY EXISTS, but --overwrite specified. Will OVERWRITE")
+    else:
+        plog(f"[{datevshot}] Output file ALREADY EXISTS and --overwrite NOT specified. Skipping.")
+        exit(1)
+
+
 wait_to_run(Max_Simultaneous_Shots, datevshot=datevshot,clean_up=False)
 
 start_time = time.perf_counter()
 
 new_h5_fn = build_ssr_shot_h5(shot_h5_fqfn, elixer_fn=elixer_h5_path)
+
 if images_path is not None and not FATAL_EXIT and new_h5_fn is not None:
     #print("Skipping images import")
     #using the earray and growing
