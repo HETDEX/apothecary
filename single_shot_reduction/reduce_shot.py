@@ -1197,6 +1197,15 @@ def run_prep_compress(cfg,max_simultaneous=0):
         except:
             print(traceback.format_exc())
 
+    #repeat user warning
+    if bg > 20:
+        print(f"Warning! --prep_compress maximum recommended is 20 for a 'normal' node with 256GB RAM.")
+        print(f"Warning! Other considerations may be active (i.e. if these are known to be small files or"
+              f" without ELiXer reports, etc)")
+    elif bg == 0:
+        print(f"Warning! --prep_compress concurrency not enforced. Be sure to regulate in your SLURM file.")
+
+
     os.chdir(cwd)
 
 def hetdex_dither(cfg):
