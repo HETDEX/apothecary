@@ -536,6 +536,8 @@ if "-help" in args:
                                           concurrent processes to use followed by the shots to include (wildcards
                                           allowed but the string should be in quotes). A 'normal' node with 256GB should
                                           be safe with 20 concurrent processes. Above that there can be memory problems.
+                                          A value of 0 does not set a concurrency limit, so that should be regulated
+                                          in a SLURM file (--ntasks_per_node).
     
     --queue_elixer : Special operation - Inserts provided shots (wildcard allowed, but should be in quotes)
                                          into SLURM queue as previously designated. Updates elixer slurm scripts,
@@ -683,6 +685,8 @@ if "-prep_compress" in args:
             print(f"Warning! --prep_compress maximum recommended is 20 for a 'normal' node with 256GB RAM.")
             print(f"Warning! Other considerations may be active (i.e. if these are known to be small files or"
                   f" without ELiXer reports, etc)")
+        elif prep_compress == 0:
+            print(f"Warning! --prep_compress concurrency not enforced. Be sure to regulate in your SLURM file.")
             #continue anyway, this is just a warning
 
     except:
@@ -1125,7 +1129,7 @@ def run_queue_elixer(cfg):
 
     os.chdir(cwd)
 
-def run_prep_compress(cfg,max_simultaneous=3):
+def run_prep_compress(cfg,max_simultaneous=0):
     """
 
     :param cfg:
@@ -1184,7 +1188,7 @@ def run_prep_compress(cfg,max_simultaneous=3):
                     print(f"[{datevshot}] !WARNING! No correspondig report images found. Not fatal, but "
                           f"there will be no ELiXer reports in the output.")
 
-            if bg:
+            if bg > 0:
                 cmd += " &"
             with open("compress.run","a") as f:
                 print("compress.run << ",cmd,flush=True)
