@@ -2408,7 +2408,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
                     scmtb.flush()
 
-                fileh.root.Astrometry.CatalogMatches.flush()
+                #fileh.root.Astrometry.CatalogMatches.flush()  #only the leaf nodes have a .flush()
 
             except:
                 #log.debug(f"[{datevshot}] Exception adding Astrometry.CatalogMatches.expXX", exc_info=True)
@@ -2433,7 +2433,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
                     datb.flush()
 
-                fileh.root.Astrometry.Dithall.flush()
+                #fileh.root.Astrometry.Dithall.flush() #only the leaf nodes have a .flush()
             except:
                 #log.debug(f"[{datevshot}] Exception adding Astrometry.Dithall.expXX", exc_info=True)
                 plog(f"[{datevshot}] Exception adding Astrometry.Dithall.expXX: {traceback.format_exc()}")
@@ -2460,7 +2460,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
                     potb.flush()
 
-                fileh.root.Astrometry.PositionOffsets.flush()
+                #fileh.root.Astrometry.PositionOffsets.flush() #only the leaf nodes have a .flush()
             except:
                 #log.debug(f"[{datevshot}] Exception adding Astrometry.PositionOffsets.expXX", exc_info=True)
                 plog(f"[{datevshot}] Exception adding Astrometry.PositionOffsets.expXX: {traceback.format_exc()}")
