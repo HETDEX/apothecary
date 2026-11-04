@@ -1112,6 +1112,7 @@ class CalfibDQ(tables.IsDescription):
 #     SATELLITE = 1024          # 0x0400
 #     BADCAL = 2048             # 0x0800
 #     PIXMASK = 4096            # 0x1000
+# >>. COULD ADD MASK HERE       # 0x2000  #as skyline mask or detection frequency mask ?
 
 # now combined with Fibers
 class VIRUSFiberIndexWithFlags(tables.IsDescription):
@@ -1656,7 +1657,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
         # Shot Table
         #######################################
 
-        fileh.create_table(fileh.root, 'Shot', VIRUSShot, 'Shot Summary Table')
+        fileh.create_table(fileh.root, 'Shot', VIRUSShot, 'Shot Summary Table') #,filters=COMPRESSION_FILTER)
 
         #see if status.pass, .warn, .fail exists and read it in
         #it should normally be in the same directory as the shot_fn
@@ -1748,7 +1749,8 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             try:
                 group = fileh.create_group(fileh.root, "Calibration", "HETDEX Calibration Info")
                 groupThroughput = fileh.create_group(group, "Throughput", "Throughput Curve")
-                fileh.create_table(fileh.root.Calibration.Throughput, "throughput", ThroughputTable, 'Throughput Curve')
+                fileh.create_table(fileh.root.Calibration.Throughput, "throughput", ThroughputTable, 'Throughput Curve',
+                                   filters=COMPRESSION_FILTER)
 
                 for row in shot_h5.root.Calibration.Throughput.throughput.read():
                     # for row in shot_h5.root.Data.Fibers.read():
@@ -1814,7 +1816,8 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                             c4 = [c4]
 
 
-                        fileh.create_table(fileh.root.Calibration.Throughput, "TP_All", TP_All, 'TP All')
+                        fileh.create_table(fileh.root.Calibration.Throughput, "TP_All", TP_All, 'TP All',
+                                           filters=COMPRESSION_FILTER)
                         for i in range(len(refid)):
                             new_row = fileh.root.Calibration.Throughput.TP_All.row
 
@@ -1905,7 +1908,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             #             if mx > threshold_16:
             #                 use32 = True
 
-        #note: turning on fitlers=COMPRESSION_FITLER can save about 500MB per file BUT
+        #note: !!! turning on fitlers=COMPRESSION_FITLER can save about 500MB per file BUT
         #      reading the fibers is 1.5 to 3x longer and fibers are what are hit most
         if use32:
             plog(f"[{datevshot}] Using Float32 for VIRUSFibers",flush=True)
@@ -2126,7 +2129,8 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
             # * up to 3 dithers * 4 amps * # active IFUs ... can get to that just by the length of the table
             # wait on a filelock (for, say, tmp_ssrvirusimage.ct) ... allow up to
 
-            target_memory_GB = 3 * 1032 * 1032 * len(shot_h5.root.Data.Images) * (4 if use32 else 2) / 2**30
+            #give it just a little more room, 10% extra
+            target_memory_GB = 1.1 * 3 * 1032 * 1032 * len(shot_h5.root.Data.Images) * (4 if use32 else 2) / 2**30
             #remove this memory from the "Available" and add it back at the end of this section
             #nominal max, 78 IFUs x 4 amps x 3 dithers x 3 images  at 32bit ~ 11.2 GB
 
@@ -2292,7 +2296,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
             try:
                 plog(f"[{datevshot}] Astrometry.NominalVals")
-                fileh.create_table(groupAstrometry, 'NominalVals', NominalVals, 'Nominal Values')
+                fileh.create_table(groupAstrometry, 'NominalVals', NominalVals, 'Nominal Values',filters=COMPRESSION_FILTER)
                 copy_cols = fileh.root.Astrometry.NominalVals.colnames
                 for row in tqdm(shot_h5.root.Astrometry.NominalVals.read(), disable=not SHOW_TQDM):
                     new_row = fileh.root.Astrometry.NominalVals.row
@@ -2310,7 +2314,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
             try:
                 plog(f"[{datevshot}] Astrometry.QA")
-                fileh.create_table(groupAstrometry, 'QA', QualityAssessment, 'Quality Assessment')
+                fileh.create_table(groupAstrometry, 'QA', QualityAssessment, 'Quality Assessment',filters=COMPRESSION_FILTER)
                 copy_cols = fileh.root.Astrometry.QA.colnames
                 for row in tqdm(shot_h5.root.Astrometry.QA.read(), disable=not SHOW_TQDM):
                     new_row = fileh.root.Astrometry.QA.row
@@ -2341,7 +2345,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
             try:
                 plog(f"[{datevshot}] Astrometry.StarCatalog")
-                fileh.create_table(groupAstrometry, 'StarCatalog', StarCatalog, 'StarCatalog')
+                fileh.create_table(groupAstrometry, 'StarCatalog', StarCatalog, 'StarCatalog',filters=COMPRESSION_FILTER)
                 copy_cols = fileh.root.Astrometry.StarCatalog.colnames
                 for row in tqdm(shot_h5.root.Astrometry.StarCatalog.read(), disable=not SHOW_TQDM):
                     new_row = fileh.root.Astrometry.StarCatalog.row
@@ -2360,7 +2364,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
             try:
                 plog(f"[{datevshot}] Astrometry.fplane")
-                fileh.create_table(groupAstrometry, 'fplane', Fplane, 'fplane')
+                fileh.create_table(groupAstrometry, 'fplane', Fplane, 'fplane',filters=COMPRESSION_FILTER)
                 int_cols = ['ifuslot','specid','specslot','ifuid']
                 float_cols = ['fpx','fpy','ifurot','platesc']
                 for row in tqdm(shot_h5.root.Astrometry.fplane.read(), disable=not SHOW_TQDM):
@@ -2393,7 +2397,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 float_cols = ['RA_det','DEC_det','xifu_det','yifu_det','RA_cat','DEC_cat','xifu_cat','yifu_cat']
 
                 for node in shot_h5.root.Astrometry.CatalogMatches: #this is "exp01", "exp02", ...
-                    scmtb = fileh.create_table(subgroup, node.name, StarCatalogMatches, 'Match Catalog Info')
+                    scmtb = fileh.create_table(subgroup, node.name, StarCatalogMatches, 'Match Catalog Info',filters=COMPRESSION_FILTER)
                     for row in node:
                         new_row = scmtb.row
 
@@ -2421,7 +2425,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
                 for node in shot_h5.root.Astrometry.Dithall:  # this is "exp01", "exp02", ...
                     plog(f"[{datevshot}] Astrometry.Dithall {node.name} , {len(node)} rows")
-                    datb = fileh.create_table(subgroup, node.name, Dithall, 'Fiber Astrometry Info')
+                    datb = fileh.create_table(subgroup, node.name, Dithall, 'Fiber Astrometry Info',filters=COMPRESSION_FILTER)
                     for row in node:
                         new_row = datb.row
                         copy_cols = node.colnames
@@ -2447,7 +2451,7 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
                 float_cols = ['xoffset','yoffset','ra_dex','dec_dex','ra_cat','dec_cat']
 
                 for node in shot_h5.root.Astrometry.PositionOffsets:  # this is "exp01", "exp02", ...
-                    potb = fileh.create_table(subgroup, node.name, PositionOffsets, 'Offset in star matches')
+                    potb = fileh.create_table(subgroup, node.name, PositionOffsets, 'Offset in star matches',filters=COMPRESSION_FILTER)
                     for row in node:
                         new_row = potb.row
 
@@ -2960,12 +2964,10 @@ def build_ssr_shot_h5(shot_fn, elixer_fn=None):#, outfn=None):
 
         if use32:
             plog(f"[{datevshot}] Using Float32 for EmptyFiber")
-            fileh.create_table(fileh.root, 'EmptyFiber', EmptyFiber32, 'Shot Average Empty Fiber',
-                               filters=COMPRESSION_FILTER)
+            fileh.create_table(fileh.root, 'EmptyFiber', EmptyFiber32, 'Shot Average Empty Fiber')
         else:
             plog(f"[{datevshot}] Using Float16 for EmptyFiber")
-            fileh.create_table(fileh.root, 'EmptyFiber', EmptyFiber16, 'Shot Average Empty Fiber',
-                               filters=COMPRESSION_FILTER)
+            fileh.create_table(fileh.root, 'EmptyFiber', EmptyFiber16, 'Shot Average Empty Fiber')
 
 
         #each table is only one row, but many columns
