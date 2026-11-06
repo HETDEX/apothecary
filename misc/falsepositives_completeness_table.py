@@ -34,7 +34,9 @@ from datetime import datetime
 #import astropy.stats.biweight as biweight
 
 import sys
-SHOW_TQDM = False
+import shutil
+from pathlib import Path
+SHOW_TQDM = True
 
 if "tacc" in socket.gethostname():
     LOCAL = False
@@ -67,6 +69,7 @@ if not LOCAL and not os.path.exists(f"group_{str(group_num).zfill(2)}"):
 #######################################
 shot_fiber_dict = {}
 
+#get the LIST of files with their group ... only have this on the /scratch right now
 shot_fns = glob.glob(f"/scratch/03261/polonius/parallel/line_det_test/group_{str(group_num).zfill(2)}/ssr_*.h5")
 
 #
@@ -95,16 +98,39 @@ if len(shot_fns) < 1:
     print("FATAL. Could not find shots.")
     exit(-1)
 
+if not LOCAL:
+    dirpath = "/tmp/fpr"
+    try:
+        dirpath.mkdir(parents=True, exist_ok=True)
+    except:
+        print(f"Fatal. Stop. cannot create /tmp/fpr")
+        exit(-1)
+
 for fn in shot_fns:
     if LOCAL:
-        fn = f"/run/media/dustin/easystore/laurel_repeats/" + os.path.basename(fn)
+        destfn = f"/run/media/dustin/easystore/laurel_repeats/" + os.path.basename(fn)
+        if not os.path.exists(destfn):
+            destfn = f"/media/dustin/easystore/laurel_repeats/" + os.path.basename(fn)
+            if not os.path.exists(destfn):
+                print("Fatal Problem. Cannot find files.")
+                exit(-1)
+    else:
+        #copy tp /tpp and point there
+        try:
+            destfn = os.path.join("/tmp/fpr", os.path.basename(fn))
+            shutil.copy(fn, destfn)
+        except:
+            print(f"Fatal. Stop. cannot copy file {fn} to /tmp/fpr")
+            print(traceback.format_exc())
+            exit(-1)
 
-    print(f"Loading {fn} ...")
-    shot = int(os.path.basename(fn).split("ssr_")[1].split(".")[0].replace("v", ""))
+
+    print(f"Loading {destfn} ...")
+    shot = int(os.path.basename(destfn).split("ssr_")[1].split(".")[0].replace("v", ""))
     d = {}
-    d['Fibers'] = Fibers(shot=shot, shot_h5=fn)
+    d['Fibers'] = Fibers(shot=shot, shot_h5=destfn)
 
-    ssr_h5 = tables.open_file(fn)
+    ssr_h5 = tables.open_file(destfn)
     shot_row = ssr_h5.root.Shot.read()
     d['seeing'] = shot_row['fwhm_virus'][0]
     d['tput'] = shot_row['response_4540'][0]
@@ -344,9 +370,11 @@ if True: #response.lower() == 'y':
     # out_has_multiples = [] #e.g. in a single shot ... put in the list of shotids
 
     # to be considered a match
-    base_max_sep = 2.0  # arcsec  ... this actually needs to be flexible, esp for resolved objects !!!
+    base_max_sep = 1.0  # arcsec  ... this actually needs to be flexible, esp for resolved objects !!!
     base_max_resolved_major = 15.0 #arcsec
-    max_delta_wave = 6.0  # AA   #this is the usual, but I worry it gets a bit to lax for small lin ewidths
+    max_delta_wave = 4.0  # AA   #this is the usual, but I worry it gets a bit to lax for small lin ewidths
+    low_sn_max_delta_wave = 2.0
+    low_sn_thresh = 5.2
 
     # no-match found check on fibers
     aperture = 3.5  # arcsec ... this is the aperture using the target coords on the bid_shot, assume some
@@ -439,14 +467,15 @@ if True: #response.lower() == 'y':
             dtnow = datetime.now()
             dtnowstr = "%s:%s:%s.%s : " % (str(dtnow.hour).zfill(2), str(dtnow.minute).zfill(2), str(dtnow.second).zfill(2),
                                 str(dtnow.microsecond).zfill(6))
+
+            elixer_dets = td[td['shotid'] == shot]['detectid']
+
             if shot in already_done_shots:
                 print(f"{dtnowstr} Already done group {group} shot {shot_counter} / {len(u_shots)} : {shot} with {len(elixer_dets)} dets ...")
                 continue
             else:
                 print(f"{dtnowstr} Starting group {group} shot {shot_counter} / {len(u_shots)} : {shot} with {len(elixer_dets)} dets ...")
 
-
-            elixer_dets = td[td['shotid'] == shot]['detectid']
             # print(f"#dets {len(elixer_dets)}")
             # T =zp[1]
 
@@ -468,7 +497,8 @@ if True: #response.lower() == 'y':
 
                 sel_update = T_elixer_dets['detectid'] == det
                 # ri = T_elixer_dets[T_elixer_dets['detectid']==det]
-                ri = T_elixer_dets[sel_update]
+                ri = T_elixer_dets[sel_update][0]
+                det_snr = ri['sn']
 
                 # out_sn.append(ri['sn'][0])
                 # out_shots.append(ri['shotid'][0])
@@ -508,13 +538,23 @@ if True: #response.lower() == 'y':
                 # if an extended object falls off the IFU where we want to look, then this just does not add to the
                 # set of valid shots to check ... could have a small impact to either the confirmation or failure side, but
                 # it just won't count toward either
+
+                #todo: COULD THIS BE A BIG I/O Hit? hetdex_api might be re-loading repeatedly??
+                # may want to lmit this code to 1 instance per node AND copy the 9, 10, or 11 ssr_h5 files to
+                # /tmp/ and point the shot_fiber_dict{} there ... I suspect hetdex_api may be repeatedly
+                # re-reading the Fubers table or leaving it up to pytables, which is maybe not caching as expected
+                # Since we have about 1.5TB of shot h5 files here, we cannot copy them all to /tmp/ (which only has
+                #  256GB per node)
                 ff = shot_fiber_dict[shot]['Fibers'].query_region(ref_coord, radius=max(aperture, max_sep / 2.0))
                 if np.any(ff['flag'] == 0):  # this is bad in some way
                     print(f"[{det}] bad ff")
                     continue
 
                 # full length of td
-                allowed_delta_wave = min(2.5 * float(ri['fwhm_line_aa']) / 2.355, max_delta_wave)
+                if det_snr < low_sn_thresh:
+                    allowed_delta_wave = min(2.5 * float(ri['fwhm_line_aa']) / 2.355, low_sn_max_delta_wave)
+                else:
+                    allowed_delta_wave = min(2.5 * float(ri['fwhm_line_aa']) / 2.355, max_delta_wave)
                 sel_wave = np.array(abs(td['wavelength_obs'] - ri['wavelength_obs']) <= allowed_delta_wave)
 
                 # td_bid_match = td[sel_wave]
@@ -606,7 +646,10 @@ if True: #response.lower() == 'y':
                                 tm = tmX[tmX['shotid'] == bid_shot]  # shotid is only in any one group
 
                                 # full length of td
-                                sel_mc_wave = np.array(abs(tm['wave'] - ri['wavelength_obs']) <= max_delta_wave)
+                                if det_snr < low_sn_thresh:
+                                    sel_mc_wave = np.array(abs(tm['wave'] - ri['wavelength_obs']) <= low_sn_max_delta_wave)
+                                else:
+                                    sel_mc_wave = np.array(abs(tm['wave'] - ri['wavelength_obs']) <= max_delta_wave)
 
                                 # td_bid_match = td[sel_wave]
                                 sel_mc_radec = np.array(
