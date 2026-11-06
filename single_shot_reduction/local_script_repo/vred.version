@@ -1,0 +1,13 @@
+vred_iback1 is a test version of vred that applies a pseudo-rescor to an amp during reductions,
+  but based locally on that instance of the amp alone.
+ 
+ It may do well to remove unnatural "sky" lines that are angled over the
+  detector (e.g. local lamps, LEDs, etc that are not following the same
+  optical path as the real sky lines). ... the effect is you can see them
+  in the cleaned_image, where they are over- then under- subtracted at one
+  end of the amp and as you move to the other end (top to bottom), they flip
+  to under- then over- subtracted.
+
+  A consequence though, is that you can loose lines that are real and cover
+  much of the amp (e.g. extended objects, planetary nebulae, etc)
+
