@@ -400,6 +400,12 @@ if True: #response.lower() == 'y':
     #     shot = int(os.path.basename(fn).split("ssr_")[1].split(".")[0].replace("v",""))
     #     shot_fiber_dict[shot] = Fibers(shot=shot,shot_h5=fn)
 
+    T_elixer_dets.add_index('detectid')
+    T_elixer_dets.add_index('shotid')
+
+    T_elixer_sep.add_index('detectid')
+
+    T_fiber_coords.add_index('shotid')
 
     # print("just running 1 group, 1 shot")
     for group in u_groups:  # [0:1]):
@@ -414,6 +420,10 @@ if True: #response.lower() == 'y':
         tf = T_fiber_coords[T_fiber_coords['group'] == group]
         Te = T_elixer_sep[T_elixer_sep['group'] == group]
         tmX = T_mc_dets[T_mc_dets['group'] == group]
+
+
+        #add some indexes for speed
+        #td.add_index('shotid') #alread above
 
         ra_for_dec_adjust = np.cos(np.deg2rad(td['dec'][0]))  # degrees, adjusted for declination
 
@@ -488,7 +498,7 @@ if True: #response.lower() == 'y':
                     continue
 
                 max_sep = base_max_sep  # reset for each detection
-                found_but_get_stats_anyway = False
+                #found_but_get_stats_anyway = False #not used anymore
                 repeat_hits = 0
                 # out_dets.append(det)
                 # out_matches.append([])
@@ -547,6 +557,7 @@ if True: #response.lower() == 'y':
                 #  256GB per node)
                 ff = shot_fiber_dict[shot]['Fibers'].query_region(ref_coord, radius=max(aperture, max_sep / 2.0))
                 if np.any(ff['flag'] == 0):  # this is bad in some way
+                    #this target detectID is Then NOT included in the cross matching
                     print(f"[{det}] bad ff")
                     continue
 
@@ -576,7 +587,8 @@ if True: #response.lower() == 'y':
                 ct = len(matching_shots)  # only count a shot once, even if more than
                 # one match is found (rare, but does happen)
 
-                if ct > 0:
+                if ct > 0: #we found a match BUT, it could be just the 1 from the target shot ... we check that below
+                    #this is the expected case .. we should find at least itself
                     x_match_shot_list = td['shotid'][sel_wave][sel_radec][sel_coord]
                     x_match_sn_list = td['sn'][sel_wave][sel_radec][sel_coord]
                     match_shot_list = []
@@ -612,28 +624,48 @@ if True: #response.lower() == 'y':
                         # if bid_shot == shot:
                         #     continue #skip itself
 
-                        sel_tf = tf['shotid'] == bid_shot
-                        sel_radec = np.array(abs(tf['ra'][sel_tf] - ri['ra']) <= max_miss_ra) * \
-                                    np.array(abs(tf['dec'][sel_tf] - ri['dec']) <= max_miss_dec)
 
-                        bid_fiber_coords = SkyCoord(ra=np.array(tf['ra'][sel_tf][sel_radec]) * u.deg,
-                                                    dec=np.array(tf['dec'][sel_tf][sel_radec]) * u.deg)
+                        #!!! what we REALLY want is ... for point sources, do we have (9) fibers within an aperture
+                        # with some wiggle room within 1" of the soruce RA, Dec
+                        #    FOR EXTENDED objects, that wiggle room is increased to the major axis up to 15"
+                        #
+                        # so, update 20261109 ... extended objects are rare and will take care of themselves
+                        #   the normal point source case is the important one  ... so we could simplify to
+                        #   9 fibers within the normal 3.5" aperture centered ON the target RA, Dec ... this is our
+                        #   nominal best chance to get a match
 
-                        sep = ref_coord.separation(bid_fiber_coords)
 
-                        num_in_range = np.count_nonzero(sep.arcsec < aperture)
+
+                        #sel_tf = tf['shotid'] == bid_shot
+                        #THIS IS WRONG ... we want the fibers within the normal extraction aperture
+                        # or the extended object aperterure ... NOT just within the PSF weighted center of the match
+                        # FOR EXTENDED OBJECTS the max_miss_ra/dec are larger BUT for the 1" nomral case this is
+                        # far too small ... way below the aperture size
+                        #sel_radec = np.array(abs(tf['ra'][sel_tf] - ri['ra']) <= max_miss_ra) * \
+                        #            np.array(abs(tf['dec'][sel_tf] - ri['dec']) <= max_miss_dec)
+                        #
+                        # sel_radec = np.array(abs(tf['ra'][sel_tf] - ri['ra']) <= max(max_miss_ra,aperture/3600.)) * \
+                        #             np.array(abs(tf['dec'][sel_tf] - ri['dec']) <= max(max_miss_dec,aperture/3600.))
+                        #
+                        # bid_fiber_coords = SkyCoord(ra=np.array(tf['ra'][sel_tf][sel_radec]) * u.deg,
+                        #                             dec=np.array(tf['dec'][sel_tf][sel_radec]) * u.deg)
+                        #
+                        # sep = ref_coord.separation(bid_fiber_coords)
+                        #
+                        # num_in_range = np.count_nonzero(sep.arcsec < aperture)
                         # collect the completeness info regardless of whether it was found or not OR is THIS shot
 
                         okay_to_continue = False
                         if bid_shot == shot:  # it is the original source shot
                             okay_to_continue = True
-                        elif num_in_range >= min_fiber_ct:
+                        else: #if num_in_range >= min_fiber_ct:
                             # is this a bad (bid) detection?? if so skip
                             # FUTURE can do better with new reductions and the full fiber flagging is available per wavelength
                             # and could just look at the wavelength range
                             ff = shot_fiber_dict[bid_shot]['Fibers'].query_region(ref_coord,
                                                                                   radius=max(aperture, max_sep / 2.0))
-                            if not np.any(ff['flag'] == 0):  # this not explicity bad
+
+                            if len(ff) >= min_fiber_ct and not np.any(ff['flag'] == 0):  # this not explicity bad
                                 okay_to_continue = True
 
                         if okay_to_continue:  # assume coverage is sufficient
