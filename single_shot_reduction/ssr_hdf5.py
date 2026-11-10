@@ -4599,7 +4599,7 @@ try:
     #need somewhere around 20GB for normal big shots (once IFU is full)
     #varies depending also on the number of exposures, but 20GB is a safe rule of thumb
 
-    print(f"*** Approx BaseRAM {ApproxBaseRAM:0.1f}GB")
+    print(f"*** Approx BaseRAM {ApproxBaseRAM:0.1f} GB")
 
 except:
     ApproxBaseRAM = -1
@@ -4862,7 +4862,6 @@ if fib_h5_condition > 0:
 
     if ssr_h5_filename is not None:
         #we are building either or both of the fiber h5 or fits files
-
         if fib_fits_condition == 1: #only the fits
             print("Only building fiber fits file")
             fib_h5 = build_fiber_h5(ssr_h5_filename, compression_filter=None,write_file=False)
@@ -4879,23 +4878,6 @@ if fib_h5_condition > 0:
                 fib_fits = build_fiber_fits(fib_h5, gzip_level=None)
                 plog(f"Built fiber only fits file: {fib_fits}")
 
-
-
-
-
-        #
-        # if fib_fits_condition != 1:
-        #     fib_h5 = build_fiber_h5(ssr_h5_filename, compression_filter=None)
-        #     plog(f"Built fiber only h5 file: {fib_h5}")
-        #     if fib_fits_condition == 2:
-        #         fib_fits = build_fiber_fits(fib_h5, gzip_level=None)
-        #         plog(f"Built fiber only fits file: {fib_fits}")
-        # else:
-        #     fib_h5 = build_fiber_h5(ssr_h5_filename, compression_filter=None,write_file=False)
-        #     if fib_h5 is not None:
-        #         fib_fits = build_fiber_fits(fib_h5, gzip_level=None)
-        #         fib_h5.close()
-        #         plog(f"Built fiber only fits file: {fib_fits}")
     else:
         print(f"Cannot build fibers only h5. Source file unknown.")
 
