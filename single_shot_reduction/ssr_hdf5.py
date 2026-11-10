@@ -4232,7 +4232,7 @@ class ReducedEmptyFiber32(tables.IsDescription):
     contrib = tables.Int32Col(1036, pos=4)
 
 
-def build_fiber_h5(ssr_h5_filename,compression_filter=None):
+def build_fiber_h5(ssr_h5_filename,compression_filter=None, write_file=True):
     """
 
     build the stripped down (mostly) fiber-only h5 file
@@ -4244,7 +4244,7 @@ def build_fiber_h5(ssr_h5_filename,compression_filter=None):
                                The default compression takes 30-60 seconds to write and increases the read time
                                20-40x (e.g. roughly from 0.5 sec to 10 to 20 seconds to read in the whole fiber table)
                                (note: this is equivalent to the gzip_level in build_fiber_fits)
-    :return: output filename
+    :return: output filename OR the h5 memory file handle
     """
 
     try:
@@ -4253,7 +4253,12 @@ def build_fiber_h5(ssr_h5_filename,compression_filter=None):
         ssr_h5 = tables.open_file(ssr_h5_filename)
 
         outfn = "fib_" + os.path.basename(ssr_h5_filename).replace("ssr_", "")
-        fileh = tables.open_file(outfn, 'w', 'SingleShot Reduction Catalog Fibers Only')
+        if write_file:
+            fileh = tables.open_file(outfn, 'w', 'SingleShot Reduction Catalog Fibers Only')
+        else:
+            fileh = tables.open_file(outfn, 'w', 'SingleShot Reduction Catalog Fibers Only',
+                                     driver = "H5FD_CORE",driver_core_backing_store=0)
+
 
 
         ########################
@@ -4363,16 +4368,27 @@ def build_fiber_h5(ssr_h5_filename,compression_filter=None):
         # fileh.root.Shot.append(shot_h5.root.Shot.read())
         fileh.root.EmptyFiber.flush()
 
-        fileh.flush()
-        fileh.close()
+        if write_file:
+            fileh.flush()
+            fileh.close()
 
-        return outfn
+        ssr_h5.close()
+
+        if write_file:
+            return outfn
+        else:
+            return fileh
     except:
         plog(f"Exception in build_fiber_h5() for {ssr_h5_filename}: {traceback.format_exc()}")
         try:
             fileh.close()
         except:
             pass
+        try:
+            ssr_h5.close()
+        except:
+            pass
+
         return None
 
 
@@ -4385,7 +4401,7 @@ def build_fiber_h5(ssr_h5_filename,compression_filter=None):
 def build_fiber_fits(ssr_h5_filename,gzip_level=0):
     """
 
-    :param ssr_h5_filename:
+    :param ssr_h5_filename: a str or an h5 handle
     :param gzip_level: normally, this should be NONE. Comppression is time expensive both on the write side
                        and the read side and the space savings is not generally worth it.
                        The default compression (1) takes 30-60 seconds to write and increases the read time
@@ -4396,10 +4412,17 @@ def build_fiber_fits(ssr_h5_filename,gzip_level=0):
     """
 
     try:
-        ssr_h5 = tables.open_file(ssr_h5_filename)
+        if isinstance(ssr_h5_filename,str):
+            close_h5 = True
+            ssr_h5 = tables.open_file(ssr_h5_filename)
+            outfn = "fib_" + ssr_h5_filename.replace(".h5", ".fits").replace("ssr_", "").replace("fib_", "")
+
+        else:
+            close_h5 = False
+            ssr_h5 = ssr_h5_filename
+            outfn = "fib_" +  ssr_h5.root.Shot.read(field="datevobs")[0].decode() + ".fits"
 
         #input could be either the big ssr_h5 or a new fib_h5
-        outfn = "fib_" + ssr_h5_filename.replace(".h5", ".fits").replace("ssr_", "").replace("fib_","")
 
         hdul = fits.HDUList([fits.PrimaryHDU()])
         nodes = [ssr_h5.root.Version, ssr_h5.root.Shot, ssr_h5.root.EmptyFiber, ssr_h5.root.Fibers, ssr_h5.root.CalfibDQ]
@@ -4426,7 +4449,7 @@ def build_fiber_fits(ssr_h5_filename,gzip_level=0):
             hdul.append(table_hdu)
 
         # Write all tables out to a single FITS file
-        if gzip_level > 0:
+        if gzip_level is not None and gzip_level > 0:
             import gzip
             with gzip.open(outfn, "wb", compresslevel=gzip_level) as gz:
                 hdul.writeto(gz)
@@ -4434,9 +4457,17 @@ def build_fiber_fits(ssr_h5_filename,gzip_level=0):
             hdul.writeto(outfn, overwrite=True)
         print("Successfully converted PyTables to multi-extension FITS file.")
 
+        if close_h5:
+            ssr_h5.close()
+
         return outfn
     except:
         plog(f"Exception in build_fiber_fits() for {ssr_h5_filename}: {traceback.format_exc()}")
+        if close_h5:
+            try:
+                ssr_h5.close()
+            except:
+                pass
         return None
 
 ########################################################################
@@ -4568,7 +4599,7 @@ try:
     #need somewhere around 20GB for normal big shots (once IFU is full)
     #varies depending also on the number of exposures, but 20GB is a safe rule of thumb
 
-    print(f"*** Approx BaseRAM {ApproxBaseRAM:0.1f}GB)")
+    print(f"*** Approx BaseRAM {ApproxBaseRAM:0.1f}GB")
 
 except:
     ApproxBaseRAM = -1
@@ -4639,27 +4670,28 @@ else:
     shot_h5_path = os.path.dirname(shot_h5_fqfn)
 
 diagnose_path = None
-if "-diagnose" in args and fib_h5_condition != 2: #path to the diagnose table
-    i = args.index("-diagnose")
-    try:
-        diagnose_path = args[i+1]
-    except:
-        print(f"Invalid -diagnose specified: {args[i+1]}")
-        exit(-1)
+if fib_h5_condition != 2:
+    if "-diagnose" in args: #path to the diagnose table
+        i = args.index("-diagnose")
+        try:
+            diagnose_path = args[i+1]
+        except:
+            print(f"Invalid -diagnose specified: {args[i+1]}")
+            exit(-1)
 
-    del args[i+1]  # args.pop(0) #remove THIS file
-    args.remove("-diagnose")
-else:
-    #see if can guess based on the shot_h5
-    try:
-        diagnose_path = os.path.join(shot_h5_path,"diagnose_classifications.tab")
-        if not os.path.exists(diagnose_path):
-            diagnose_path = None
+        del args[i+1]  # args.pop(0) #remove THIS file
+        args.remove("-diagnose")
+    else:
+        #see if can guess based on the shot_h5
+        try:
+            diagnose_path = os.path.join(shot_h5_path,"diagnose_classifications.tab")
+            if not os.path.exists(diagnose_path):
+                diagnose_path = None
+                plog(f"[{datevshot}] Could not locate Diagnose table, will skip.")
+            else:
+                plog(f"[{datevshot}] Using Diagnose Classification : {diagnose_path}", flush=True)
+        except:
             plog(f"[{datevshot}] Could not locate Diagnose table, will skip.")
-        else:
-            plog(f"[{datevshot}] Using Diagnose Classification : {diagnose_path}", flush=True)
-    except:
-        plog(f"[{datevshot}] Could not locate Diagnose table, will skip.")
 
 
 elixer_h5_path = None
@@ -4741,41 +4773,42 @@ else:
 
 #default, level 2
 COMPRESSION_FILTER = tables.Filters(complevel=1, complib='zlib', bitshuffle=False, shuffle=False)
-if "-compression" in args and fib_h5_condition != 2:
-    i = args.index("-compression")
-    try:
-        compression = int(args[i+1])
+if fib_h5_condition != 2:
+    if "-compression" in args:
+        i = args.index("-compression")
+        try:
+            compression = int(args[i+1])
 
-        #create the filter to use
-        if compression == 1: #least compression (that is still acceptable, but fast)
-            #around 5 minutes (300s) for typical ELiXer data ~ 1000 detects and Neighbors
-            #around 3.3 GB
-            #yes, this one should be at level 9 (basically same time as level1 and a good bit better compression)
-            COMPRESSION_FILTER = tables.Filters(complevel=9, complib='blosc2', bitshuffle=False, shuffle=False)
-            plog(f"[{datevshot}] Using type 1 compression: blosc2 at complvl 9 . Limited compression (lossless), low CPU + time")
-        elif compression == 2: #standard
-            # around 6.0 minutes (360s) for typical ELiXer data ~ 1000 detects and Neighbors
-            # around 2.6 GB
-            # leave at complevel 1 (increasing is huge time cost for very little compression improvement)
-            COMPRESSION_FILTER = tables.Filters(complevel=1, complib='zlib', bitshuffle=False, shuffle=False)
-            plog(f"[{datevshot}] Using type 2 compression: zlib at complvl 1 . Good compression, moderate CPU + time")
-        elif compression == 3: #maximum
-            # around 17 minutes (1000s) for typical ELiXer data ~ 1000 detects and Neighbors
-            # around 1.9 GB (1.8Gb at level 9 and 18 minutes)
-            # 1 vs 9 is arund 1015s vs 1080s (e.g. +1 minute) for about 5% better compression
-            COMPRESSION_FILTER = tables.Filters(complevel=9, complib='bzip2', bitshuffle=False, shuffle=False)
-            plog(f"[{datevshot}] Using type 3 compression: bzip2 at complvl 9 . Maximum compression, maximum CPU + time")
-        else:
-            plog(f"[{datevshot}] Unexpected --compression value {compression}: Must be in [1,2,3], least compression to most and shortest to longest time cost")
+            #create the filter to use
+            if compression == 1: #least compression (that is still acceptable, but fast)
+                #around 5 minutes (300s) for typical ELiXer data ~ 1000 detects and Neighbors
+                #around 3.3 GB
+                #yes, this one should be at level 9 (basically same time as level1 and a good bit better compression)
+                COMPRESSION_FILTER = tables.Filters(complevel=9, complib='blosc2', bitshuffle=False, shuffle=False)
+                plog(f"[{datevshot}] Using type 1 compression: blosc2 at complvl 9 . Limited compression (lossless), low CPU + time")
+            elif compression == 2: #standard
+                # around 6.0 minutes (360s) for typical ELiXer data ~ 1000 detects and Neighbors
+                # around 2.6 GB
+                # leave at complevel 1 (increasing is huge time cost for very little compression improvement)
+                COMPRESSION_FILTER = tables.Filters(complevel=1, complib='zlib', bitshuffle=False, shuffle=False)
+                plog(f"[{datevshot}] Using type 2 compression: zlib at complvl 1 . Good compression, moderate CPU + time")
+            elif compression == 3: #maximum
+                # around 17 minutes (1000s) for typical ELiXer data ~ 1000 detects and Neighbors
+                # around 1.9 GB (1.8Gb at level 9 and 18 minutes)
+                # 1 vs 9 is arund 1015s vs 1080s (e.g. +1 minute) for about 5% better compression
+                COMPRESSION_FILTER = tables.Filters(complevel=9, complib='bzip2', bitshuffle=False, shuffle=False)
+                plog(f"[{datevshot}] Using type 3 compression: bzip2 at complvl 9 . Maximum compression, maximum CPU + time")
+            else:
+                plog(f"[{datevshot}] Unexpected --compression value {compression}: Must be in [1,2,3], least compression to most and shortest to longest time cost")
+                exit(-1)
+        except:
+            plog(f"[{datevshot}] Invalid -compression specified: {args[i+1]}")
             exit(-1)
-    except:
-        plog(f"[{datevshot}] Invalid -compression specified: {args[i+1]}")
-        exit(-1)
 
-    del args[i+1]  # args.pop(0) #remove THIS file
-    args.remove("-compression")
-else:
-    plog(f"[{datevshot}] Using [default] type 2 compression: zlib at complvl 1 . Good compression, moderate CPU + time")
+        del args[i+1]  # args.pop(0) #remove THIS file
+        args.remove("-compression")
+    else:
+        plog(f"[{datevshot}] Using [default] type 2 compression: zlib at complvl 1 . Good compression, moderate CPU + time")
 
 if len(args) > 0:
     if fib_h5_condition == 2:
@@ -4828,16 +4861,41 @@ if fib_h5_condition > 0:
         ssr_h5_filename = new_h5_fn
 
     if ssr_h5_filename is not None:
+        #we are building either or both of the fiber h5 or fits files
 
-        if fib_fits_condition != 1:
+        if fib_fits_condition == 1: #only the fits
+            print("Only building fiber fits file")
+            fib_h5 = build_fiber_h5(ssr_h5_filename, compression_filter=None,write_file=False)
+            if fib_h5 is not None:
+                fib_fits = build_fiber_fits(fib_h5, gzip_level=None)
+                fib_h5.close()
+                plog(f"Built fiber only fits file: {fib_fits}")
+            else:
+                plog(f"Failed to build fiber only fits file")
+        else:
             fib_h5 = build_fiber_h5(ssr_h5_filename, compression_filter=None)
             plog(f"Built fiber only h5 file: {fib_h5}")
-            if fib_fits_condition == 2:
-                fib_fits = build_fiber_fits(ssr_h5_filename, gzip_level=None)
+            if fib_fits_condition == 2: #aslo build the fits
+                fib_fits = build_fiber_fits(fib_h5, gzip_level=None)
                 plog(f"Built fiber only fits file: {fib_fits}")
-        else:
-            fib_fits = build_fiber_fits(ssr_h5_filename, gzip_level=None)
-            plog(f"Built fiber only fits file: {fib_fits}")
+
+
+
+
+
+        #
+        # if fib_fits_condition != 1:
+        #     fib_h5 = build_fiber_h5(ssr_h5_filename, compression_filter=None)
+        #     plog(f"Built fiber only h5 file: {fib_h5}")
+        #     if fib_fits_condition == 2:
+        #         fib_fits = build_fiber_fits(fib_h5, gzip_level=None)
+        #         plog(f"Built fiber only fits file: {fib_fits}")
+        # else:
+        #     fib_h5 = build_fiber_h5(ssr_h5_filename, compression_filter=None,write_file=False)
+        #     if fib_h5 is not None:
+        #         fib_fits = build_fiber_fits(fib_h5, gzip_level=None)
+        #         fib_h5.close()
+        #         plog(f"Built fiber only fits file: {fib_fits}")
     else:
         print(f"Cannot build fibers only h5. Source file unknown.")
 
