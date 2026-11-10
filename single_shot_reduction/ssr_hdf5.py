@@ -34,9 +34,9 @@ This file is for a single shot (observation) ONLY. Do NOT commbine shots.
 # 0.1.16 add Detection_Fiber_Map table
 # 0.1.17 add VIRUSFITSHeader table, make VIRUSShot mhd a float64,
 #        added to VIRUSShot total_exposures, total_pexptime, pexptimes, ut_strings  and reordered VIRUSShot columns
+# 0.1.18 add options for --fibers and --fits
 
-
-__version__ = '0.1.17'
+__version__ = '0.1.18'
 
 
 import numpy as np
@@ -3921,6 +3921,524 @@ def import_images_carray(shot_h5fn,image_path,group_name,carray_name="image_data
     except:
         plog(f"[{datevshot}] Exception in import_images_carray(): {traceback.format_exc()}")
 
+
+
+
+##########################################
+##########################################
+# stripped down Fiber Only version
+##########################################
+##########################################
+
+#########################################
+# reduced versions of the SSR tables
+#########################################
+
+class ReducedVIRUSShot(tables.IsDescription):  # Shot table
+    """
+    cloned from HETDEX_API create_shot_hdf5.py
+    """
+    shotid = tables.Int64Col(pos=0)
+    datevobs = tables.StringCol((12), pos=1)
+    field = tables.StringCol((12), pos=2)
+    objid = tables.StringCol((18), pos=3)
+
+    date = tables.Int32Col(pos=4)
+    obsid = tables.Int32Col(pos=5)
+
+    ra = tables.Float64Col(pos=6)
+    dec = tables.Float64Col(pos=7)
+    healpix = tables.Int64Col(dflt=-999, pos=8)  # added 0.1.10
+
+    # added 0.1.11
+    reduction_date = tables.Int32Col(pos=9)
+    reduction_status = tables.StringCol(4, dflt="unk", pos=10)  # enough for "warn" "pass" "fail" "unk"
+    reduction_status_ext = tables.StringCol(256, dflt="unk",
+                                            pos=11)  # basically contents of status.xxxx file, with [datevshot] stripped out
+
+    # added 0.1.17
+    total_exposures = tables.Int32Col(dflt=-1, pos=12)
+    total_pexptime = tables.Float32Col(dflt=-1, pos=13)  # sum of all
+    pexptimes = tables.Float32Col((3), dflt=[-1, -1, -1], pos=14)  # up to 3
+    ut_strings = tables.StringCol(itemsize=12, shape=(3,), dflt=["", "", ""],
+                                  pos=15)  # 3 strings of length 12 for ut time hh:mm:ss.xxx
+
+    pa = tables.Float64Col()
+    n_ifu = tables.Int32Col()
+
+    trajcra = tables.Float32Col()
+    trajcdec = tables.Float32Col()
+    trajcpa = tables.Float32Col()
+    structaz = tables.Float32Col()
+    time = tables.StringCol(7)
+    ambtemp = tables.Float32Col()
+    humidity = tables.Float32Col()
+    dewpoint = tables.Float32Col()
+    pressure = tables.Float32Col()
+    expnum = tables.Int32Col((3))
+    exptime = tables.Float32Col((3))
+    darktime = tables.Float32Col((3))
+    mjd = tables.Float64Col(
+        (3))  # (start time of 1st dither) this really should be float64 ... otherwise is limited to 160s resolution
+    fwhm_virus = tables.Float32Col()
+    fwhm_virus_err = tables.Float32Col()
+    response_4540 = tables.Float32Col()  # normalized for 360s
+    nstars_fit_fwhm = tables.Int32Col()
+    # relflux_guider = tb.Float32Col((3),pos=13)
+    relflux_virus = tables.Float32Col((3))
+    xditherpos = tables.Float32Col((3))
+    yditherpos = tables.Float32Col((3))
+    xoffset = tables.Float32Col((3))
+    yoffset = tables.Float32Col((3))
+    xrms = tables.Float32Col((3))
+    yrms = tables.Float32Col((3))
+    nstars_fit = tables.Int32Col((3))
+
+    obsind = tables.Int32Col()
+    avg_sky = tables.Float32Col()  # not the same as AmpStat table avg_orig, but related
+    dust_corr_4540 = tables.Float32Col()
+
+
+class ReducedVIRUSFiber16(tables.IsDescription):  # uses Float16 where possibly
+    """
+    cloned from HETDEX_API create_shot_hdf5.py
+
+    remove redundant columns (for this purpose ... single shot only)
+    reduce the unnecessary precision to save space
+
+    """
+    # obsind = tables.Int32Col() #usuall only 3 digits, but I suppose technically could be up to 9, so leave as is?
+    # BUT this is redundant with the shot table since this is just one shot
+    # also redundant with the multiframe string
+
+    fiber_id = tables.StringCol((38), pos=0)
+    # flag = tables.Int32Col(dflt=1, pos=1)  #1 is "good" (copied from VIRUSFiberIndexWithFlags aka /FiberIndex
+    ra = tables.Float32Col(pos=1)  # may still want this precision, float16 really only gives 4 decimals here
+    dec = tables.Float32Col(pos=2)
+    multiframe = tables.StringCol((20), pos=3)  # this is redundant with fiber_id (which contains the multiframe)
+
+    fibnum = tables.Int8Col(pos=4)  # only runs 1 to 112
+    fibidx = tables.Int8Col(pos=5)  # this the index on the amp (e.g. 0 to 111) #really redundant with fibnum-1
+    healpix = tables.Int64Col(dflt=-999, pos=6)  # from VIRUSFiberIndex
+
+    ifux = tables.Float32Col()
+    ifuy = tables.Float32Col()
+    fpx = tables.Float32Col()
+    fpy = tables.Float32Col()
+
+    calfib = StdFloatCol((1036,))
+    calfibe = StdFloatCol((1036,))
+    calfib_ffsky = StdFloatCol((1036,))  # could consider dropping this tone too
+
+    ifuslot = tables.StringCol(3)
+    ifuid = tables.StringCol(3)
+    specid = tables.StringCol(3)
+    contid = tables.StringCol(8)
+    amp = tables.StringCol(2)
+    expnum = tables.Int32Col()
+
+    # cloned from VIRUSFiberIndex
+    flag = tables.Int8Col(
+        dflt=1)  # was Int32 #pos=19) #1 is "good" * note: 1 IFF all others are 1, but is not (currently) a bitmap
+    flag_badamp = tables.Int8Col(dflt=1)  # pos=20) #1 is "good"
+    flag_badfib = tables.Int8Col(dflt=1)  # pos=21) #1 is "good"
+    flag_meteor = tables.Int8Col(dflt=1)  # pos=22) #1 is "good"
+    flag_satellite = tables.Int8Col(dflt=1)  # pos=23) #1 is "good"
+    flag_largegal = tables.Int8Col(dflt=1)  # pos=24) #1 is "good"
+    flag_shot = tables.Int8Col(dflt=1)  # pos=25) #1 is "good"
+    flag_throughput = tables.Int8Col(dflt=1)  # pos=26) #1 is "good"
+
+    # #consider removing these to save longterm storage
+    # #if needed, would re-run
+    # spectrum = tables.Float16Col((1032,))
+    # wavelength = tables.Float32Col((1032,))
+
+    # fiber_to_fiber = tables.Float16Col((1032,)) #re-extraction in HETDEX_API needs it
+
+    # #
+    # chi2 = tables.Float16Col((1032,))
+    # rms = tables.Float16Col((1032,))
+    # # calfib_counts = tables.Float16ColCol((1036,))
+    # # calfibe_counts = tables.Float16ColCol((1036,))
+    # #
+    # trace = tables.Float16Col((1032,))
+    # sky_subtracted = tables.Float16Col((1032,))
+    # sky_spectrum = tables.Float16Col((1032,))
+    # #error1D = tables.Float16ColCol((1032,))
+
+
+class ReducedVIRUSFiber32(tables.IsDescription):  # same as VIRUSFiber but uses Float32 instead of Float16 if needed
+    """
+    cloned from HETDEX_API create_shot_hdf5.py
+
+    remove redundant columns (for this purpose ... single shot only)
+    reduce the unnecessary precision to save space
+
+    """
+    # obsind = tables.Int32Col() #usuall only 3 digits, but I suppose technically could be up to 9, so leave as is?
+    # BUT this is redundant with the shot table since this is just one shot
+    # also redundant with the multiframe string
+
+    fiber_id = tables.StringCol((38), pos=0)
+    # flag = tables.Int32Col(dflt=1, pos=1)  #1 is "good" (copied from VIRUSFiberIndexWithFlags aka /FiberIndex
+    ra = tables.Float32Col(pos=1)  # may still want this precision, float16 really only gives 4 decimals here
+    dec = tables.Float32Col(pos=2)
+    multiframe = tables.StringCol((20), pos=3)  # this is redundant with fiber_id (which contains the multiframe)
+
+    fibnum = tables.Int8Col(pos=4)  # only runs 1 to 112
+    fibidx = tables.Int8Col(pos=5)  # this the index on the amp (e.g. 0 to 111) #really redundant with fibnum-1
+    healpix = tables.Int64Col(dflt=-999, pos=6)  # from VIRUSFiberIndex
+
+    ifux = tables.Float32Col()
+    ifuy = tables.Float32Col()
+    fpx = tables.Float32Col()
+    fpy = tables.Float32Col()
+
+    calfib = tables.Float32Col((1036,))
+    calfibe = tables.Float32Col((1036,))
+    calfib_ffsky = tables.Float32Col((1036,))  # could consider dropping this tone too
+
+    ifuslot = tables.StringCol(3)
+    ifuid = tables.StringCol(3)
+    specid = tables.StringCol(3)
+    contid = tables.StringCol(8)
+    amp = tables.StringCol(2)
+    expnum = tables.Int32Col()
+
+    # cloned from VIRUSFiberIndex
+    flag = tables.Int8Col(
+        dflt=1)  # was Int32 #pos=19) #1 is "good" * note: 1 IFF all others are 1, but is not (currently) a bitmap
+    flag_badamp = tables.Int8Col(dflt=1)  # pos=20) #1 is "good"
+    flag_badfib = tables.Int8Col(dflt=1)  # pos=21) #1 is "good"
+    flag_meteor = tables.Int8Col(dflt=1)  # pos=22) #1 is "good"
+    flag_satellite = tables.Int8Col(dflt=1)  # pos=23) #1 is "good"
+    flag_largegal = tables.Int8Col(dflt=1)  # pos=24) #1 is "good"
+    flag_shot = tables.Int8Col(dflt=1)  # pos=25) #1 is "good"
+    flag_throughput = tables.Int8Col(dflt=1)  # pos=26) #1 is "good"
+
+    # # consider removing these to save longterm storage
+    # # if needed, would re-run
+    # spectrum = tables.Float32Col((1032,))
+    # wavelength = tables.Float32Col((1032,))
+
+    # fiber_to_fiber = tables.Float32Col((1032,)) #re-extraction in HETDEX_API needs it as part of the masking
+
+    # #
+    # chi2 = tables.Float32Col((1032,))
+    # rms = tables.Float32Col((1032,))
+    # # calfib_counts = tables.Float16Col((1036,))
+    # # calfibe_counts = tables.Float16Col((1036,))
+    # #
+    # trace = tables.Float32Col((1032,))
+    # sky_subtracted = tables.Float32Col((1032,))
+    # sky_spectrum = tables.Float32Col((1032,))
+    # # error1D = tables.Float16ColCol((1032,))
+
+
+class ReducedCalfibDQ(tables.IsDescription):
+    """
+    cloned from HETDEX_API create_fiber_mask_hdf5.py
+    """
+
+    fiber_id = tables.StringCol((38), pos=0)
+    calfib_dq = tables.Int16Col((1036,), pos=1)
+
+
+# for reference, these are the bitmapped mask values
+# class CALFIB_DQ(BitFlagNameMap):
+#     MAIN = 1                  # 0x0001
+#     FTF = 2                   # 0x0002
+#     CHI2FIB = 4               # 0x0004
+#     BADPIX = 8                # 0x0008
+#     BADAMP = 16               # 0x0010
+#     LARGEGAL = 32             # 0x0020
+#     METEOR = 64               # 0x0040
+#     BADSHOT = 128             # 0x0080
+#     THROUGHPUT = 256          # 0x0100
+#     BADFIB = 512              # 0x0200
+#     SATELLITE = 1024          # 0x0400
+#     BADCAL = 2048             # 0x0800
+#     PIXMASK = 4096            # 0x1000
+# >>. COULD ADD MASK HERE       # 0x2000  #as skyline mask or detection frequency mask ?
+
+# now combined with Fibers
+# MAY not need this one at all
+class ReducedVIRUSFiberIndexWithFlags(tables.IsDescription):
+    """
+    cloned from HETDEX_API create_fiber_index_hdr5.py
+
+    remove redundant info to save space
+
+    note: this is the alternate form of VIRUSFiberIndex
+          it is used in the same way but (in original HETDEX) adds the flag information
+          It both forms are used to create a group/table named FiberIndex, with the Single Shot Reduction
+          using the VIRUSFiberIndexWithFlags variant instead
+
+    *** NOTE: there will likely be some code modifications needed in HETDEX_API to look for the flag in the new place
+              if it is not found in the old group/table
+
+    """
+    # minimum necessary
+    multiframe = tables.StringCol((20), pos=0)  # redundant with Fibers table
+    ra = tables.Float32Col(pos=1)  # redundant with Fibers table
+    dec = tables.Float32Col(pos=2)  # redundant with Fibers table
+    fiber_id = tables.StringCol((38), pos=3)
+    healpix = tables.Int64Col(dflt=-999, pos=4)
+
+    # do we need these? maybe for speedy selection
+    amp = tables.StringCol(2, pos=5)  # redundant with Fibers table
+    date = tables.Int64Col(pos=6)  # redundant with Fibers table
+    datevobs = tables.StringCol((12), pos=7)  # redundant with Fibers table
+    expnum = tables.Int32Col(pos=8)  # redundant with Fibers table
+    fibidx = tables.Int8Col()  # redundant with Fibers table
+    fibnum = tables.Int32Col(pos=10)  # redundant with Fibers table
+    fpx = tables.Float32Col(pos=11)  # redundant with Fibers table
+    fpy = tables.Float32Col(pos=12)  # redundant with Fibers table
+    ifuslot = tables.StringCol(3, pos=13)  # redundant with Fibers table
+    ifuid = tables.StringCol(3, pos=14)  # redundant with Fibers table
+    ifux = tables.Float32Col(pos=15)  # redundant with Fibers table
+    ifuy = tables.Float32Col(pos=16)  # redundant with Fibers table
+    shotid = tables.Int64Col(pos=17)  # redundant with Fibers table
+    specid = tables.StringCol(3, pos=18)  # redundant with Fibers table
+
+    flag = tables.Int32Col(
+        dflt=1)  # was Int32 #pos=19) #1 is "good" * note: 1 IFF all others are 1, but is not (currently) a bitmap
+    flag_badamp = tables.Int8Col(dflt=1)  # pos=20) #1 is "good"
+    flag_badfib = tables.Int8Col(dflt=1)  # pos=21) #1 is "good"
+    flag_meteor = tables.Int8Col(dflt=1)  # pos=22) #1 is "good"
+    flag_satellite = tables.Int8Col(dflt=1)  # pos=23) #1 is "good"
+    flag_largegal = tables.Int8Col(dflt=1)  # pos=24) #1 is "good"
+    flag_shot = tables.Int8Col(dflt=1)  # pos=25) #1 is "good"
+    flag_throughput = tables.Int8Col(dflt=1)  # pos=26) #1 is "good"
+
+
+# I don't think these can be reduceds
+class ReducedEmptyFiber16(tables.IsDescription):
+    sky = tables.StringCol((1), pos=0)  # "L", "R", "R", for local, fullfield or rescore
+    flags = tables.Int32Col(dflt=0, pos=1)
+    rtype = tables.StringCol((16), pos=2)
+    fluxd = tables.Float16Col((1036,), pos=3)
+    fluxd_err = tables.Float16Col((1036,), pos=3)
+    contrib = tables.Int32Col(1036,
+                              pos=4)  # this always needs to be 32bit since we have to have ints, usually around 70-90k
+
+
+class ReducedEmptyFiber32(tables.IsDescription):
+    sky = tables.StringCol((1), pos=0)  # "L", "R", "R", for local, fullfield or rescore
+    flags = tables.Int32Col(dflt=0, pos=1)
+    rtype = tables.StringCol((16), pos=2)
+    fluxd = tables.Float32Col((1036,), pos=3)
+    fluxd_err = tables.Float32Col((1036,), pos=3)
+    contrib = tables.Int32Col(1036, pos=4)
+
+
+def build_fiber_h5(ssr_h5_filename,compression_filter=None):
+    """
+
+    build the stripped down (mostly) fiber-only h5 file
+
+
+    :param ssr_h5_filename:
+    :param compression_filter: normally, this should be NONE. Comppression is time expensive both on the write side
+                               and the read side and the space savings is not generally worth it.
+                               The default compression takes 30-60 seconds to write and increases the read time
+                               20-40x (e.g. roughly from 0.5 sec to 10 to 20 seconds to read in the whole fiber table)
+                               (note: this is equivalent to the gzip_level in build_fiber_fits)
+    :return: output filename
+    """
+
+    try:
+        global __version__
+
+        ssr_h5 = tables.open_file(ssr_h5_filename)
+
+        outfn = "fib_" + os.path.basename(ssr_h5_filename).replace("ssr_", "")
+        fileh = tables.open_file(outfn, 'w', 'SingleShot Reduction Catalog Fibers Only')
+
+
+        ########################
+        # version table
+        ########################
+        __this_version__ = __version__  #right now, matched to the global version
+
+        vtb = fileh.create_table(fileh.root, 'Version', Version, 'Version Table')
+        row = vtb.row
+        row['version'] = __this_version__
+        row['version_pytables'] = tables.__version__
+        row.append()
+        vtb.flush()
+
+        #######################################
+        # Shot Table
+        #######################################
+
+        fileh.create_table(fileh.root, 'Shot', ReducedVIRUSShot, 'Shot Summary Table', filters=compression_filter)
+
+        # just one row for Shot table, so just do a direct copy
+        # but there are additional columns
+        for row in ssr_h5.root.Shot.read():
+            new_row = fileh.root.Shot.row
+
+            # todo: any culling of columns here
+            for col in ssr_h5.root.Shot.colnames:
+                new_row[col] = row[col]
+
+            new_row.append()
+
+        # fileh.root.Shot.append(shot_h5.root.Shot.read())
+        fileh.root.Shot.flush()
+
+        ####################################################
+        # VIRUSFiberXX table ... is it 16 or 32?
+        ####################################################
+
+        if ssr_h5.root.Fibers.coltypes['calfib'] == 'float32':
+            fileh.create_table(fileh.root, 'Fibers', ReducedVIRUSFiber32, 'Fiber Summary Table',
+                               filters=compression_filter)
+            print("Using float32")
+        else:
+            fileh.create_table(fileh.root, 'Fibers', ReducedVIRUSFiber16, 'Fiber Summary Table',
+                               filters=compression_filter)
+            print("Using float16")
+
+        skip_cols = ["spectrum", "wavelength", "fiber_to_fiber", "chi2", "rms", "trace", "sky_subtracted",
+                     "sky_spectrum"]
+
+        for row in ssr_h5.root.Fibers.read():
+            new_row = fileh.root.Fibers.row
+
+            # todo: any culling of columns here
+            for col in ssr_h5.root.Fibers.colnames:
+                if col not in skip_cols:
+                    new_row[col] = row[col]
+
+            new_row.append()
+
+        # fileh.root.Shot.append(shot_h5.root.Shot.read())
+        fileh.root.Fibers.flush()
+
+        ####################################################
+        # CalfibDQ
+        ####################################################
+
+        fileh.create_table(fileh.root, 'CalfibDQ', CalfibDQ, 'Fiber per-Wavelength Flags Table',
+                           filters=compression_filter)
+
+        # just one row for Shot table, so just do a direct copy
+        # but there are additional columns
+        for row in ssr_h5.root.CalfibDQ.read():
+            new_row = fileh.root.CalfibDQ.row
+
+            # todo: any culling of columns here
+            for col in ssr_h5.root.CalfibDQ.colnames:
+                new_row[col] = row[col]
+
+            new_row.append()
+
+        # fileh.root.Shot.append(shot_h5.root.Shot.read())
+        fileh.root.CalfibDQ.flush()
+
+        ####################################################
+        # EMPTY Fiber  table ... is it 16 or 32?
+        ####################################################
+
+        if ssr_h5.root.EmptyFiber.coltypes['fluxd'] == 'float32':
+            print("Using float32")
+            fileh.create_table(fileh.root, 'EmptyFiber', EmptyFiber32, 'Shot Average Empty Fiber',
+                               filters=compression_filter)
+        else:
+            print("Using float16")
+            fileh.create_table(fileh.root, 'EmptyFiber', EmptyFiber16, 'Shot Average Empty Fiber',
+                               filters=compression_filter)
+
+        for row in ssr_h5.root.EmptyFiber.read():
+            new_row = fileh.root.EmptyFiber.row
+
+            # todo: any culling of columns here
+            for col in ssr_h5.root.EmptyFiber.colnames:
+                new_row[col] = row[col]
+
+            new_row.append()
+
+        # fileh.root.Shot.append(shot_h5.root.Shot.read())
+        fileh.root.EmptyFiber.flush()
+
+        fileh.flush()
+        fileh.close()
+
+        return outfn
+    except:
+        plog(f"Exception in build_fiber_h5() for {ssr_h5_filename}: {traceback.format_exc()}")
+        try:
+            fileh.close()
+        except:
+            pass
+        return None
+
+
+###############################
+# Try as a simple fits
+# works well, fast read
+# same size and almost as fast as
+#   uncompressed hdf5
+##################################
+def build_fiber_fits(ssr_h5_filename,gzip_level=0):
+    """
+
+    :param ssr_h5_filename:
+    :param gzip_level: normally, this should be NONE. Comppression is time expensive both on the write side
+                       and the read side and the space savings is not generally worth it.
+                       The default compression (1) takes 30-60 seconds to write and increases the read time
+                       20-40x (e.g. roughly from 0.5 sec to 10 to 20 seconds to read in the whole fiber table).
+                       (note: this is equivalent to the compression_level in build_fiber_h5)
+
+    :return: output filename
+    """
+
+    try:
+        ssr_h5 = tables.open_file(ssr_h5_filename)
+
+        #input could be either the big ssr_h5 or a new fib_h5
+        outfn = "fib_" + ssr_h5_filename.replace(".h5", ".fits").replace("ssr_", "").replace("fib_","")
+
+        hdul = fits.HDUList([fits.PrimaryHDU()])
+        nodes = [ssr_h5.root.Version, ssr_h5.root.Shot, ssr_h5.root.EmptyFiber, ssr_h5.root.Fibers, ssr_h5.root.CalfibDQ]
+
+        # !! warning BAD conversion for Fibers table fibnum fibidx :  this treats them as bool type, not Int8
+        # !! same is true for all the flag columns BUT, while they are int8 they do function as BOOLs (at leat in general)
+
+        for node in nodes:
+
+            data_array = node.read()
+
+            # cast int8 to int16
+            int8keys = [k for k, v in node.coltypes.items() if v == "int8"]
+            for k in int8keys:
+                data_array[k] = data_array[k].astype(np.int16)
+
+            # 2. Convert the structured array to a FITS Binary Table
+            table_hdu = fits.BinTableHDU(data=data_array)
+
+            # 3. Assign the PyTables table name to the FITS extension name (EXTNAME)
+            table_hdu.name = node.name
+
+            # 4. Append this extension to our HDU list
+            hdul.append(table_hdu)
+
+        # Write all tables out to a single FITS file
+        if gzip_level > 0:
+            import gzip
+            with gzip.open(outfn, "wb", compresslevel=gzip_level) as gz:
+                hdul.writeto(gz)
+        else:
+            hdul.writeto(outfn, overwrite=True)
+        print("Successfully converted PyTables to multi-extension FITS file.")
+
+        return outfn
+    except:
+        plog(f"Exception in build_fiber_fits() for {ssr_h5_filename}: {traceback.format_exc()}")
+        return None
+
 ########################################################################
 ########################################################################
 ########################################################################
@@ -3981,6 +4499,21 @@ if "-help" in args:
         --exclude_ccd               optional
             Do not include the CCD images (3x1032x1032 plus supporting fields for each amp)
             note: in compressed float16 representation this is around 6GB for a typical shot. 
+            
+        --fibers [#]                optional
+            Build the stripped down fibers only h5 file. The default is (1)
+            (0) - Do NOT build
+            (1) - Build
+            (2) - Only Build the fibers h5 file (e.g. do NOT buld the ssr_h5 file)
+                  In this case, it is assumed that the --shot_h5 is the ssr_h5 filename from which to construct this
+                  fibers only h5 file.        
+                  
+        --fits [#]                  optional
+            Combined with --fibers. The default is (0).
+            (0) - Do NOT build a .fits (e.g. do nothing / build just the .h5)
+            (1) - Build ONLY the .fits version (not .h5)
+            (2) - Build BOTH .fits and .h5
+            
              
         --float32                   optional
             Override the compression and force float32 where float16 would otherwise be used due to limited range
@@ -4048,6 +4581,37 @@ if "-clear_mutex" in args:
         pass
     exit(0)
 
+fib_h5_condition = 1
+if "-fibers" in args:
+    i = args.index("-fibers")
+    try:
+        fib_h5_condition = int(args[i + 1])
+        if  not 0 <= fib_h5_condition <= 2:
+            print(f"Invalid -fibers argument specified: {args[i + 1]}")
+            exit(-1)
+    except:
+        print(f"Invalid -fibers argument specified: {args[i + 1]}")
+        exit(-1)
+    del args[i + 1]
+    args.remove("-fibers")
+
+fib_fits_condition = 0
+if "-fits" in args:
+    i = args.index("-fits")
+    try:
+        fib_fits_condition = int(args[i + 1])
+        if  not 0 <= fib_fits_condition <= 2:
+            print(f"Invalid -fits argument specified: {args[i + 1]}")
+            exit(-1)
+    except:
+        print(f"Invalid -fits argument specified: {args[i + 1]}")
+        exit(-1)
+    del args[i + 1]
+    args.remove("-fits")
+
+    if fib_fits_condition > 0 and fib_h5_condition == 0:
+        print(f"Invalid -fits argument specified: {fib_fits_condition} . Incompatible with --fibers {fib_fits_condition}")
+        exit(-1)
 
 
 
@@ -4065,12 +4629,17 @@ if "-shot_h5" in args: #path to the shot h5 file
 else:
     print("Fatal. Must supply --shot_h5 <path to the shot hdf5 file>")
 
-datevshot = os.path.basename(shot_h5_fqfn).replace(".h5","")
-shotid = int(datevshot.replace("v","").replace("s","").replace("d",""))
-shot_h5_path = os.path.dirname(shot_h5_fqfn)
+if fib_h5_condition == 2: #assume shot_h5 is actually the ssr_h5
+    datevshot = os.path.basename(shot_h5_fqfn).replace(".h5","").replace("ssr_","")
+    shotid = int(datevshot.replace("v","").replace("s","").replace("d",""))
+    shot_h5_path = os.path.dirname(shot_h5_fqfn)
+else:
+    datevshot = os.path.basename(shot_h5_fqfn).replace(".h5", "")
+    shotid = int(datevshot.replace("v", "").replace("s", "").replace("d", ""))
+    shot_h5_path = os.path.dirname(shot_h5_fqfn)
 
 diagnose_path = None
-if "-diagnose" in args: #path to the diagnose table
+if "-diagnose" in args and fib_h5_condition != 2: #path to the diagnose table
     i = args.index("-diagnose")
     try:
         diagnose_path = args[i+1]
@@ -4094,7 +4663,7 @@ else:
 
 
 elixer_h5_path = None
-if "-elixer_h5" in args: #path to the shot h5 file
+if "-elixer_h5" in args and fib_h5_condition != 2: #path to the shot h5 file
     i = args.index("-elixer_h5")
     try:
         elixer_h5_path = args[i+1]
@@ -4124,7 +4693,7 @@ else:
 
 
 images_path = None
-if "-images" in args:
+if "-images" in args and fib_h5_condition != 2:
     i = args.index("-images")
     try:
         images_path = args[i+1]
@@ -4146,11 +4715,11 @@ if "-float32" in args: #force32 bit for fields that were originally 32bit (do no
 #     args.remove("-exclude_ccd")
 
 
-if "-include_all_reports" in args:
+if "-include_all_reports" in args and fib_h5_condition != 2:
     include_all_reports = True
     args.remove("-include_all_reports")
 
-if "-minimum" in args:
+if "-minimum" in args and fib_h5_condition != 2:
     minimum_h5 = True
     args.remove("-minimum")
 
@@ -4172,7 +4741,7 @@ else:
 
 #default, level 2
 COMPRESSION_FILTER = tables.Filters(complevel=1, complib='zlib', bitshuffle=False, shuffle=False)
-if "-compression" in args:
+if "-compression" in args and fib_h5_condition != 2:
     i = args.index("-compression")
     try:
         compression = int(args[i+1])
@@ -4209,42 +4778,69 @@ else:
     plog(f"[{datevshot}] Using [default] type 2 compression: zlib at complvl 1 . Good compression, moderate CPU + time")
 
 if len(args) > 0:
-    plog(f"[{datevshot}] Unknown remaining args: {args}")
-
-
-#is this a legit call ... do NOT overwrite a file that is already there
-if os.path.exists("ssr_" + os.path.basename(shot_h5_fqfn)):
-    if OVERWRITE:
-        plog(f"[{datevshot}] Output file ALREADY EXISTS, but --overwrite specified. Will OVERWRITE")
+    if fib_h5_condition == 2:
+        plog(f"[{datevshot}] --fibers ONLY specified. Ignoring other remaining args: {args}")
     else:
-        plog(f"[{datevshot}] Output file ALREADY EXISTS and --overwrite NOT specified. Skipping.")
-        exit(1)
+        plog(f"[{datevshot}] Unknown remaining args: {args}")
+
+new_h5_fn = None
+if fib_h5_condition != 2:
+    #is this a legit call ... do NOT overwrite a file that is already there
+    if os.path.exists("ssr_" + os.path.basename(shot_h5_fqfn)):
+        if OVERWRITE:
+            plog(f"[{datevshot}] Output file ALREADY EXISTS, but --overwrite specified. Will OVERWRITE")
+        else:
+            plog(f"[{datevshot}] Output file ALREADY EXISTS and --overwrite NOT specified. Skipping.")
+            exit(1)
 
 
-wait_to_run(Max_Simultaneous_Shots, datevshot=datevshot,clean_up=False)
+    wait_to_run(Max_Simultaneous_Shots, datevshot=datevshot,clean_up=False)
 
-start_time = time.perf_counter()
+    start_time = time.perf_counter()
 
-new_h5_fn = build_ssr_shot_h5(shot_h5_fqfn, elixer_fn=elixer_h5_path)
+    new_h5_fn = build_ssr_shot_h5(shot_h5_fqfn, elixer_fn=elixer_h5_path)
 
-if images_path is not None and not FATAL_EXIT and new_h5_fn is not None:
-    #print("Skipping images import")
-    #using the earray and growing
-    import_images_earray(new_h5_fn,os.path.join(images_path,"*[0-9].png"),"elixer_reports",add_neighbor_table=False)
-    import_images_earray(new_h5_fn,os.path.join(images_path,"*_nei.png"),"elixer_neighbors",add_neighbor_table=True)
+    if images_path is not None and not FATAL_EXIT and new_h5_fn is not None:
+        #print("Skipping images import")
+        #using the earray and growing
+        import_images_earray(new_h5_fn,os.path.join(images_path,"*[0-9].png"),"elixer_reports",add_neighbor_table=False)
+        import_images_earray(new_h5_fn,os.path.join(images_path,"*_nei.png"),"elixer_neighbors",add_neighbor_table=True)
 
-    #pre-allocating with carray
-    #import_images_carray(new_h5_fn,os.path.join(images_path,"*[0-9].png"),"elixer_reports")
-    #import_images_carray(new_h5_fn,os.path.join(images_path,"*_nei.png"),"elixer_neighbors")
+        #pre-allocating with carray
+        #import_images_carray(new_h5_fn,os.path.join(images_path,"*[0-9].png"),"elixer_reports")
+        #import_images_carray(new_h5_fn,os.path.join(images_path,"*_nei.png"),"elixer_neighbors")
 
-try:
-    if FATAL_EXIT == 0 and new_h5_fn is not None:
-        os.rename(new_h5_fn, new_h5_fn.replace(".part",""))
-except:
-    print(f"Error renaming .part file: {traceback.format_exc()}")
+    try:
+        if FATAL_EXIT == 0 and new_h5_fn is not None:
+            os.rename(new_h5_fn, new_h5_fn.replace(".part",""))
+            new_h5_fn = new_h5_fn.replace(".part","")
+    except:
+        print(f"Error renaming .part file: {traceback.format_exc()}")
 
-print(f"[{os.path.basename(shot_h5_fqfn).replace('.h5','')}] Elapsed time: {time.perf_counter() - start_time :0.1f}s")
-wait_to_run(Max_Simultaneous_Shots, datevshot=datevshot,clean_up=True)
+    print(f"[{os.path.basename(shot_h5_fqfn).replace('.h5','')}] Elapsed time: {time.perf_counter() - start_time :0.1f}s")
+    wait_to_run(Max_Simultaneous_Shots, datevshot=datevshot,clean_up=True)
+
+
+if fib_h5_condition > 0:
+    if fib_h5_condition == 2:
+        ssr_h5_filename = shot_h5_fqfn
+    else:
+        ssr_h5_filename = new_h5_fn
+
+    if ssr_h5_filename is not None:
+
+        if fib_fits_condition != 1:
+            fib_h5 = build_fiber_h5(ssr_h5_filename, compression_filter=None)
+            plog(f"Built fiber only h5 file: {fib_h5}")
+            if fib_fits_condition == 2:
+                fib_fits = build_fiber_fits(ssr_h5_filename, gzip_level=None)
+                plog(f"Built fiber only fits file: {fib_fits}")
+        else:
+            fib_fits = build_fiber_fits(ssr_h5_filename, gzip_level=None)
+            plog(f"Built fiber only fits file: {fib_fits}")
+    else:
+        print(f"Cannot build fibers only h5. Source file unknown.")
+
 
 # example code to fetch images
 # main elixer report
