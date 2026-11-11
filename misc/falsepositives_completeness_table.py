@@ -344,6 +344,10 @@ if True: #response.lower() == 'y':
     miss_self = []  # T/F is this the same as the source shot
     miss_sn = []
 
+    match_delta_wave = [] #bid target
+    match_delta_sep = []
+
+
     # repeat_found = []
     source_seeing = []
     source_tput = []
@@ -463,6 +467,9 @@ if True: #response.lower() == 'y':
             miss_num_fibers = list(T['bid_nfib'])
             miss_f50 = list(T['bid_f50'])
             miss_completeness = list(T['bid_cmplt'])
+
+            match_delta_wave = list(T['match_delta_wave'])
+            match_delta_sep = list(T['match_delta_sep'])
 
             already_done_shots = np.unique('source_shotid')
 
@@ -594,10 +601,14 @@ if True: #response.lower() == 'y':
                     x_match_sn_list = td['sn'][sel_wave][sel_radec][sel_coord]
                     match_shot_list = []
                     match_sn_list = []
+                    #match_delta_sep_list = []
+                    #match_delta_wave_list = []
                     for st in matching_shots:
                         sst = x_match_shot_list == st
                         match_shot_list.append(st)
                         match_sn_list.append(np.max(x_match_sn_list[sst]))
+                        #match_delta_sep_list.append()
+                        #match_delta_wave_list.append()
                 else:
                     match_shot_list = []
                     match_sn_list = []
@@ -672,6 +683,8 @@ if True: #response.lower() == 'y':
                         if okay_to_continue:  # assume coverage is sufficient
                             # now ... check those *.mc files ... could be match, just without sufficient SNR
 
+                            minsep = 9999.9
+                            minwave= 9999.9
                             if bid_shot not in match_shot_list:  # did not already found a match in ELiXer
 
                                 # want the mc table selection that matches bid_shot
@@ -703,6 +716,12 @@ if True: #response.lower() == 'y':
                                     match_shot_list.append(bid_shot)
                                     match_sn_list.append(maxsn)
 
+                                    #min sep in RA, Dec
+                                    minsep = min([x.arcsec for x in sep_mc[sel_mc_coord]])
+                                    minwave = min([abs(w-ri['wavelength_obs']) for w in tm['wave'][sel_mc_wave][sel_mc_radec][sel_mc_coord] ])
+                                    # match_delta_sep_list.append(minsep)
+                                    # match_delta_wave_list.append(minwave)
+
                             # get the fiber spectra, but do not re-extract?
 
                             # todo: need seeing fwhm, etc.
@@ -722,8 +741,12 @@ if True: #response.lower() == 'y':
                                 sst = match_shot_list == bid_shot
                                 if np.count_nonzero(sst) == 1:
                                     miss_sn.append(float(np.array(match_sn_list)[sst]))
+                                    match_delta_wave.append(minwave)
+                                    match_delta_sep.append(minsep)
                                 else:
                                     miss_sn.append(0.)
+                                    match_delta_wave.append(9999.9)   #large positive, since normal select will be <
+                                    match_delta_sep.append(9999.9)
 
                                 miss_f50.append(f50)
                                 miss_completeness.append(completeness)
@@ -797,11 +820,11 @@ if True: #response.lower() == 'y':
                 [source_group, source_shotid, source_detid, source_wave, source_line_flux, source_line_sigma,
                  source_num_fibers, source_sn, source_f50, source_completeness,
                  miss_shotid, miss_self, miss_found, miss_sn, miss_seeing, miss_tput, miss_num_fibers,
-                 miss_f50, miss_completeness, ],
+                 miss_f50, miss_completeness,match_delta_wave, match_delta_sep ],
                 names=['group', 'src_shotid', 'detectid', 'wave', 'line_flux', 'line_sigma',
                        'src_nfib', 'sn', 'src_f50', 'src_cmplt',
                        'bid_shotid', 'self', 'found', 'bid_sn', 'bid_seeing', 'bid_tput', 'bid_nfib',
-                       'bid_f50', 'bid_cmplt'])
+                       'bid_f50', 'bid_cmplt','delta_wave','sep'])
 
             Cmplt_Table.write(f"laurel_elixer_mc_completeness_{str(group_num).zfill(2)}.fits", overwrite=True,
                               format="fits")
@@ -820,11 +843,11 @@ if True: #response.lower() == 'y':
 Cmplt_Table = Table([source_group,source_shotid,source_detid,source_wave,source_line_flux,source_line_sigma,
                     source_num_fibers,source_sn, source_f50,source_completeness,
                     miss_shotid,miss_self,miss_found,miss_sn,miss_seeing,miss_tput,miss_num_fibers,
-                    miss_f50,miss_completeness,],
+                    miss_f50,miss_completeness,match_delta_wave, match_delta_sep],
                   names=['group','src_shotid','detectid','wave','line_flux','line_sigma',
                          'src_nfib','sn','src_f50','src_cmplt',
                          'bid_shotid','self','found','bid_sn','bid_seeing','bid_tput','bid_nfib',
-                         'bid_f50','bid_cmplt'])
+                         'bid_f50','bid_cmplt','delta_wave','sep'])
 
 Cmplt_Table['wave'].format="%0.2f"
 Cmplt_Table['line_flux'].format="%0.2f"
