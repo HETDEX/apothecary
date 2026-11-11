@@ -370,17 +370,17 @@ if True: #response.lower() == 'y':
     # out_has_multiples = [] #e.g. in a single shot ... put in the list of shotids
 
     # to be considered a match
-    base_max_sep = 1.0  # arcsec  ... this actually needs to be flexible, esp for resolved objects !!!
+    base_max_sep = 1.5  # arcsec  ... this actually needs to be flexible, esp for resolved objects !!!
     base_max_resolved_major = 15.0 #arcsec
     max_delta_wave = 4.0  # AA   #this is the usual, but I worry it gets a bit to lax for small lin ewidths
-    low_sn_max_delta_wave = 2.0
+    low_sn_max_delta_wave = 4.0
     low_sn_thresh = 5.2
 
     # no-match found check on fibers
     aperture = 3.5  # arcsec ... this is the aperture using the target coords on the bid_shot, assume some
     # astrometric error between the target and bid shots, so make larger than the normal 3.0 - 3.5"
     # will not be quite right for extended objects, but those are handled a little differently
-    min_fiber_ct = 9  # how many fibers should be in the aperture (e.g. this keeps us away from the edge)
+    min_fiber_ct = 15  # how many fibers should be in the aperture (e.g. this keeps us away from the edge)
     # and keeps us from counting as misses the shots that don't have good matching fiber coverage
 
     # reset?
@@ -416,6 +416,7 @@ if True: #response.lower() == 'y':
         # if halt:
         #     break
         # get the group sub-selected tables
+        #who also gets updated?
         td = T_elixer_dets[T_elixer_dets['group'] == group]
         tf = T_fiber_coords[T_fiber_coords['group'] == group]
         Te = T_elixer_sep[T_elixer_sep['group'] == group]
@@ -665,7 +666,7 @@ if True: #response.lower() == 'y':
                             ff = shot_fiber_dict[bid_shot]['Fibers'].query_region(ref_coord,
                                                                                   radius=max(aperture, max_sep / 2.0))
 
-                            if len(ff) >= min_fiber_ct and not np.any(ff['flag'] == 0):  # this not explicity bad
+                            if len(ff) >= min_fiber_ct and not np.any(ff['flag'] == 0):  # this not explicilty bad
                                 okay_to_continue = True
 
                         if okay_to_continue:  # assume coverage is sufficient
@@ -806,6 +807,14 @@ if True: #response.lower() == 'y':
                               format="fits")
 
         #end for each shot
+
+        #updaet the crossmatch since the counts were updated
+        sel_grp =T_elixer_dets['group']==group
+        T_elixer_dets[sel_grp].write(f"laurel_elixer_mc_crossmatch_{str(group_num).zfill(2)}.fits",overwrite=True,
+                              format="fits")
+    #dnf for group in group
+#need to also update the T_elixer_dets for this group
+
 
 
 Cmplt_Table = Table([source_group,source_shotid,source_detid,source_wave,source_line_flux,source_line_sigma,
