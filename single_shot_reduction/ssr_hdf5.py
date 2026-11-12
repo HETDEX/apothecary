@@ -4321,6 +4321,12 @@ def build_fiber_h5(ssr_h5_filename,compression_filter=None, write_file=True):
 
         # fileh.root.Shot.append(shot_h5.root.Shot.read())
         fileh.root.Fibers.flush()
+        fileh.root.Fibers.cols.fiber_id.create_csindex()
+        fileh.root.Fibers.cols.multiframe.create_csindex()
+        fileh.root.Fibers.cols.healpix.create_csindex()
+        fileh.root.Fibers.cols.ra.create_csindex()
+        fileh.root.Fibers.cols.dec.create_csindex()
+        fileh.root.Fibers.flush()
 
         ####################################################
         # CalfibDQ
@@ -4341,6 +4347,8 @@ def build_fiber_h5(ssr_h5_filename,compression_filter=None, write_file=True):
             new_row.append()
 
         # fileh.root.Shot.append(shot_h5.root.Shot.read())
+        fileh.root.CalfibDQ.flush()
+        fileh.root.CalfibDQ.cols.fiber_id.create_csindex()
         fileh.root.CalfibDQ.flush()
 
         ####################################################
