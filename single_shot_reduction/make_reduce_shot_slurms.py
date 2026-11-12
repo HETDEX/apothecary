@@ -19,7 +19,7 @@ NOTIFICATION_EMAIL = None # "XXX@astro.as.utexas.edu"
 
 SU_ACCOUNT = "AST23008"
 BASE_FILENAME = "parallel"
-MIN_TOTAL_EXPTIME = 300.0 #seconds
+MIN_TOTAL_EXPTIME = 180.0 #seconds
 MAX_TOTAL_EXPTIME = 999999.0 #seconds
 
 QUEUE = "normal"
@@ -36,8 +36,10 @@ if shutil.which("reduce_shot"):
 else:
     BASE_CMD = "python reduce_shot.py "
 
-EXTRA_SWITCHES = "--linedet_filter 0 " #"--multifits_only --clean 0"
-#EXTRA_SWITCHES = "--multifits_only --local_het_raw_path /scratch/03261/polonius/het_raw --clean 0"
+#esp. when debugging, may want also want:  --clean 0    so we do not clear out all the intermediate files/products
+EXTRA_SWITCHES = "--resume --linedet_filter 0 " #"--multifits_only --clean 0"
+
+#see reduce_shot.py --help  for more information
 
 #note: these are the defaults
 #--cal_flux 'sdss' --cal_astro 'gaia'  --clean 1
