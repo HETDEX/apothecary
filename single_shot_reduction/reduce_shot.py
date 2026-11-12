@@ -479,7 +479,7 @@ if "-help" in args:
     
     --clean <integer> : -5 to 5; 0 performs no cleanup (e.g. for full debugging). Default = (1) if not specified.
                       negatives do the same as positives except they force the clean-up immediately and as the only action
-                      0 = No clean up at all. Intermediate files and all tempory scripts reamin. Good for debugging.
+                      0 = No clean up at all. Intermediate files and all temporary scripts remain. Good for debugging.
                       1 = *** default *** Basic cleaning of scripts and non-informative intermediate files
                           (--resume can still work if accompanied by --update or --repair)
                       2 = removes additional intermediate files, and most debugging files, vdrp, etc
