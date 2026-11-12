@@ -3321,15 +3321,18 @@ def update_only(cfg):
         if cfg.update_local_repo:
             print("(Only) Updating local repo ... (this may take 1-2 minutes).")
             try:
-                cip_file = os.path.join(os.getcwd(), LocalScriptRepo, "copy-in-progress")
+                local_scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                Path(local_scriptdir).mkdir(parents=True, exist_ok=True)
+
+                cip_file = os.path.join(local_scriptdir, "copy-in-progress")
                 system_command(cfg, f"touch {cip_file}")
 
                 shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
-                                os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
+                                local_scriptdir, dirs_exist_ok=True)
 
                 system_command(cfg, f"rm {cip_file}")
 
-                cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                cfg.scriptdir = local_scriptdir
             except:
                 log(f"[{cfg.datevshot}] Exception in update_only. {traceback.format_exc()}")
 
@@ -3831,15 +3834,18 @@ def initial_setup(cfg):
                 if cfg.update_local_repo:
                     log(f"[{cfg.datevshot}] Updating local repo ... (this may take 1-2 minutes)")
                     try:
-                        cip_file = os.path.join(os.getcwd(), LocalScriptRepo, "copy-in-progress")
+                        local_scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                        Path(local_scriptdir).mkdir(parents=True, exist_ok=True)
+
+                        cip_file = os.path.join(local_scriptdir, "copy-in-progress")
                         system_command(cfg, f"touch {cip_file}")
 
                         shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
-                                        os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
+                                        local_scriptdir, dirs_exist_ok=True)
 
                         system_command(cfg, f"rm {cip_file}")
 
-                        cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                        cfg.scriptdir = local_scriptdir
                         log(f"[{cfg.datevshot}] Update to local repo complete.")
                     except:
                         log(f"[{cfg.datevshot}] Exception in initial_setup. Update to local repo failed. {traceback.format_exc()}")
@@ -3858,14 +3864,17 @@ def initial_setup(cfg):
                     #copy first to local script repo
                     log(f"[{cfg.datevshot}] Copying to local repo ...")
                     try:
-                        cip_file = os.path.join(os.getcwd(), LocalScriptRepo, "copy-in-progress")
-                        system_command(cfg,f"touch {cip_file}")
+                        local_scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                        Path(local_scriptdir).mkdir(parents=True, exist_ok=True)
+
+                        cip_file = os.path.join(local_scriptdir, "copy-in-progress")
+                        system_command(cfg, f"touch {cip_file}")
 
                         shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
-                                        os.path.join(os.getcwd(),LocalScriptRepo), dirs_exist_ok=True)
+                                        local_scriptdir, dirs_exist_ok=True)
 
                         system_command(cfg,f"rm {cip_file}")
-                        cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                        cfg.scriptdir = local_scriptdir
                         log(f"[{cfg.datevshot}] Copy to local repo complete.")
                     except:
                         log(f"[{cfg.datevshot}] Exception in initial_setup. Copy to local repo failed. {traceback.format_exc()}")
@@ -3887,15 +3896,18 @@ def initial_setup(cfg):
                     log(f"[{cfg.datevshot}] Updating local repo ... (this may take 1-2 minutes)")
                     try:
 
-                        cip_file = os.path.join(os.getcwd(), LocalScriptRepo, "copy-in-progress")
-                        system_command(cfg,f"touch {cip_file}")
+                        local_scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                        Path(local_scriptdir).mkdir(parents=True, exist_ok=True)
+
+                        cip_file = os.path.join(local_scriptdir, "copy-in-progress")
+                        system_command(cfg, f"touch {cip_file}")
 
                         shutil.copytree(os.path.join(ScriptRepo, "science_reductions"),
-                                        os.path.join(os.getcwd(), LocalScriptRepo), dirs_exist_ok=True)
+                                        local_scriptdir, dirs_exist_ok=True)
 
                         system_command(cfg, f"rm {cip_file}")
 
-                        cfg.scriptdir = os.path.join(os.getcwd(), LocalScriptRepo)
+                        cfg.scriptdir = local_scriptdir
                     except:
                         log(f"[{cfg.datevshot}] Exception in initial_setup. Update (repair) to local repo failed. {traceback.format_exc()}")
                         local_repo_status = 1  # fail, but try again
