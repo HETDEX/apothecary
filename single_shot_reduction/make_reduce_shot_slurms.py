@@ -67,6 +67,12 @@ sel = np.array(T['exptime'] >= MIN_TOTAL_EXPTIME) * np.array(T['exptime'] <= MAX
 #sel = sel * np.array(T['name'] == 'parallel')
 sel = sel * np.array([n[0:4] != 'VDFI' for n in T['name']])
 sel = sel * np.array(T['date'] >= START_DATE) * np.array(T['date'] < END_DATE)
+try:
+    #new columns allowed == 1 if HETDEX or parallel or explicit permission to use was given
+    if "allowed" in T.columns:
+        sel = sel * np.array(T['allowed'] == 1)
+except:
+    pass
 #sel = sel * np.array(T['num_exp'] == 1)
 #T[sel]
 
