@@ -375,7 +375,7 @@ if True: #response.lower() == 'y':
     # out_has_multiples = [] #e.g. in a single shot ... put in the list of shotids
 
     # to be considered a match
-    base_max_sep = 1.5  # arcsec  ... this actually needs to be flexible, esp for resolved objects !!!
+    base_max_sep = 2.0  # arcsec  ... this actually needs to be flexible, esp for resolved objects !!!
     base_max_resolved_major = 15.0 #arcsec
     max_delta_wave = 6.0  # AA   #this is the usual, but I worry it gets a bit to lax for small lin ewidths
     low_sn_max_delta_wave = 6.0
