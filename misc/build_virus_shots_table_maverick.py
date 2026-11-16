@@ -311,7 +311,15 @@ for p in tqdm(fps):
 
         # get the file listing from the tar
         tf = tar.open(fn)
-        tarpaths = np.array(tf.getnames())
+        try:
+            tarpaths = np.array(tf.getnames())
+        except:
+            print(f"[{datevshot}] failed to read. Skipping.")
+            try:
+                tf.close()
+            except:
+                pass
+            continue
 
         # is this a science observation?
         obstype = os.path.basename(tarpaths[0]).split('.')[-2][-3:]
