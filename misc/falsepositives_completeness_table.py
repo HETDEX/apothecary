@@ -385,7 +385,7 @@ if True: #response.lower() == 'y':
     aperture = 3.5  # arcsec ... this is the aperture using the target coords on the bid_shot, assume some
     # astrometric error between the target and bid shots, so make larger than the normal 3.0 - 3.5"
     # will not be quite right for extended objects, but those are handled a little differently
-    min_fiber_ct = 15  # how many fibers should be in the aperture (e.g. this keeps us away from the edge)
+    min_fiber_ct = 10  # how many fibers should be in the aperture (e.g. this keeps us away from the edge)
     # and keeps us from counting as misses the shots that don't have good matching fiber coverage
 
     # reset?
