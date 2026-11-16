@@ -363,6 +363,7 @@ if True: #response.lower() == 'y':
     source_f50_2 = []
     source_completeness_2 = []
     source_num_fibers = []
+    source_extent = []
 
     halt = False
 
@@ -376,8 +377,8 @@ if True: #response.lower() == 'y':
     # to be considered a match
     base_max_sep = 1.5  # arcsec  ... this actually needs to be flexible, esp for resolved objects !!!
     base_max_resolved_major = 15.0 #arcsec
-    max_delta_wave = 4.0  # AA   #this is the usual, but I worry it gets a bit to lax for small lin ewidths
-    low_sn_max_delta_wave = 4.0
+    max_delta_wave = 6.0  # AA   #this is the usual, but I worry it gets a bit to lax for small lin ewidths
+    low_sn_max_delta_wave = 6.0
     low_sn_thresh = 5.2
 
     # no-match found check on fibers
@@ -523,6 +524,7 @@ if True: #response.lower() == 'y':
 
                 # need the size of the detection ... the RA, Dec differences need to be allowed to occur within the
                 # SEP ellipse
+                source_major = 0.0
                 try:
                     sel_te = Te['detectid'] == det
                     if np.count_nonzero(sel_te) > 0:
@@ -531,11 +533,13 @@ if True: #response.lower() == 'y':
                         major = np.nanmedian(te['major'][sel_te])
                         if not np.isnan(major):
                             max_sep = min(base_max_resolved_major,max(max_sep, major))
+                            source_major = max_sep
                             # if major > max_sep:
                             #     #print(f"Changed max_sep for major = {major}")
                             #     max_sep = major
                         else:
                             print(f"major was NaN; keeping max_sep {max_sep}")
+
                 except:
                     print(f"Exception with {det} for SEP")
 
@@ -783,6 +787,7 @@ if True: #response.lower() == 'y':
                                 source_num_fibers.append(src_num_fibers)
 
                                 source_sn.append(float(ri["sn"]))
+                                source_extent.append(source_major)
 
                                 if bid_shot == shot:
                                     miss_self.append(True)
@@ -817,11 +822,11 @@ if True: #response.lower() == 'y':
             print(f"{dtnowstr} Intermediate write of cmplt table for group {group}")
 
             Cmplt_Table = Table(
-                [source_group, source_shotid, source_detid, source_wave, source_line_flux, source_line_sigma,
+                [source_group, source_shotid, source_detid, source_wave, source_line_flux, source_line_sigma, source_extent,
                  source_num_fibers, source_sn, source_f50, source_completeness,
                  miss_shotid, miss_self, miss_found, miss_sn, miss_seeing, miss_tput, miss_num_fibers,
                  miss_f50, miss_completeness,match_delta_wave, match_delta_sep ],
-                names=['group', 'src_shotid', 'detectid', 'wave', 'line_flux', 'line_sigma',
+                names=['group', 'src_shotid', 'detectid', 'wave', 'line_flux', 'line_sigma','extent',
                        'src_nfib', 'sn', 'src_f50', 'src_cmplt',
                        'bid_shotid', 'self', 'found', 'bid_sn', 'bid_seeing', 'bid_tput', 'bid_nfib',
                        'bid_f50', 'bid_cmplt','delta_wave','sep'])
@@ -840,11 +845,11 @@ if True: #response.lower() == 'y':
 
 
 
-Cmplt_Table = Table([source_group,source_shotid,source_detid,source_wave,source_line_flux,source_line_sigma,
+Cmplt_Table = Table([source_group,source_shotid,source_detid,source_wave,source_line_flux,source_line_sigma,source_extent,
                     source_num_fibers,source_sn, source_f50,source_completeness,
                     miss_shotid,miss_self,miss_found,miss_sn,miss_seeing,miss_tput,miss_num_fibers,
                     miss_f50,miss_completeness,match_delta_wave, match_delta_sep],
-                  names=['group','src_shotid','detectid','wave','line_flux','line_sigma',
+                  names=['group','src_shotid','detectid','wave','line_flux','line_sigma','extent',
                          'src_nfib','sn','src_f50','src_cmplt',
                          'bid_shotid','self','found','bid_sn','bid_seeing','bid_tput','bid_nfib',
                          'bid_f50','bid_cmplt','delta_wave','sep'])
