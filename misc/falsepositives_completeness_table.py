@@ -346,6 +346,7 @@ if True: #response.lower() == 'y':
 
     match_delta_wave = [] #bid target
     match_delta_sep = []
+    match_raw_ct = []
 
 
     # repeat_found = []
@@ -390,6 +391,7 @@ if True: #response.lower() == 'y':
 
     # reset?
     T_elixer_dets['num_matches'] = -1
+    T_elixer_dets['num_matches_raw'] = -1
     T_elixer_dets[
         'num_valid_misses'] = -1  # in how many group shots was it not found, where there are sufficient fibers
 
@@ -471,6 +473,7 @@ if True: #response.lower() == 'y':
 
             match_delta_wave = list(T['match_delta_wave'])
             match_delta_sep = list(T['match_delta_sep'])
+            match_raw_ct = list(T['match_raw_ct'])
 
             already_done_shots = np.unique('source_shotid')
 
@@ -596,7 +599,10 @@ if True: #response.lower() == 'y':
                 # td_bid_match = td[sel_wave][sel_radec][sel_coord]
 
                 matching_shots = np.unique(td['shotid'][sel_wave][sel_radec][sel_coord])
+
+
                 ct = len(matching_shots)  # only count a shot once, even if more than
+                raw_ct = len(td['shotid'][sel_wave][sel_radec][sel_coord])
                 # one match is found (rare, but does happen)
 
                 if ct > 0: #we found a match BUT, it could be just the 1 from the target shot ... we check that below
@@ -634,7 +640,7 @@ if True: #response.lower() == 'y':
                     #    print(f"[{det}] found : {ct}")
                     valid_misses = 0
                     mc_hits = 0
-
+                    raw_mc_hits = 0
                     for bid_shot in u_shots:
                         # don't skip we want to record it too
                         # if bid_shot == shot:
@@ -689,6 +695,7 @@ if True: #response.lower() == 'y':
 
                             minsep = 9999.9
                             minwave= 9999.9
+                            this_shot_raw_hits  =0
                             if bid_shot not in match_shot_list:  # did not already found a match in ELiXer
 
                                 # want the mc table selection that matches bid_shot
@@ -714,8 +721,15 @@ if True: #response.lower() == 'y':
                                 sep_mc = ref_coord.separation(bid_det_mc_coords)
                                 sel_mc_coord = sep_mc.arcsec <= max_sep
 
+
+
                                 # matched wave and position
                                 if np.count_nonzero(sel_mc_coord) > 0:
+                                    #this is ONE shot
+                                    mc_hits += 1
+                                    this_shot_raw_hits += len(tm[sel_mc_wave][sel_mc_radec][sel_mc_coord])
+                                    raw_mc_hits += this_shot_raw_hits
+
                                     maxsn = max(tm['sn'][sel_mc_wave][sel_mc_radec][sel_mc_coord])
                                     match_shot_list.append(bid_shot)
                                     match_sn_list.append(maxsn)
@@ -747,10 +761,12 @@ if True: #response.lower() == 'y':
                                     miss_sn.append(float(np.array(match_sn_list)[sst]))
                                     match_delta_wave.append(minwave)
                                     match_delta_sep.append(minsep)
+                                    match_raw_ct.append(this_shot_raw_hits)
                                 else:
                                     miss_sn.append(0.)
                                     match_delta_wave.append(9999.9)   #large positive, since normal select will be <
                                     match_delta_sep.append(9999.9)
+                                    match_raw_ct.append(0)
 
                                 miss_f50.append(f50)
                                 miss_completeness.append(completeness)
@@ -807,6 +823,7 @@ if True: #response.lower() == 'y':
                             # valid_misses += 1
 
                     T_elixer_dets['num_matches'][sel_update] = mc_hits
+                    T_elixer_dets['num_matches_raw'][sel_update] = raw_mc_hits
                     T_elixer_dets['num_valid_misses'][sel_update] = valid_misses
 
                 T_elixer_dets['num_valid_misses'][sel_update] = valid_misses
@@ -825,11 +842,11 @@ if True: #response.lower() == 'y':
                 [source_group, source_shotid, source_detid, source_wave, source_line_flux, source_line_sigma, source_extent,
                  source_num_fibers, source_sn, source_f50, source_completeness,
                  miss_shotid, miss_self, miss_found, miss_sn, miss_seeing, miss_tput, miss_num_fibers,
-                 miss_f50, miss_completeness,match_delta_wave, match_delta_sep ],
+                 miss_f50, miss_completeness,match_delta_wave, match_delta_sep, match_raw_ct ],
                 names=['group', 'src_shotid', 'detectid', 'wave', 'line_flux', 'line_sigma','extent',
                        'src_nfib', 'sn', 'src_f50', 'src_cmplt',
                        'bid_shotid', 'self', 'found', 'bid_sn', 'bid_seeing', 'bid_tput', 'bid_nfib',
-                       'bid_f50', 'bid_cmplt','delta_wave','sep'])
+                       'bid_f50', 'bid_cmplt','delta_wave','sep','match_raw_ct'])
 
             Cmplt_Table.write(f"laurel_elixer_mc_completeness_{str(group_num).zfill(2)}.fits", overwrite=True,
                               format="fits")
@@ -848,11 +865,11 @@ if True: #response.lower() == 'y':
 Cmplt_Table = Table([source_group,source_shotid,source_detid,source_wave,source_line_flux,source_line_sigma,source_extent,
                     source_num_fibers,source_sn, source_f50,source_completeness,
                     miss_shotid,miss_self,miss_found,miss_sn,miss_seeing,miss_tput,miss_num_fibers,
-                    miss_f50,miss_completeness,match_delta_wave, match_delta_sep],
+                    miss_f50,miss_completeness,match_delta_wave, match_delta_sep,match_raw_ct],
                   names=['group','src_shotid','detectid','wave','line_flux','line_sigma','extent',
                          'src_nfib','sn','src_f50','src_cmplt',
                          'bid_shotid','self','found','bid_sn','bid_seeing','bid_tput','bid_nfib',
-                         'bid_f50','bid_cmplt','delta_wave','sep'])
+                         'bid_f50','bid_cmplt','delta_wave','sep','match_raw_ct'])
 
 Cmplt_Table['wave'].format="%0.2f"
 Cmplt_Table['line_flux'].format="%0.2f"
