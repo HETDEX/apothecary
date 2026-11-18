@@ -376,11 +376,16 @@ if True: #response.lower() == 'y':
     # out_has_multiples = [] #e.g. in a single shot ... put in the list of shotids
 
     # to be considered a match
-    base_max_sep = 2.0  # arcsec  ... this actually needs to be flexible, esp for resolved objects !!!
+    base_max_sep = 1.5  # arcsec  ... this actually needs to be flexible, esp for resolved objects !!!
+    high_sn_max_sep = 2.5 #help with extended objects, esp where elixer did not match up properly to continuum object
+                          #and since we are cutting out the continuum object versions
+    high_sn = 7.0
+
     base_max_resolved_major = 15.0 #arcsec
-    max_delta_wave = 6.0  # AA   #this is the usual, but I worry it gets a bit to lax for small lin ewidths
+    max_delta_wave = 6.0  # AA   #this is the usual, but I worry it gets a bit to lax for small line widths
     low_sn_max_delta_wave = 6.0
     low_sn_thresh = 5.2
+    min_snr = 3.0
 
     # no-match found check on fibers
     aperture = 3.5  # arcsec ... this is the aperture using the target coords on the bid_shot, assume some
@@ -509,7 +514,7 @@ if True: #response.lower() == 'y':
                 if str(det)[9] == '9':
                     continue
 
-                max_sep = base_max_sep  # reset for each detection
+
                 #found_but_get_stats_anyway = False #not used anymore
                 repeat_hits = 0
                 # out_dets.append(det)
@@ -521,6 +526,11 @@ if True: #response.lower() == 'y':
                 # ri = T_elixer_dets[T_elixer_dets['detectid']==det]
                 ri = T_elixer_dets[sel_update][0]
                 det_snr = ri['sn']
+
+                if det_snr >= high_sn:
+                    max_sep = high_sn_max_sep
+                else:
+                    max_sep = base_max_sep  # reset for each detection
 
                 # out_sn.append(ri['sn'][0])
                 # out_shots.append(ri['shotid'][0])
@@ -535,6 +545,7 @@ if True: #response.lower() == 'y':
                         sel_te = te['selected'] == True
                         major = np.nanmedian(te['major'][sel_te])
                         if not np.isnan(major):
+                            #we still miss some of these ... example: 25082502104948 and 25082502104919
                             max_sep = min(base_max_resolved_major,max(max_sep, major))
                             source_major = max_sep
                             # if major > max_sep:
@@ -763,7 +774,7 @@ if True: #response.lower() == 'y':
                                     match_delta_sep.append(minsep)
                                     match_raw_ct.append(this_shot_raw_hits)
                                 else:
-                                    miss_sn.append(0.)
+                                    miss_sn.append(-1.0)
                                     match_delta_wave.append(9999.9)   #large positive, since normal select will be <
                                     match_delta_sep.append(9999.9)
                                     match_raw_ct.append(0)
