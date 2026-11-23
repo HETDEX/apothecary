@@ -763,7 +763,7 @@ if True: #response.lower() == 'y':
                                 sel_td_rows = np.array(matching_td_rows_all['shotid']==bid_shot)
 
                                 if np.count_nonzero(sel_td_rows) > 0:
-                                    #td_sn = np.nanmax(float(matching_td_rows_all['sn'][sel_td_rows]))
+                                    #miss_sn.append(np.nanmax(np.array(matching_td_rows_all['sn'])[sel_td_rows]))
 
                                     try:
                                         miss_sn.append(np.nanmax(np.array(matching_td_rows_all['sn'])[sel_td_rows]))
@@ -791,7 +791,9 @@ if True: #response.lower() == 'y':
 
                                     this_shot_raw_hits = np.count_nonzero(sel_td_rows)
                                     match_raw_ct.append(this_shot_raw_hits)
-                                    #print(f"*** DEBUG *** {bid_shot} found {this_shot_raw_hits} elixer hits")
+                                    print(f"*** DEBUG *** {bid_shot} found {this_shot_raw_hits} elixer hits")
+                                    print(f"*** DEBUG *** {miss_sn[-1]} {minwave} {minsep}")
+
                                 else:
                                     print(f"Something went wrong. {bid_shot} in and not in {match_shot_list} ???")
 
