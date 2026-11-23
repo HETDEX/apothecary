@@ -794,8 +794,8 @@ if True: #response.lower() == 'y':
                                     if this_shot_raw_hits > 1:
                                         print(f"*** DEBUG *** {bid_shot} found {this_shot_raw_hits} elixer hits")
                                         for rr in matching_td_rows_all[sel_td_rows]:
-                                            print(f"*** DEBUG *** {rr['sn']} {abs(rr['wavelength_obs']-ri['wavelength_obs'])}"
-                                                  f" {ref_coord.separation(SkyCoord(rr['ra']*u.deg,rr['dec']*u.deg))}")
+                                            print(f"*** DEBUG *** {rr['detectiid']} {rr['sn']} {abs(rr['wavelength_obs']-ri['wavelength_obs'])}"
+                                                  f" {ref_coord.separation(SkyCoord(rr['ra']*u.deg,rr['dec']*u.deg)).value*3600.}")
 
                                         print(f"*** DEBUG *** ---------------------------- ")
 
