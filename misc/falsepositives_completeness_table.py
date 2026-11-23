@@ -613,8 +613,13 @@ if True: #response.lower() == 'y':
 
                 matching_shots = np.unique(td['shotid'][sel_wave][sel_radec][sel_coord])
 
+                #matching_dets_all and matching_shots_all should be 1:1
+                #matching_shots_all = td['shotid'][sel_wave][sel_radec][sel_coord]
+                #matching_dets_all  = td['detectid'][sel_wave][sel_radec][sel_coord]
+                matching_td_rows_all = td[sel_wave][sel_radec][sel_coord]
 
-                ct = len(matching_shots)  # only count a shot once, even if more than
+
+                ct = len(matching_shots)  # only count a shot once, even if more than one
                 raw_ct = len(td['shotid'][sel_wave][sel_radec][sel_coord])
                 # one match is found (rare, but does happen)
 
@@ -752,6 +757,36 @@ if True: #response.lower() == 'y':
                                     minwave = min([abs(w-ri['wavelength_obs']) for w in tm['wave'][sel_mc_wave][sel_mc_radec][sel_mc_coord] ])
                                     # match_delta_sep_list.append(minsep)
                                     # match_delta_wave_list.append(minwave)
+                            else: #did find direct elixer match already
+                                #it IS in the match shot list
+
+                                sel_td_rows = matching_td_rows_all['shotid']==bid_shot
+
+                                if np.count_nonzero(sel_td_rows) > 0:
+                                    #td_sn = np.nanmax(float(matching_td_rows_all['sn'][sel_td_rows]))
+                                    miss_sn.append(np.nanmax(float(matching_td_rows_all['sn'][sel_td_rows])))
+                                    minwave =min([abs(w-ri['wavelength_obs']) for w in matching_td_rows_all['wavelength_obs'][sel_td_rows] ])
+
+                                    td_coords = SkyCoord(
+                                        ra=np.array(matching_td_rows_all['ra'][sel_td_rows]) * u.deg,
+                                        dec=np.array(matching_td_rows_all['dec'][sel_td_rows]) * u.deg)
+
+                                    sep_td = ref_coord.separation(td_coords)
+                                    minsep = min([x.arcsec for x in sep_td])
+
+                                    match_delta_wave.append(minwave)
+                                    match_delta_sep.append(minsep)
+
+                                    this_shot_raw_hits = np.count_nonzero(sel_td_rows)
+                                    match_raw_ct.append(this_shot_raw_hits)
+                                    print(f"*** DEBUG *** {bid_shot} found {this_shot_raw_hits} elixer hits")
+                                else:
+                                    print(f"Something went wrong. {bid_shot} in and not in {match_shot_list} ???")
+
+                                    miss_sn.append(-666.)
+                                    match_delta_wave.append(-666.)
+                                    match_delta_sep.append(-666.)
+                                    match_raw_ct.append(-666.)
 
                             # get the fiber spectra, but do not re-extract?
 
