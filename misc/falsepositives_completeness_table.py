@@ -745,7 +745,18 @@ if True: #response.lower() == 'y':
                                 if np.count_nonzero(sel_mc_coord) > 0:
                                     #this is ONE shot
                                     mc_hits += 1
-                                    this_shot_raw_hits += len(tm[sel_mc_wave][sel_mc_radec][sel_mc_coord])
+
+                                    #I think on this path it will always be the else case
+                                    if source_major is not None and source_major > 0:
+                                        this_shot_raw_hits = np.count_nonzero([x.arcsec > source_major  for x in sep_mc])
+                                        this_shot_raw_hits = max(1,this_shot_raw_hits) #count can remove all of them
+                                    else:
+                                        #this_shot_raw_hits = np.count_nonzero([x.arcsec > base_max_sep for x in sep_mc])
+                                        this_shot_raw_hits = len(tm[sel_mc_wave][sel_mc_radec][sel_mc_coord])
+
+
+
+                                    #this_shot_raw_hits += len(tm[sel_mc_wave][sel_mc_radec][sel_mc_coord])
                                     raw_mc_hits += this_shot_raw_hits
 
                                     maxsn = max(tm['sn'][sel_mc_wave][sel_mc_radec][sel_mc_coord])
@@ -789,7 +800,13 @@ if True: #response.lower() == 'y':
                                     match_delta_wave.append(minwave)
                                     match_delta_sep.append(minsep)
 
-                                    this_shot_raw_hits = np.count_nonzero(sel_td_rows)
+                                    if source_major is not None and source_major > 0:
+                                        this_shot_raw_hits = np.count_nonzero([x.arcsec > source_major + base_max_sep for x in sep_td])
+                                        this_shot_raw_hits = max(1,this_shot_raw_hits) #count can remove all of them
+                                    else:
+                                        this_shot_raw_hits = np.count_nonzero(sel_td_rows)
+
+
                                     match_raw_ct.append(this_shot_raw_hits)
                                     if this_shot_raw_hits > 1:
                                         print(f"*** DEBUG *** {bid_shot} found {this_shot_raw_hits} elixer hits for "
