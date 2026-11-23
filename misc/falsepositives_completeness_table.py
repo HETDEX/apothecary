@@ -791,8 +791,13 @@ if True: #response.lower() == 'y':
 
                                     this_shot_raw_hits = np.count_nonzero(sel_td_rows)
                                     match_raw_ct.append(this_shot_raw_hits)
-                                    print(f"*** DEBUG *** {bid_shot} found {this_shot_raw_hits} elixer hits")
-                                    print(f"*** DEBUG *** {miss_sn[-1]} {minwave} {minsep}")
+                                    if this_shot_raw_hits > 1:
+                                        print(f"*** DEBUG *** {bid_shot} found {this_shot_raw_hits} elixer hits")
+                                        for rr in matching_td_rows_all[sel_td_rows]:
+                                            print(f"*** DEBUG *** {rr["sn"]} {abs(rr["wavelength_obs"]-ri['wavelength_obs'])}"
+                                                  f" {ref_coord.separation(SkyCoord(rr['ra']*u.deg,rr['dec']*u.deg))}")
+
+                                        print(f"*** DEBUG *** ---------------------------- ")
 
                                 else:
                                     print(f"Something went wrong. {bid_shot} in and not in {match_shot_list} ???")
