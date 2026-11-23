@@ -769,9 +769,10 @@ if True: #response.lower() == 'y':
                                         miss_sn.append(np.nanmax(float(matching_td_rows_all['sn'][sel_td_rows])))
                                     except:
                                         print(f"*** DEBUG *** {np.count_nonzero(sel_td_rows)}")
-                                        print(matching_td_rows_all['sn'])
-                                        print(matching_td_rows_all['sn'][sel_td_rows])
-                                        print(float(matching_td_rows_all['sn'][sel_td_rows]))
+                                        print("sn:", matching_td_rows_all['sn'])
+                                        print("sn[sel_td_rows]:",matching_td_rows_all['sn'][sel_td_rows])
+                                        print(f"{type(sel_td_rows)}, {sel_td_rows}")
+                                       # print(float(matching_td_rows_all['sn'][sel_td_rows]))
 
                                         print(traceback.format_exc())
 
@@ -790,7 +791,7 @@ if True: #response.lower() == 'y':
 
                                     this_shot_raw_hits = np.count_nonzero(sel_td_rows)
                                     match_raw_ct.append(this_shot_raw_hits)
-                                    print(f"*** DEBUG *** {bid_shot} found {this_shot_raw_hits} elixer hits")
+                                    #print(f"*** DEBUG *** {bid_shot} found {this_shot_raw_hits} elixer hits")
                                 else:
                                     print(f"Something went wrong. {bid_shot} in and not in {match_shot_list} ???")
 
