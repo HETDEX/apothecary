@@ -716,6 +716,8 @@ if True: #response.lower() == 'y':
                             this_shot_raw_hits  =0
                             if bid_shot not in match_shot_list:  # did not already found a match in ELiXer
 
+                                already_added_sn_wave_sep_ct = False
+
                                 # want the mc table selection that matches bid_shot
                                 # tm = T_mc_dets[T_mc_dets['shotid'] == bid_shot] #shotid is only in any one group
                                 tm = tmX[tmX['shotid'] == bid_shot]  # shotid is only in any one group
@@ -771,51 +773,62 @@ if True: #response.lower() == 'y':
                             else: #did find direct elixer match already
                                 #it IS in the match shot list
 
+                                already_added_sn_wave_sep_ct = True
+
                                 sel_td_rows = np.array(matching_td_rows_all['shotid']==bid_shot)
 
                                 if np.count_nonzero(sel_td_rows) > 0:
                                     #miss_sn.append(np.nanmax(np.array(matching_td_rows_all['sn'])[sel_td_rows]))
-
                                     try:
                                         miss_sn.append(np.nanmax(np.array(matching_td_rows_all['sn'])[sel_td_rows]))
+
+                                        # try:
+                                        #     miss_sn.append(np.nanmax(np.array(matching_td_rows_all['sn'])[sel_td_rows]))
+                                        # except:
+                                        #     print(f"*** DEBUG *** {np.count_nonzero(sel_td_rows)}")
+                                        #     print("sn:", matching_td_rows_all['sn'])
+                                        #     print("sn[sel_td_rows]:",matching_td_rows_all['sn'][sel_td_rows])
+                                        #     print(f"{type(sel_td_rows)}, {sel_td_rows}")
+                                        #    # print(float(matching_td_rows_all['sn'][sel_td_rows]))
+                                        #
+                                        #     print(traceback.format_exc())
+
+
+                                        minwave =min([abs(w-ri['wavelength_obs']) for w in matching_td_rows_all['wavelength_obs'][sel_td_rows] ])
+
+                                        td_coords = SkyCoord(
+                                            ra=np.array(matching_td_rows_all['ra'][sel_td_rows]) * u.deg,
+                                            dec=np.array(matching_td_rows_all['dec'][sel_td_rows]) * u.deg)
+
+                                        sep_td = ref_coord.separation(td_coords)
+                                        minsep = min([x.arcsec for x in sep_td])
+
+                                        match_delta_wave.append(minwave)
+                                        match_delta_sep.append(minsep)
+
+                                        if source_major is not None and source_major > 0:
+                                            this_shot_raw_hits = np.count_nonzero([x.arcsec > source_major + base_max_sep for x in sep_td])
+                                            this_shot_raw_hits = max(1,this_shot_raw_hits) #count can remove all of them
+                                        else:
+                                            this_shot_raw_hits = np.count_nonzero(sel_td_rows)
+
+
+                                        match_raw_ct.append(this_shot_raw_hits)
+                                        # if True: #this_shot_raw_hits > 1:
+                                        #     print(f"*** DEBUG *** {bid_shot} found {this_shot_raw_hits} elixer hits for "
+                                        #           f"{ri['detectid']} with size {source_major}")
+                                        #     for rr in matching_td_rows_all[sel_td_rows]:
+                                        #         print(f"*** DEBUG *** {rr['detectid']} {rr['sn']} {abs(rr['wavelength_obs']-ri['wavelength_obs'])}"
+                                        #               f" {ref_coord.separation(SkyCoord(rr['ra']*u.deg,rr['dec']*u.deg)).value*3600.}")
+                                        #
+                                        #     print(f"*** DEBUG *** ---------------------------- ")
                                     except:
-                                        print(f"*** DEBUG *** {np.count_nonzero(sel_td_rows)}")
-                                        print("sn:", matching_td_rows_all['sn'])
-                                        print("sn[sel_td_rows]:",matching_td_rows_all['sn'][sel_td_rows])
-                                        print(f"{type(sel_td_rows)}, {sel_td_rows}")
-                                       # print(float(matching_td_rows_all['sn'][sel_td_rows]))
-
+                                        print(f"Something went wrong. Exception in {bid_shot}")
                                         print(traceback.format_exc())
-
-
-                                    minwave =min([abs(w-ri['wavelength_obs']) for w in matching_td_rows_all['wavelength_obs'][sel_td_rows] ])
-
-                                    td_coords = SkyCoord(
-                                        ra=np.array(matching_td_rows_all['ra'][sel_td_rows]) * u.deg,
-                                        dec=np.array(matching_td_rows_all['dec'][sel_td_rows]) * u.deg)
-
-                                    sep_td = ref_coord.separation(td_coords)
-                                    minsep = min([x.arcsec for x in sep_td])
-
-                                    match_delta_wave.append(minwave)
-                                    match_delta_sep.append(minsep)
-
-                                    if source_major is not None and source_major > 0:
-                                        this_shot_raw_hits = np.count_nonzero([x.arcsec > source_major + base_max_sep for x in sep_td])
-                                        this_shot_raw_hits = max(1,this_shot_raw_hits) #count can remove all of them
-                                    else:
-                                        this_shot_raw_hits = np.count_nonzero(sel_td_rows)
-
-
-                                    match_raw_ct.append(this_shot_raw_hits)
-                                    # if True: #this_shot_raw_hits > 1:
-                                    #     print(f"*** DEBUG *** {bid_shot} found {this_shot_raw_hits} elixer hits for "
-                                    #           f"{ri['detectid']} with size {source_major}")
-                                    #     for rr in matching_td_rows_all[sel_td_rows]:
-                                    #         print(f"*** DEBUG *** {rr['detectid']} {rr['sn']} {abs(rr['wavelength_obs']-ri['wavelength_obs'])}"
-                                    #               f" {ref_coord.separation(SkyCoord(rr['ra']*u.deg,rr['dec']*u.deg)).value*3600.}")
-                                    #
-                                    #     print(f"*** DEBUG *** ---------------------------- ")
+                                        miss_sn.append(-666.)
+                                        match_delta_wave.append(-666.)
+                                        match_delta_sep.append(-666.)
+                                        match_raw_ct.append(-666.)
 
                                 else:
                                     print(f"Something went wrong. {bid_shot} in and not in {match_shot_list} ???")
@@ -842,16 +855,17 @@ if True: #response.lower() == 'y':
                                 # repeat_found.append(0)
 
                                 sst = match_shot_list == bid_shot
-                                if np.count_nonzero(sst) == 1:
-                                    miss_sn.append(float(np.array(match_sn_list)[sst]))
-                                    match_delta_wave.append(minwave)
-                                    match_delta_sep.append(minsep)
-                                    match_raw_ct.append(this_shot_raw_hits)
-                                else:
-                                    miss_sn.append(-1.0)
-                                    match_delta_wave.append(9999.9)   #large positive, since normal select will be <
-                                    match_delta_sep.append(9999.9)
-                                    match_raw_ct.append(0)
+                                if not already_added_sn_wave_sep_ct:
+                                    if np.count_nonzero(sst) == 1:
+                                        miss_sn.append(float(np.array(match_sn_list)[sst]))
+                                        match_delta_wave.append(minwave)
+                                        match_delta_sep.append(minsep)
+                                        match_raw_ct.append(this_shot_raw_hits)
+                                    else:
+                                        miss_sn.append(-1.0)
+                                        match_delta_wave.append(9999.9)   #large positive, since normal select will be <
+                                        match_delta_sep.append(9999.9)
+                                        match_raw_ct.append(0)
 
                                 miss_f50.append(f50)
                                 miss_completeness.append(completeness)
