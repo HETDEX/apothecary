@@ -938,6 +938,22 @@ if True: #response.lower() == 'y':
             str(dtnow.microsecond).zfill(6))
             print(f"{dtnowstr} Intermediate write of cmplt table for group {group}")
 
+            check_len = -1
+            for ccol, ccol_name in zip([source_group, source_shotid, source_detid, source_wave, source_line_flux, source_line_sigma, source_extent,
+                 source_num_fibers, source_sn, source_z, source_f50, source_completeness,
+                 miss_shotid, miss_self, miss_found, miss_sn, miss_seeing, miss_tput, miss_num_fibers,
+                 miss_f50, miss_completeness,match_delta_wave, match_delta_sep, match_raw_ct ],
+                                 ['group', 'src_shotid', 'detectid', 'wave', 'line_flux', 'line_sigma', 'extent',
+                                  'src_nfib', 'sn', 'z', 'src_f50', 'src_cmplt',
+                                  'bid_shotid', 'self', 'found', 'bid_sn', 'bid_seeing', 'bid_tput', 'bid_nfib',
+                                  'bid_f50', 'bid_cmplt', 'delta_wave', 'sep', 'match_raw_ct']):
+                if check_len < -1:
+                    check_len = len(ccol)
+                else:
+                    if len(ccol) != check_len:
+                        print(f"{ccol_name} {len(ccol)} != {check_len}")
+
+
             Cmplt_Table = Table(
                 [source_group, source_shotid, source_detid, source_wave, source_line_flux, source_line_sigma, source_extent,
                  source_num_fibers, source_sn, source_z, source_f50, source_completeness,
