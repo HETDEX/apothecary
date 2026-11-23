@@ -766,7 +766,7 @@ if True: #response.lower() == 'y':
                                     #td_sn = np.nanmax(float(matching_td_rows_all['sn'][sel_td_rows]))
 
                                     try:
-                                        miss_sn.append(np.nanmax(float(matching_td_rows_all['sn'][sel_td_rows])))
+                                        miss_sn.append(np.nanmax(np.array(matching_td_rows_all['sn'])[sel_td_rows]))
                                     except:
                                         print(f"*** DEBUG *** {np.count_nonzero(sel_td_rows)}")
                                         print("sn:", matching_td_rows_all['sn'])
