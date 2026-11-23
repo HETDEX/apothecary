@@ -765,13 +765,17 @@ if True: #response.lower() == 'y':
                                 if np.count_nonzero(sel_td_rows) > 0:
                                     #td_sn = np.nanmax(float(matching_td_rows_all['sn'][sel_td_rows]))
 
-                                    print(f"*** DEBUG ***")
-                                    print(matching_td_rows_all['sn'])
-                                    print(matching_td_rows_all['sn'][sel_td_rows])
-                                    print(float(matching_td_rows_all['sn'][sel_td_rows]))
+                                    try:
+                                        miss_sn.append(np.nanmax(float(matching_td_rows_all['sn'][sel_td_rows])))
+                                    except:
+                                        print(f"*** DEBUG *** {np.count_nonzero(sel_td_rows)}")
+                                        print(matching_td_rows_all['sn'])
+                                        print(matching_td_rows_all['sn'][sel_td_rows])
+                                        print(float(matching_td_rows_all['sn'][sel_td_rows]))
+
+                                        print(traceback.format_exc())
 
 
-                                    miss_sn.append(np.nanmax(float(matching_td_rows_all['sn'][sel_td_rows])))
                                     minwave =min([abs(w-ri['wavelength_obs']) for w in matching_td_rows_all['wavelength_obs'][sel_td_rows] ])
 
                                     td_coords = SkyCoord(
