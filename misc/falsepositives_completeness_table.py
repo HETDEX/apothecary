@@ -808,7 +808,7 @@ if True: #response.lower() == 'y':
 
 
                                     match_raw_ct.append(this_shot_raw_hits)
-                                    if this_shot_raw_hits > 1:
+                                    if True: #this_shot_raw_hits > 1:
                                         print(f"*** DEBUG *** {bid_shot} found {this_shot_raw_hits} elixer hits for "
                                               f"{ri['detectid']} with size {source_major}")
                                         for rr in matching_td_rows_all[sel_td_rows]:
