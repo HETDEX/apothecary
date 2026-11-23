@@ -760,10 +760,17 @@ if True: #response.lower() == 'y':
                             else: #did find direct elixer match already
                                 #it IS in the match shot list
 
-                                sel_td_rows = matching_td_rows_all['shotid']==bid_shot
+                                sel_td_rows = np.array(matching_td_rows_all['shotid']==bid_shot)
 
                                 if np.count_nonzero(sel_td_rows) > 0:
                                     #td_sn = np.nanmax(float(matching_td_rows_all['sn'][sel_td_rows]))
+
+                                    print(f"*** DEBUG ***")
+                                    print(matching_td_rows_all['sn'])
+                                    print(matching_td_rows_all['sn'][sel_td_rows])
+                                    print(float(matching_td_rows_all['sn'][sel_td_rows]))
+
+
                                     miss_sn.append(np.nanmax(float(matching_td_rows_all['sn'][sel_td_rows])))
                                     minwave =min([abs(w-ri['wavelength_obs']) for w in matching_td_rows_all['wavelength_obs'][sel_td_rows] ])
 
