@@ -947,7 +947,7 @@ if True: #response.lower() == 'y':
                                   'src_nfib', 'sn', 'z', 'src_f50', 'src_cmplt',
                                   'bid_shotid', 'self', 'found', 'bid_sn', 'bid_seeing', 'bid_tput', 'bid_nfib',
                                   'bid_f50', 'bid_cmplt', 'delta_wave', 'sep', 'match_raw_ct']):
-                if check_len < -1:
+                if check_len < 0:
                     check_len = len(ccol)
                 else:
                     if len(ccol) != check_len:
